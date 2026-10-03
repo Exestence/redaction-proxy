@@ -251,27 +251,31 @@ function sseTransformer(api: Api, registry: RedactionRegistry, stats: Stats, onR
   return (lines: string[], event: Json): string => {
     let before = ''
     if (api === 'chat') {
-      const flushed: Json[] = []
       for (const choice of (event.choices ?? []) as Json[]) {
-        const delta = choice.delta as Json | undefined
+        const delta = (choice.delta ??= {}) as Json
         const at = `${choice.index}:`
-        if (typeof delta?.content === 'string') delta.content = r.push(`${at}content`, delta.content)
-        if (typeof delta?.reasoning_content === 'string') delta.reasoning_content = r.push(`${at}reasoning`, delta.reasoning_content)
-        for (const call of (delta?.tool_calls ?? []) as Json[]) {
+        if (typeof delta.content === 'string') delta.content = r.push(`${at}content`, delta.content)
+        if (typeof delta.reasoning_content === 'string') delta.reasoning_content = r.push(`${at}reasoning`, delta.reasoning_content)
+        for (const call of (delta.tool_calls ?? []) as Json[]) {
           if (typeof call.function?.arguments === 'string') call.function.arguments = r.push(`${at}tool:${call.index}`, call.function.arguments, true)
         }
-        if (choice.finish_reason != null) {
-          const tail: Json = {}
-          for (const [key, text] of r.flushPrefix(at)) {
-            if (text === '') continue
-            const field = key.slice(at.length)
-            if (field.startsWith('tool:')) (tail.tool_calls ??= []).push({ index: Number(field.slice(5)), function: { arguments: text } })
-            else tail[field === 'content' ? 'content' : 'reasoning_content'] = text
+        if (choice.finish_reason == null) continue
+        // The finishing chunk may carry text of its own, so a held tail is appended to it, not sent ahead.
+        for (const [key, text] of r.flushPrefix(at)) {
+          if (text === '') continue
+          const field = key.slice(at.length)
+          if (field.startsWith('tool:')) {
+            const index = Number(field.slice(5))
+            const calls = (delta.tool_calls ??= []) as Json[]
+            const call = calls.find(item => item.index === index)
+            if (call === undefined) calls.push({ index, function: { arguments: text } })
+            else call.function = { ...call.function, arguments: (call.function?.arguments ?? '') + text }
+          } else {
+            const name = field === 'content' ? 'content' : 'reasoning_content'
+            delta[name] = (delta[name] ?? '') + text
           }
-          if (Object.keys(tail).length > 0) flushed.push({ index: choice.index, delta: tail, finish_reason: null })
         }
       }
-      if (flushed.length > 0) before = formatEvent(lines, { ...event, choices: flushed })
       return before + formatEvent(lines, event)
     }
     if (api === 'messages') {
@@ -331,7 +335,7 @@ export function createProxyServer(config: ProxyConfig, log: (line: string) => vo
   const detector = new RulesDetector(config.redaction)
   const continuations = new Map<string, string[]>()
 
-  const forward = async (req: IncomingMessage, res: ServerResponse, api: Api | undefined, body: Buffer | undefined): Promise<void> => {
+  const forward = async (req: IncomingMessage, res: ServerResponse, path: string, api: Api | undefined, body: Buffer | undefined): Promise<void> => {
     const started = Date.now()
     const stats: Stats = { masked: {}, restored: 0, unknown: 0 }
     const anthropic = api === 'messages' || (api === undefined && (req.headers['x-api-key'] !== undefined || req.headers['anthropic-version'] !== undefined))
@@ -393,7 +397,7 @@ export function createProxyServer(config: ProxyConfig, log: (line: string) => vo
         walk(parsed, '')
         throw new Refusal(422, `masked request still contains ${leaked.length} detected value(s) in fields the proxy does not rewrite: ${[...where].slice(0, 5).join(', ')}`)
       }
-      if (config.debugMasked) log(`masked ${req.url}: ${outgoing}`)
+      if (config.debugMasked) log(`masked ${path}: ${outgoing}`)
     }
 
     const headers: Record<string, string> = { 'accept-encoding': 'identity' }
@@ -422,7 +426,7 @@ export function createProxyServer(config: ProxyConfig, log: (line: string) => vo
     }
     const done = (): void => {
       const masked = Object.entries(stats.masked).map(([category, n]) => `${category} ${n}`).join(', ')
-      log(`${req.method} ${req.url} -> ${upstream.status} masked ${Object.values(stats.masked).reduce((a, b) => a + b, 0)}${masked === '' ? '' : ` (${masked})`} restored ${stats.restored} unknown ${stats.unknown} ${Date.now() - started}ms`)
+      log(`${req.method} ${path} -> ${upstream.status} masked ${Object.values(stats.masked).reduce((a, b) => a + b, 0)}${masked === '' ? '' : ` (${masked})`} restored ${stats.restored} unknown ${stats.unknown} ${Date.now() - started}ms`)
     }
 
     if (registry === undefined || upstream.body === null) {
@@ -499,10 +503,10 @@ export function createProxyServer(config: ProxyConfig, log: (line: string) => vo
     const chunks: Buffer[] = []
     req.on('data', (chunk: Buffer) => chunks.push(chunk))
     req.on('end', () => {
-      forward(req, res, api, Buffer.concat(chunks)).catch((error: unknown) => {
+      forward(req, res, path, api, Buffer.concat(chunks)).catch((error: unknown) => {
         if (error instanceof Refusal) fail(error.status, error.message)
         else if (abortedByClient(error)) res.destroy()
-        else fail(502, `upstream request failed: ${error instanceof Error ? error.name : 'error'}`)
+        else fail(502, `upstream request failed: ${error instanceof Error ? (error.cause as { code?: string } | undefined)?.code ?? error.name : 'error'}`)
       })
     })
   })

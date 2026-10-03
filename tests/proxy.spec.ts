@@ -177,8 +177,8 @@ describe('OpenAI Chat Completions', () => {
         sse: [
           ...sse(chunk(content).map(part => [undefined, { ...env, choices: [{ index: 0, delta: { content: part }, finish_reason: null }] }])),
           ...sse(chunk(args).map(part => [undefined, { ...env, choices: [{ index: 0, delta: { tool_calls: [{ index: 0, function: { arguments: part } }] }, finish_reason: null }] }])),
-          ...sse([[undefined, { ...env, choices: [{ index: 0, delta: { content: ' tail ⟦EMAIL_1' } , finish_reason: null }] }]]),
-          ...sse([[undefined, { ...env, choices: [{ index: 0, delta: {}, finish_reason: 'stop' }] }], [undefined, '[DONE]']]),
+          ...sse([[undefined, { ...env, choices: [{ index: 0, delta: { content: ' tail ⟦EMAIL_1' }, finish_reason: null }] }]]),
+          ...sse([[undefined, { ...env, choices: [{ index: 0, delta: { content: ' end ⟦PATH_1' }, finish_reason: 'stop' }] }], [undefined, '[DONE]']]),
         ],
       }
     }
@@ -190,8 +190,8 @@ describe('OpenAI Chat Completions', () => {
     const args = deltas.flatMap(delta => delta.tool_calls ?? []).map((call: any) => call.function.arguments).join('')
     expect(content).toContain(`Echo: `)
     for (const original of ORIGINALS) expect(content).toContain(original)
-    // An unclosed placeholder at the end of the stream is flushed as text before finish.
-    expect(content.endsWith(' tail ⟦EMAIL_1')).toBe(true)
+    // Unclosed placeholders are released as text in order, the last one inside the finishing chunk.
+    expect(content.endsWith(' tail ⟦EMAIL_1 end ⟦PATH_1')).toBe(true)
     expect(JSON.parse(args).to).toEqual(expect.arrayContaining(ORIGINALS))
     expect(text).not.toMatch(/⟦(?:EMAIL|PATH|TWID|KEY|PROJECT)_\d+⟧/)
   })
@@ -271,6 +271,28 @@ describe('Anthropic Messages', () => {
     expect(text.endsWith(' tail ⟦PATH')).toBe(true)
     expect(JSON.parse(json)).toEqual({ path: `${HOME}/b.md`, note: QUOTED })
     expect(thought).toBe('mask ⟦EMAIL_1⟧ seen')
+  })
+
+  it('restores a JSON reply: text and tool input, not signed thinking', async () => {
+    reply = entry => {
+      const ids = placeholders(entry.raw)
+      const path = ids.find(id => id.startsWith('⟦PATH'))
+      return {
+        json: {
+          id: 'm2', type: 'message', role: 'assistant', model: 'claude', stop_reason: 'tool_use',
+          content: [
+            { type: 'thinking', thinking: `consider ${path}`, signature: 'sig3' },
+            { type: 'text', text: `Reading ${path}/c.md for ${ids.find(id => id.startsWith('⟦EMAIL'))}` },
+            { type: 'tool_use', id: 'tu3', name: 'read', input: { path: `${path}/c.md`, tags: [ids.find(id => id.startsWith('⟦PROJECT'))] } },
+          ],
+        },
+      }
+    }
+    const res = await post('/v1/messages', request, { 'x-api-key': 'k' })
+    const body = await res.json() as any
+    expect(body.content[0].thinking).toMatch(/^consider ⟦PATH_\d+⟧$/)
+    expect(body.content[1].text).toBe(`Reading ${HOME}/c.md for ${EMAIL}`)
+    expect(body.content[2].input).toEqual({ path: `${HOME}/c.md`, tags: [QUOTED] })
   })
 
   it('masks count_tokens requests too', async () => {
