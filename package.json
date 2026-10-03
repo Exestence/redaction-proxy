@@ -25,8 +25,9 @@
     "build": "tsc -p tsconfig.build.json",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "vitest run",
-    "bench": "node --experimental-strip-types bench/run.ts",
-    "start": "node lib/cli.js"
+    "bench": "tsc -p tsconfig.build.json && node bench/false-positives.mjs",
+    "start": "node lib/cli.js",
+    "demo": "tsc -p tsconfig.build.json && node bench/demo.mjs"
   },
   "engines": {
     "node": "^22.19.0 || >=24.0.0"
