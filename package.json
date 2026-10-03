@@ -1,0 +1,43 @@
+{
+  "name": "redaction-proxy",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Local proxy that masks PII and secrets in LLM API requests and restores them in responses, plus the redaction core it is built on",
+  "type": "module",
+  "main": "lib/core/index.js",
+  "types": "lib/core/index.d.ts",
+  "bin": {
+    "redaction-proxy": "lib/cli.js"
+  },
+  "exports": {
+    ".": {
+      "types": "./lib/core/index.d.ts",
+      "default": "./lib/core/index.js"
+    },
+    "./proxy": {
+      "types": "./lib/proxy/server.d.ts",
+      "default": "./lib/proxy/server.js"
+    },
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "lib/**/*.js",
+    "lib/**/*.d.ts"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest run",
+    "bench": "node --experimental-strip-types bench/run.ts",
+    "start": "node lib/cli.js"
+  },
+  "engines": {
+    "node": "^22.19.0 || >=24.0.0"
+  },
+  "license": "UNLICENSED",
+  "devDependencies": {
+    "@types/node": "^22.20.4",
+    "typescript": "^6.0.3",
+    "vitest": "^4.1.11"
+  }
+}
