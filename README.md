@@ -145,7 +145,7 @@ See the [technical details](docs/DETAILS.md#12-完整設定) for the matching en
 | Tests | 418, all passing | Rules, engine, adversarial inputs, and streamed and non-streamed requests for all three APIs against a fake upstream. |
 | Credential false positives | **0.76** per 1,000 code lines | Measured on DeepSeek Harness source, which holds no real key (698k code lines): about one spot every 1,300 lines is mistaken for a key and masked. |
 | Restore failures | 0 | Every file that was masked restores byte for byte. |
-| Speed | about 850k lines in 4.8 s | Apple M5 Max. |
+| Speed | about 850k lines in 5 s | Apple M5 Max. |
 
 A false positive costs the model one unnecessary placeholder, which is restored in the reply. The corpus is English code; Chinese prose has not been measured. Reproduce with `pnpm test` and `pnpm bench`.
 
