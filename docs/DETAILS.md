@@ -321,3 +321,7 @@ POST /v1/chat/completions -> 200 masked 3 (EMAIL 1, TWID 1, PATH 1) restored 3 u
 - 量測中文散文語料的誤遮率。
 - 決定授權條款（目前 `package.json` 為 `UNLICENSED`）並發布到 npm（目前未發布，也沒有 `bin` 入口）。
 - 將 dsh-privacy-router 的串流還原器統一到這份核心。
+
+## 來源聲明
+
+部分遮蔽規則與引擎源自 [LYiHub/pub-dsh-privacy-router](https://github.com/LYiHub/pub-dsh-privacy-router)（MIT），經由 dsh-privacy-router fork 與 dsh-addons 移植。公開前選擇授權時，必須保留 [NOTICE](../NOTICE) 裡的原作者版權聲明。
