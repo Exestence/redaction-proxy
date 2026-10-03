@@ -6,9 +6,6 @@
   "type": "module",
   "main": "lib/core/index.js",
   "types": "lib/core/index.d.ts",
-  "bin": {
-    "redaction-proxy": "lib/cli.js"
-  },
   "exports": {
     ".": {
       "types": "./lib/core/index.d.ts",
