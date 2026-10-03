@@ -34,3 +34,5 @@ export {
   resolveRulesConfig,
 } from './rules/index.ts'
 export type { RedactionRuleName, ResolvedRulesConfig, RulesRedactionConfig } from './rules/index.ts'
+export { screenText } from './rules/screen.ts'
+export type { ScreenFailure } from './rules/screen.ts'
