@@ -25,7 +25,7 @@
 | 目錄 | 內容 |
 | --- | --- |
 | `src/core/` | 遮罩核心：規則、佔位符引擎、嚴格與串流還原。只依賴 Node 標準函式庫，沒有宿主型別。 |
-| `src/core/rules/` | 規則偵測器 `RulesDetector`：各規則、NFKC 投影、同值擴散、輸入篩檢。 |
+| `src/core/rules/` | 規則偵測器 `RulesDetector`：各規則、NFKC 投影、百分比解碼投影、同值擴散、輸入篩檢。 |
 | `src/proxy/config.ts` | 設定檔載入與驗證。 |
 | `src/proxy/server.ts` | HTTP 代理：收集可遮字串、遮罩、外洩檢查、轉送、JSON 與 SSE 還原。 |
 | `src/cli.ts` | 命令列 `node lib/cli.js [--config path]`。 |
@@ -64,7 +64,7 @@ flowchart TD
 | `restore(output, registry)` | 嚴格還原：未綁定的 id 或不成對的分隔符會讓整段失敗（`unknown-placeholder` 或 `malformed-placeholder`）。 |
 | `createStreamRestorer(registry, { json })` | 寬鬆的串流還原器，永不失敗，詳見第 7 節。 |
 | `restoreLenient` | 一次性的寬鬆還原。 |
-| `RulesDetector`、`resolveRulesConfig`、`RULE_NAMES`、`DEFAULT_ALLOWLIST`、`DETECTOR_VERSION` | 規則偵測器與其設定。`DETECTOR_VERSION` 目前是 `rules-3`。 |
+| `RulesDetector`、`resolveRulesConfig`、`RULE_NAMES`、`DEFAULT_ALLOWLIST`、`DETECTOR_VERSION` | 規則偵測器與其設定。`DETECTOR_VERSION` 目前是 `rules-4`。 |
 | `isTaiwanNationalId` | 身分證與居留證檢查碼驗證。 |
 | `screenText` | 輸入篩檢，詳見第 9 節。 |
 | `emptyRedactionIndex`、`foldRedactionScan` | 給需要持久化掃描結果的宿主使用的 span 索引。 |
@@ -89,7 +89,7 @@ flowchart TD
 | `user-path` | `PATH` | 只遮家目錄前綴（`/Users/x`、`/home/x`、`C:\Users\x`、`~x/`），含 JSON 跳脫形式；路徑其餘部分保持可讀。 |
 | `api-key` | `KEY` | PEM、AWS `AKIA`/`ASIA`、GitHub `ghp_` 系列、`sk-`、Slack `xox` 與 webhook、Google `AIza`、JWT、`Authorization`/`Bearer`、URL 中的帳密、`curl -u`、`--password x`，以及鍵名代表憑證的 `key=value` 指派（含中英文關鍵詞）。 |
 | `tw-national-id` | `TWID` | 身分證字號（第二碼 1/2）與居留證號（第二碼 8/9），**驗證檢查碼**。也接受字母後（`A 123456789`）或第四字元後（`A123-456789`）的一個空白或連字號；其他位置的分隔不算。 |
-| `phone` | `PHONE` | 手機 `09xx-xxx-xxx`、`09-xxxx-xxxx`、`09 xxxx xxxx`（同一種分隔符）與 `+886` 形式不需關鍵詞，中間四碼像年份（`09-2026-1005`）時視為日期不遮；市話（`02-2345-6789`、`(02)2345-6789`）需在「電話」、tel 等關鍵詞之後。 |
+| `phone` | `PHONE` | 手機 `09xx-xxx-xxx`、`09-xxxx-xxxx`、`09 xxxx xxxx`（同一種分隔符）與 `+886` 形式不需關鍵詞，前後緊鄰英文字母或數字時不遮（雜湊值 `…e5a0912345678dd…`、`abc0912345678`），中間四碼像年份（`09-2026-1005`）時視為日期不遮；市話（`02-2345-6789`、`(02)2345-6789`）需在「電話」、tel 等關鍵詞之後。 |
 | `tax-id` | `TAXID` | 「統一編號」、「統編」、tax id、VAT 等關鍵詞後的 8 碼數字。中間有一個空白或連字號（`統編 3208-5109`）時須通過統編檢查碼。同一段數字也符合市話關鍵詞（`聯絡…統編：02086968`）時報為 `TAXID`。 |
 | `card` | `CARD` | 13–19 碼、**Luhn 驗證**、檢查發卡機構前綴，並把視窗錨定在數字組邊界，避免遮到時間戳與 snowflake id。 |
 | `ip` | `IP` | RFC 1918 私有位址，並檢查每段數值。 |
@@ -99,6 +99,7 @@ flowchart TD
 | `projectNames` | `PROJECT` | 同上，另一個類別。 |
 
 - **NFKC 投影。** 每條規則也會在去除零寬字元後的 NFKC 投影上再跑一次，所以全形數字（`０９１２３４５６７８`）、全形 `＠`、`ali\u200bce@…` 都抓得到。
+- **百分比解碼投影。** 每條規則（包括 `terms`）也會在百分比解碼後的文字上再跑一次。每一段連續的 `%XX` 以 UTF-8 解碼；不是合法 UTF-8 的一段（例如截斷的 `%E6`）保持原樣，`+` 不當成空格。偵測到的範圍對應回整段編碼原文，佔位符蓋住編碼原文，登錄表綁定的也是編碼原文，所以還原與工具參數都逐位元組寫回原樣（大小寫混用的 `%2f` 也一樣）。編碼過的 term 不與未編碼寫法共用佔位符，各自還原成自己的寫法。只解碼一層：`%2540` 不偵測。解碼投影與 NFKC 投影不疊加，所以百分比編碼的全形字元（`%EF%BC%A0`）不折疊。URL 裡經 base64 編碼的值不解碼；隱私路由只在工具輸出中解碼 base64。
 - **同值擴散。** 一個值被偵測到之後，它在同一請求中的其他出現位置也會用同一個佔位符遮掉（`propagate`）。
 - **允許清單。** `allowlist` 中的字面值不會被任何內建規則遮罩，預設是 `git@github.com` 與 `noreply@github.com`。設為空陣列就什麼都不放過。
 - **未偵測的拆開寫法。** 點後加空格的私有 IP（`192. 168. 1. 2`）、被空格或換行拆開的金鑰（只有高熵規則可能抓到片段），以及寫成 `name @ domain`（有空白）或單獨用 ` at ` 的 email 不遮（只有分類器把關）。
@@ -281,13 +282,14 @@ POST /v1/chat/completions -> 200 masked 3 (EMAIL 1, TWID 1, PATH 1) restored 3 u
 
 ## 13. 測試
 
-`pnpm test`（vitest）執行 9 個檔案、418 個測試：
+`pnpm test`（vitest）執行 14 個檔案、640 個測試：
 
 | 檔案 | 內容 |
 | --- | --- |
 | `rules-detection`、`rules-secrets`、`rules-normalization`、`rules-propagation`、`rules-config`、`rules-synthetic-corpus` | 與 DeepSeek Harness 轉接層共用的規則測試：各規則、憑證樣式、NFKC 與零寬字元、同值擴散、設定驗證、合成語料。 |
+| `rules-regroup`、`rules-regroup-review*`、`rules-percent` | 拆開寫法（WO-6）、百分比編碼的值與逐位元組還原、手機號碼的字母邊界（WO-7）。 |
 | `engine` | 遮罩引擎：編號、保留 id、索引重用、嚴格還原。 |
-| `adversarial` | 洩漏與往返、失敗即關閉的篩檢、35 種 200 KB 病態輸入各須在 2 秒內、串流回覆的所有 2 段與 3 段切法、100 KB 串流以 4 字元為單位。 |
+| `adversarial` | 洩漏與往返、失敗即關閉的篩檢、54 種 200 KB 病態輸入各須在 2 秒 CPU 時間內（量測 worker 行程的 CPU 時間而非經過時間，平行執行的其他測試不計入）、串流回覆的所有 2 段與 3 段切法、100 KB 串流以 4 字元為單位。 |
 | `proxy` | 對本機假上游的端對端測試：Chat Completions、Responses、Anthropic Messages 的 JSON 與 SSE，佔位符跨越分塊邊界並出現在工具呼叫 JSON 中。 |
 
 `pnpm typecheck` 做型別檢查。所有端對端測試與 `pnpm demo` 都只用本機假上游，尚未對真實 API 或真實用戶端驗證。
@@ -301,7 +303,7 @@ POST /v1/chat/completions -> 200 masked 3 (EMAIL 1, TWID 1, PATH 1) restored 3 u
 3. 每個檔案以預設規則整份 `mask`，再以嚴格 `restore` 確認逐位元組還原。
 4. 主要指標：程式碼檔（`.md`、`.yml`、`.yaml` 以外）中的 `KEY` 數量除以程式碼行數。原始碼不含可用的憑證，所以每一個都是誤遮。其他類別以全部行數與程式碼行數各計一次，是誤遮的上限，因為文件裡確實有應被遮的範例路徑與地址。預設設定不含 `terms`，所以 `TERM`、`PROJECT` 不出現。
 
-最近一次結果（`rules-3`；DeepSeek Harness `6d3b7608bf`，4,789 個檔案、848,546 行，其中程式碼檔 697,669 行，Apple M5 Max 約 6 秒；與 `rules-2` 每一類數量相同，`TAXID` 為 0）：
+最近一次結果（`rules-4`；DeepSeek Harness `6d3b7608bf`，4,789 個檔案、848,546 行，其中程式碼檔 697,669 行，Apple M5 Max 約 6 秒；與 `rules-3`、`rules-2` 每一類數量相同，`TAXID` 為 0）：
 
 | 類別 | 數量 | 每千行 |
 | --- | --- | --- |

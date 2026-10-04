@@ -34,7 +34,7 @@ describe('RulesRedactionService', () => {
       expect(masked).not.toContain(value)
     }
     expect(masked).not.toContain('fictional-user')
-    expect(service.detectorVersion).toBe('rules-3')
+    expect(service.detectorVersion).toBe('rules-4')
     expect(service.policyDigest).toMatch(/^sha256:[0-9a-f]{64}$/)
   })
 

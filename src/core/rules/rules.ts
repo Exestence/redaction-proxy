@@ -62,9 +62,9 @@ const TWID_SPLIT = /(?<![A-Za-z0-9-])[A-Z](?:[- \u3000][1289]\d{8}|[1289]\d{2}[-
 /** A separator inside a telephone number: a hyphen, an ideographic space, or a space. */
 const PHONE_GAP = '[-\\u3000 ]?'
 const PHONE_MOBILE = new RegExp(
-  `(?<!\\d)(?:09\\d{2}${PHONE_GAP}\\d{3}${PHONE_GAP}\\d{3}`
+  `(?<![0-9A-Za-z])(?:09\\d{2}${PHONE_GAP}\\d{3}${PHONE_GAP}\\d{3}`
   + `|\\+886${PHONE_GAP}(?:9\\d{2}${PHONE_GAP}\\d{3}${PHONE_GAP}\\d{3}`
-  + `|\\d{1,2}${PHONE_GAP}\\d{3,4}${PHONE_GAP}\\d{3,4}))(?!\\d)`,
+  + `|\\d{1,2}${PHONE_GAP}\\d{3,4}${PHONE_GAP}\\d{3,4}))(?![0-9A-Za-z])`,
   'g',
 )
 /**

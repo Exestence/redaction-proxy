@@ -1,8 +1,9 @@
 /**
- * Unicode projection and character predicates shared by the rule passes. The
- * projection folds one base code point plus its combining marks at a time and
- * keeps a map back to the original offsets, so a span found on the projection
- * names a range of the text the caller submitted.
+ * Projections and character predicates shared by the rule passes. The NFKC
+ * projection folds one base code point plus its combining marks at a time, and
+ * the percent projection decodes `%XX` escapes; both keep a map back to the
+ * original offsets, so a span found on a projection names a range of the text
+ * the caller submitted.
  *
  * @module redaction-proxy/core/rules/normalize
  */
@@ -13,16 +14,20 @@ const COMBINING_MARK = /\p{M}/u
 const ALNUM = /[A-Za-z0-9]/
 const ASCII_PRINTABLE = /^[\x20-\x7e]*$/
 
-/** NFKC projection of one text, with a map from projected offsets back to the original. */
-export interface NfkcProjection {
-  /** The folded text; equal to the input when nothing folded. */
+/** A projected text with a map from each projected code unit back to its source range. */
+export interface OffsetProjection {
+  /** The projected text. */
   norm: string
+  /** Original start offset of the source range each `norm` code unit came from. */
+  startMap: number[]
+  /** Original end offset of the source range each `norm` code unit came from. */
+  endMap: number[]
+}
+
+/** NFKC projection of one text; `norm` equals the input when nothing folded. */
+export interface NfkcProjection extends OffsetProjection {
   /** `norm` lower-cased without changing any character's length. */
   lower: string
-  /** Original start offset of the fold each `norm` code unit came from. */
-  startMap: number[]
-  /** Original end offset of the fold each `norm` code unit came from. */
-  endMap: number[]
 }
 
 /**
@@ -76,6 +81,66 @@ export function projectNfkc(text: string): NfkcProjection {
   }
   const norm = parts.join('')
   return { norm, lower: lowerPreserving(norm), startMap, endMap }
+}
+
+const PERCENT_RUN = /(?:%[0-9A-Fa-f]{2})+/g
+const UTF8 = new TextDecoder('utf-8', { fatal: true, ignoreBOM: true })
+
+/**
+ * Project a text through one level of percent-decoding. Every run of
+ * consecutive `%XX` escapes is decoded as UTF-8; a run that is not valid UTF-8
+ * stays as written, and `+` stays literal. Each decoded character maps to the
+ * whole escape range its bytes came from, so a span found on the projection
+ * names the encoded text.
+ * @param text - text to project.
+ * @returns the projection, or `undefined` when no run decodes.
+ */
+export function projectPercent(text: string): OffsetProjection | undefined {
+  let norm = ''
+  const startMap: number[] = []
+  const endMap: number[] = []
+  let copied = 0
+  let decodedAny = false
+  PERCENT_RUN.lastIndex = 0
+  for (let match = PERCENT_RUN.exec(text); match !== null; match = PERCENT_RUN.exec(text)) {
+    const run = match[0]
+    const bytes = new Uint8Array(run.length / 3)
+    for (let k = 0; k < bytes.length; k += 1) bytes[k] = Number.parseInt(run.slice(k * 3 + 1, k * 3 + 3), 16)
+    let decoded: string
+    try {
+      decoded = UTF8.decode(bytes)
+    } catch {
+      // Invalid UTF-8 (a truncated or stray byte): the run is kept as written,
+      // and the literal pass already covers it.
+      continue
+    }
+    for (let k = copied; k < match.index; k += 1) {
+      startMap.push(k)
+      endMap.push(k + 1)
+    }
+    norm += text.slice(copied, match.index)
+    let at = match.index
+    for (const char of decoded) {
+      // oxlint-disable-next-line typescript/no-non-null-assertion -- `char` is one code point.
+      const code = char.codePointAt(0)!
+      const end = at + 3 * (code < 0x80 ? 1 : code < 0x800 ? 2 : code < 0x10000 ? 3 : 4)
+      for (let k = 0; k < char.length; k += 1) {
+        startMap.push(at)
+        endMap.push(end)
+      }
+      at = end
+    }
+    norm += decoded
+    copied = match.index + run.length
+    decodedAny = true
+  }
+  if (!decodedAny) return undefined
+  for (let k = copied; k < text.length; k += 1) {
+    startMap.push(k)
+    endMap.push(k + 1)
+  }
+  norm += text.slice(copied)
+  return { norm, startMap, endMap }
 }
 
 /**
