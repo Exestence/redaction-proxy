@@ -2,9 +2,9 @@
  * Rule-based redaction provider: home paths, email addresses, Taiwan
  * identification and business numbers, telephone numbers, payment card
  * numbers, credentials, high-entropy runs, private addresses, internal host
- * names, and configured literal terms, with every rule run a second time over
- * an NFKC projection and every detected value propagated to its other
- * occurrences.
+ * names, and configured literal terms, with every rule run again over an NFKC
+ * projection and over a percent-decoded projection, and every detected value
+ * propagated to its other occurrences.
  *
  * @module redaction-proxy/core/rules
  */
@@ -14,7 +14,8 @@ import { RedactionError, RedactionPolicyDigest } from '../engine.ts'
 import type { RedactionDetection, RedactionDetector, RedactionPropagation } from '../types.ts'
 import type { Candidate, PushCandidate } from './candidate.ts'
 import { mergeCandidates } from './candidate.ts'
-import { projectNfkc } from './normalize.ts'
+import type { OffsetProjection } from './normalize.ts'
+import { projectNfkc, projectPercent } from './normalize.ts'
 import { propagateValues } from './propagate.ts'
 import { screenText } from './screen.ts'
 import type { ConfiguredTerm } from './rules.ts'
@@ -58,7 +59,7 @@ export interface RulesRedactionConfig {
 }
 
 /** Detector version recorded with every scan; changes whenever a rule's matches change. */
-export const DETECTOR_VERSION = 'rules-3'
+export const DETECTOR_VERSION = 'rules-4'
 
 /** Shared addresses that are public by construction and carry no private value. */
 export const DEFAULT_ALLOWLIST: readonly string[] = ['git@github.com', 'noreply@github.com']
@@ -67,6 +68,8 @@ export const DEFAULT_ALLOWLIST: readonly string[] = ['git@github.com', 'noreply@
 export const RULE_NAMES: readonly RedactionRuleName[] = [
   'email', 'user-path', 'api-key', 'tw-national-id', 'phone', 'tax-id', 'card', 'ip', 'host', 'entropy',
 ]
+
+const PERCENT_ESCAPE = /%[0-9A-Fa-f]{2}/
 
 const CONFIG_KEYS: ReadonlySet<string> = new Set(['rules', 'terms', 'projectNames', 'allowlist'])
 
@@ -235,21 +238,36 @@ export class RulesDetector implements RedactionDetector {
     // A second pass over the NFKC projection: without it a full-width digit or a
     // zero-width character inserted mid-value hides an address, a card, or a
     // credential. Configured literals already project themselves.
-    const projection = projectNfkc(text)
-    if (projection.norm !== text) {
-      const folded: Candidate[] = []
-      this.collect(projection.norm, folded, true, offset => text.charAt(projection.startMap[offset] ?? text.length))
-      for (const candidate of folded) {
-        candidates.push({
-          ...candidate,
-          // oxlint-disable-next-line typescript/no-non-null-assertion -- both offsets are inside the projection.
-          start: projection.startMap[candidate.start]!,
-          // oxlint-disable-next-line typescript/no-non-null-assertion -- both offsets are inside the projection.
-          end: projection.endMap[candidate.end - 1]!,
-        })
-      }
-    }
+    const nfkc = projectNfkc(text)
+    if (nfkc.norm !== text) this.collectProjected(text, nfkc, candidates, true)
+    // A third pass over the percent-decoded text, so `%40` in a mailto link or
+    // `%E6...` in a query string hides nothing. Terms run here too: their own
+    // NFKC projection is taken of the decoded text, and the map below carries
+    // each span to the whole encoded range, which is what the registry binds.
+    const percent = projectPercent(text)
+    if (percent !== undefined) this.collectProjected(text, percent, candidates, false)
     return mergeCandidates(candidates)
+  }
+
+  /**
+   * Run every enabled rule over one projection and map its candidates back.
+   * @param text - the submitted text.
+   * @param projection - a projection of `text` with its offset maps.
+   * @param out - candidate sink, in submitted-text offsets.
+   * @param skipTerms - whether to skip configured literals.
+   */
+  private collectProjected(text: string, projection: OffsetProjection, out: Candidate[], skipTerms: boolean): void {
+    const found: Candidate[] = []
+    this.collect(projection.norm, found, skipTerms, offset => text.charAt(projection.startMap[offset] ?? text.length))
+    for (const candidate of found) {
+      out.push({
+        ...candidate,
+        // oxlint-disable-next-line typescript/no-non-null-assertion -- both offsets are inside the projection.
+        start: projection.startMap[candidate.start]!,
+        // oxlint-disable-next-line typescript/no-non-null-assertion -- both offsets are inside the projection.
+        end: projection.endMap[candidate.end - 1]!,
+      })
+    }
   }
 
   /**
@@ -260,7 +278,10 @@ export class RulesDetector implements RedactionDetector {
    * @returns the key its identity is allocated by.
    */
   identityKey(value: string, category: string): string {
-    return category === 'TERM' || category === 'PROJECT' ? termIdentityKey(value, category) : value
+    // A percent-encoded spelling keeps its own identity so restore writes it back byte for byte.
+    return (category === 'TERM' || category === 'PROJECT') && !PERCENT_ESCAPE.test(value)
+      ? termIdentityKey(value, category)
+      : value
   }
 
   /**

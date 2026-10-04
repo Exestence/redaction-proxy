@@ -80,11 +80,15 @@ describe('pathological inputs', () => {
     'key', 'sid', 'session', 'token', 'KEY_', 'a_key=b ', '.lan.', '4111 1111 ', 'A123456789 ',
     '-----BEGIN RSA PRIVATE KEY-----\n', 'TAG_1 ', '/Users/a/', 'a@b.co ', 'password=a ', '0912345678 ',
     ' @ ', 'a.b at ', '(at)', 'a [dot] ', 'a(dot)', ' ', '09-1234-', 'A 1', '統編 1234-', 'Nimbus ', '機密 ',
-  ])('masks 200KB of %j within 2s', async unit => {
+    '%41', '%30', '%E6%98%9F', '%2', '%', 'a%40b.co ', '%2FUsers%2F', '%E6%A9%9F%E5%AF%86',
+  ])('masks 200KB of %j within 2s of CPU time', async unit => {
     const text = unit.repeat(Math.ceil(SIZE / unit.length)).slice(0, SIZE)
-    const started = performance.now()
+    // CPU time of this worker process rather than wall-clock time, so other
+    // test files running in parallel do not count against the budget.
+    const started = process.cpuUsage()
     await maskAll([text])
-    expect(performance.now() - started).toBeLessThan(2_000)
+    const used = process.cpuUsage(started)
+    expect((used.user + used.system) / 1_000).toBeLessThan(2_000)
   })
 })
 
