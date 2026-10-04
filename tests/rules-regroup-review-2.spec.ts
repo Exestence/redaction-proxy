@@ -58,16 +58,26 @@ describe('WO-6 review 2 D3: required fixes (red at 0b31e32)', () => {
 
 describe('WO-6 review 2 D3: unseen positives', () => {
   it.each([
-    ['email: wang.yichun at example.com', 'email: ⟦EMAIL_1⟧'],
-    ['my e-mail is chen.mei at gmail.com', 'my e-mail is ⟦EMAIL_1⟧'],
-    ['電子郵件 lin.wei at company.com.tw', '電子郵件 ⟦EMAIL_1⟧'],
-    ['E-mail：lin_yating AT ntu.edu.tw', 'E-mail：⟦EMAIL_1⟧'],
     ['wang.yichun(at)gmail(dot)com', '⟦EMAIL_1⟧'],
     ['john.doe(at)gmail[dot]com', '⟦EMAIL_1⟧'],
     ['chen_mei [at] ntu.edu.tw', '⟦EMAIL_1⟧'],
     ['lin.wei＠example.com.tw', '⟦EMAIL_1⟧'],
-    ['信箱：wang.yichun ＠ gmail.com', '信箱：⟦EMAIL_1⟧'],
   ])('masks %j', async (text, expected) => {
     expect(await mask(text)).toBe(expected)
+  })
+})
+
+// WO-6 round 3 dropped the spaced `@`/`＠` and bare ` at ` forms (prose and
+// matrix code are lexically identical), so these former positives are now
+// asserted unmasked.
+describe('WO-6 round 3: spaced @ and bare at are not detected', () => {
+  it.each([
+    'email: wang.yichun at example.com',
+    'my e-mail is chen.mei at gmail.com',
+    '電子郵件 lin.wei at company.com.tw',
+    'E-mail：lin_yating AT ntu.edu.tw',
+    '信箱：wang.yichun ＠ gmail.com',
+  ])('keeps %j', async (text) => {
+    expect(await mask(text)).toBe(text)
   })
 })

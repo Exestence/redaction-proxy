@@ -21,11 +21,11 @@ const HOST_NAME_MAX = 253
 
 const HOME = /(?<![.\-])(?:[a-z]:)?(?:\\\/|\\{1,2}|\/)(?:users|home)(?:\\\/|\\{1,2}|\/)[^/\\\s"'`,;()[\]{}<>|*?:]+/gi
 const HOME_TILDE = /(?<![.\-\w])~[A-Za-z][^/\\\s"'`,;()[\]{}<>|*?:~]*(?=\/)/g
-// Anchored on the `@` (or a spelled-out `at`) and expanded in JavaScript: a
+// Anchored on the `@` (or a bracketed `at`) and expanded in JavaScript: a
 // greedy local part followed by a required `@` would rescan every start
-// position of a text that has no `@`. Whitespace around the anchor is walked
-// in JavaScript too, so a long whitespace run is not rescanned per position.
-const EMAIL_AT = /[@＠]|[([]at[)\]]| at /gi
+// position of a text that has no `@`. Whitespace around a bracketed `at` is
+// walked in JavaScript too, so a long whitespace run is not rescanned per position.
+const EMAIL_AT = /[@＠]|[([]at[)\]]/gi
 const EMAIL_SPACE = /[ \t\u3000]/
 const EMAIL_LOCAL = /[A-Za-z0-9._%+-]/
 const EMAIL_DOMAIN_CHAR = /[A-Za-z0-9.-]/
@@ -36,21 +36,17 @@ const EMAIL_SPELLED_DOT = /\s*[([]dot[)\]]\s*/gi
 const EMAIL_SPELLED_DOT_AT = /\s*[([]dot[)\]]/iy
 /**
  * Top-level domains an obfuscated address may end in: any two-letter country
- * code, or one of these. A spaced `@` in code (`x @ self.weight`) and `at` in
- * prose end in other words.
+ * code, or one of these. Code and file names (`x(at)self.weight`) end in
+ * other words.
  */
 const EMAIL_SPELLED_TLD = /^(?:[a-z]{2}|com|net|org|edu|gov|mil|info|biz|dev|app|cloud|tech|site|online|xyz|test|example)$/i
 /**
- * Local part of an address spaced from its `@` or `at`: letter-led words joined
- * by `.`, `_`, or `+`, so a lone English word (`met at github.com`,
- * `find us @ shop.tw`) or a version (`v1.2`) is not one.
+ * Local part of an address spaced from its `(at)` or `[at]`: letter-led words
+ * joined by `.`, `_`, or `+`, so a lone English word (`find us (at) shop.tw`)
+ * or a version (`v1.2`) is not one.
  */
 const EMAIL_WORD_LOCAL = /^[A-Za-z][A-Za-z0-9]*(?:[._+][A-Za-z][A-Za-z0-9]*)+$/
-/** Words that make a bare ` at ` an address, in a window before the local part that no sentence end crosses. */
-const EMAIL_KEYWORD = /(?:mail|信箱|電郵|郵件|聯絡|寄到|contact)[^\n;!?。；！？]*$/i
-/** How many characters before the local part the email word may start. */
-const EMAIL_KEYWORD_WINDOW = 16
-/** Last local-part segments that name a file, not a mailbox (`package.json at github.com`). */
+/** Last local-part segments that name a file, not a mailbox (`package.json [at] github.com`). */
 const EMAIL_FILE_SUFFIX = /\.(?:json|js|ts|mjs|cjs|md|py|txt|ya?ml|html|css|sh|lock|toml|tar|gz|zip)$/i
 /** Longest local part and domain the expansion reads either side of the `@`. */
 const EMAIL_LOCAL_MAX = 128
@@ -266,13 +262,12 @@ export function collectPathCandidates(text: string, push: PushCandidate): void {
 
 /**
  * Expand every `@` into an address and keep the ones with a valid domain. An
- * obfuscated spelling (spaces around `@`, `＠`, `(at)`, `[at]`, ` at `, and
- * `[dot]` or `(dot)` in the domain) also needs a known top-level domain, and a
- * spaced one also needs a lower-case top-level domain and a local part of
- * joined words that does not start with a code root (`self.`, `this.`). A bare
- * ` at ` also needs an email word (`email`, `mail`, `信箱`, `聯絡`, `寄到`,
- * `contact`, ...) within 16 characters before the local part. Spaces never
- * cross a line break.
+ * obfuscated spelling (`＠`, `(at)`, `[at]`, and `[dot]` or `(dot)` in the
+ * domain) also needs a known top-level domain. `@` and `＠` must touch both
+ * parts: `a.b @ c.de` is as often a matrix product as an address, and a bare
+ * ` at ` as often prose. A bracketed `at` may have spaces around it (never a
+ * line break) when the TLD is lower-case and the local part is joined words
+ * that do not start with a code root (`self.`, `this.`).
  * @param text - text to scan.
  * @param push - candidate sink.
  */
@@ -281,7 +276,7 @@ export function collectEmailCandidates(text: string, push: PushCandidate): void 
     const spelledAt = match[0].length > 1
     let localEnd = match.index
     let from = match.index + match[0].length
-    if (!/^ at $/i.test(match[0])) {
+    if (spelledAt) {
       while (localEnd > 0 && EMAIL_SPACE.test(text.charAt(localEnd - 1))) localEnd -= 1
       while (from < text.length && EMAIL_SPACE.test(text.charAt(from))) from += 1
     }
@@ -303,16 +298,13 @@ export function collectEmailCandidates(text: string, push: PushCandidate): void 
     if (!EMAIL_DOMAIN.test(domain)) return
     const obfuscated = spelledAt || spelledDot || match[0] !== '@' || localEnd !== match.index || from !== match.index + 1
     if (obfuscated && !EMAIL_SPELLED_TLD.test(domain.slice(domain.lastIndexOf('.') + 1))) return
-    const bareAt = /^ at $/i.test(match[0])
-    if (bareAt || localEnd !== match.index || from !== match.index + match[0].length) {
+    if (localEnd !== match.index || from !== match.index + match[0].length) {
       const local = text.slice(start, localEnd)
       if (!EMAIL_WORD_LOCAL.test(local) || EMAIL_FILE_SUFFIX.test(local)) return
-      // `A.T @ B.mT` and `self.q @ self.k` are code: a mixed-case TLD or a code root before the dot.
+      // `a.T (at) b.mT` and `self.q (at) self.k` read as code: a mixed-case TLD or a code root before the dot.
       if (!/^[a-z]+$/.test(domain.slice(domain.lastIndexOf('.') + 1))) return
       if (HOST_CODE_ROOTS.has(local.slice(0, local.search(/[._+]/)))) return
     }
-    // A bare ` at ` reads as prose (`socket.io at github.com`) unless an email word precedes it.
-    if (bareAt && !EMAIL_KEYWORD.test(text.slice(Math.max(0, start - EMAIL_KEYWORD_WINDOW), start))) return
     push(start, end, 'EMAIL', PRIORITY_PII)
   })
 }

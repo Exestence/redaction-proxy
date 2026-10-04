@@ -52,7 +52,6 @@ describe('WO-6 review D3: required fixes (red at b5fa653)', () => {
 
 describe('WO-6 review D3: unseen positives', () => {
   it.each([
-    ['請寄到 chen.meiling ＠ example.tw，謝謝', '請寄到 ⟦EMAIL_1⟧，謝謝'],
     ['mail: lin.yating[at]school[dot]tw', 'mail: ⟦EMAIL_1⟧'],
     ['申請人 K231-415926 已補件', '申請人 ⟦TWID_1⟧ 已補件'],
     ['統一編號 5271-8444', '統一編號 ⟦TAXID_1⟧'],
@@ -105,5 +104,16 @@ describe('WO-6 review D4: identity and restore across spellings', () => {
   it('refuses an index recorded under rules-2 instead of reusing it', async () => {
     const index = { ...emptyRedactionIndex(), policyDigest: 'sha256:rules-2-digest' as typeof service.policyDigest }
     await expect(service.mask([{ seq: SessionSeq(1), path: '/a', text: '星河計畫' }], index)).rejects.toMatchObject({ code: 'policy' })
+  })
+})
+
+// WO-6 round 3 dropped the spaced `@`/`＠` and bare ` at ` forms (prose and
+// matrix code are lexically identical), so these former positives are now
+// asserted unmasked.
+describe('WO-6 round 3: spaced @ and bare at are not detected', () => {
+  it.each([
+    '請寄到 chen.meiling ＠ example.tw，謝謝',
+  ])('keeps %j', async (text) => {
+    expect(await mask(text)).toBe(text)
   })
 })

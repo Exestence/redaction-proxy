@@ -72,13 +72,9 @@ describe('configured terms split by a separator', () => {
 
 describe('obfuscated email addresses', () => {
   it.each([
-    ['CONTACT=wang.yichun @ example.tw', 'CONTACT=⟦EMAIL_1⟧'],
-    ['寄到 liu_kuanting ＠ school.test 謝謝', '寄到 ⟦EMAIL_1⟧ 謝謝'],
     ['mail wang.yichun(at)example.com now', 'mail ⟦EMAIL_1⟧ now'],
+    ['寄到 liu_kuanting＠school.test 謝謝', '寄到 ⟦EMAIL_1⟧ 謝謝'],
     ['mail wang.yichun [at] example.com now', 'mail ⟦EMAIL_1⟧ now'],
-    ['mail wang.yichun at example.com now', 'mail ⟦EMAIL_1⟧ now'],
-    ['信箱：wang.yichun at example.com', '信箱：⟦EMAIL_1⟧'],
-    ['Contact: hsu_yawen AT corp.test', 'Contact: ⟦EMAIL_1⟧'],
     ['mail wang.yichun@example[dot]com now', 'mail ⟦EMAIL_1⟧ now'],
     ['mail wang.yichun [at] example (dot) com now', 'mail ⟦EMAIL_1⟧ now'],
   ])('masks %j', async (text, expected) => {
@@ -178,6 +174,21 @@ describe('the call guard on a full-width host', () => {
     'call foo.lan(1) ｘ',
     'call ｆｏｏ．ｌａｎ(1)',
   ])('keeps the call in %j', async (text) => {
+    expect(await mask(text)).toBe(text)
+  })
+})
+
+// WO-6 round 3 dropped the spaced `@`/`＠` and bare ` at ` forms (prose and
+// matrix code are lexically identical), so these former positives are now
+// asserted unmasked.
+describe('WO-6 round 3: spaced @ and bare at are not detected', () => {
+  it.each([
+    'CONTACT=wang.yichun @ example.tw',
+    '寄到 liu_kuanting ＠ school.test 謝謝',
+    'mail wang.yichun at example.com now',
+    '信箱：wang.yichun at example.com',
+    'Contact: hsu_yawen AT corp.test',
+  ])('keeps %j', async (text) => {
     expect(await mask(text)).toBe(text)
   })
 })
