@@ -85,7 +85,7 @@ flowchart TD
 
 | 規則 | 類別 | 細節 |
 | --- | --- | --- |
-| `email` | `EMAIL` | 以 `@` 為錨點、有上限地向兩側展開。也接受防爬寫法：`＠`、`(at)`、`[at]`，以及網域中的 `[dot]`、`(dot)`；這些寫法要求頂級網域是兩字母國碼或常見 gTLD（`com`、`org`、`dev`、`test` 等）。`@`、`＠` 必須緊貼前後兩段；`(at)`、`[at]` 兩側可有空白（不跨行），此時頂級網域須全小寫、本地部分須是以 `.`、`_`、`+` 連接的字（`wang.yichun`）且不以 `self.`、`this.` 等程式根開頭。`@` 兩側有空白與單獨的 ` at ` **不偵測**：英文散文（`socket.io at github.com`、`contact fly.io at community.fly.io`）與矩陣程式碼（`layer.weight @ state.dx`）在字面上與地址無法區分。 |
+| `email` | `EMAIL` | 以 `@` 為錨點、有上限地向兩側展開。也接受防爬寫法：`＠`、`(at)`、`[at]`，以及網域中的 `[dot]`、`(dot)`；這些寫法要求頂級網域是兩字母國碼或常見 gTLD（`com`、`org`、`dev`、`test` 等）。`@`、`＠` 兩側各可有最多兩個空白（不跨行），此時網域最後一段須在封閉清單內（`com`、`net`、`org`、`edu`、`gov`、`io`、`dev`、`app`、`ai`、`co`、`me`、`info`、`biz`、`tw`、`jp`、`hk`、`cn`、`sg`、`uk`、`de`、`fr`、`us`、`ca`、`au`、`test`、`example`、`invalid`、`localhost`，全小寫；`com.tw` 這類以 `tw` 結尾也算），本地部分至少 2 個字元且含字母，所以 `layer.weight @ state.dx`、`A.T @ B.mt` 不算，`wang.yichun @ example.xyz` 也偵測不到。`(at)`、`[at]` 兩側可有空白（不跨行），此時頂級網域須全小寫、本地部分須是以 `.`、`_`、`+` 連接的字（`wang.yichun`）且不以 `self.`、`this.` 等程式根開頭。單獨的 ` at ` **不偵測**：英文散文（`socket.io at github.com`、`contact fly.io at community.fly.io`）在字面上與地址無法區分。 |
 | `user-path` | `PATH` | 只遮家目錄前綴（`/Users/x`、`/home/x`、`C:\Users\x`、`~x/`），含 JSON 跳脫形式；路徑其餘部分保持可讀。 |
 | `api-key` | `KEY` | PEM、AWS `AKIA`/`ASIA`、GitHub `ghp_` 系列、`sk-`、Slack `xox` 與 webhook、Google `AIza`、JWT、`Authorization`/`Bearer`、URL 中的帳密、`curl -u`、`--password x`，以及鍵名代表憑證的 `key=value` 指派（含中英文關鍵詞）。 |
 | `tw-national-id` | `TWID` | 身分證字號（第二碼 1/2）與居留證號（第二碼 8/9），**驗證檢查碼**。也接受字母後（`A 123456789`）或第四字元後（`A123-456789`）的一個空白或連字號；其他位置的分隔不算。 |
@@ -101,7 +101,7 @@ flowchart TD
 - **NFKC 投影。** 每條規則也會在去除零寬字元後的 NFKC 投影上再跑一次，所以全形數字（`０９１２３４５６７８`）、全形 `＠`、`ali\u200bce@…` 都抓得到。
 - **同值擴散。** 一個值被偵測到之後，它在同一請求中的其他出現位置也會用同一個佔位符遮掉（`propagate`）。
 - **允許清單。** `allowlist` 中的字面值不會被任何內建規則遮罩，預設是 `git@github.com` 與 `noreply@github.com`。設為空陣列就什麼都不放過。
-- **未偵測的拆開寫法。** 點後加空格的私有 IP（`192. 168. 1. 2`）、被空格或換行拆開的金鑰（只有高熵規則可能抓到片段），以及 `@` 兩側有空白或單獨用 ` at ` 的 email 不偵測。
+- **未偵測的拆開寫法。** 點後加空格的私有 IP（`192. 168. 1. 2`）、被空格或換行拆開的金鑰（只有高熵規則可能抓到片段），單獨用 ` at ` 的 email，以及 `@` 兩側有空白但網域結尾不在清單內（例如 `.xyz`）的 email 不偵測。
 - **保留 id。** 原文中若出現字面的 `EMAIL_3`（某個政策類別的 `CATEGORY_n`），這個 id 會被保留、不分配給偵測到的值。
 
 ## 4. 遮罩順序與提示快取

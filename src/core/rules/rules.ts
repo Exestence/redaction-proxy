@@ -46,6 +46,17 @@ const EMAIL_SPELLED_TLD = /^(?:[a-z]{2}|com|net|org|edu|gov|mil|info|biz|dev|app
  * or a version (`v1.2`) is not one.
  */
 const EMAIL_WORD_LOCAL = /^[A-Za-z][A-Za-z0-9]*(?:[._+][A-Za-z][A-Za-z0-9]*)+$/
+/** Most spaces an address may have on either side of `@` or `＠`. */
+const EMAIL_SIGN_GAP_MAX = 2
+/**
+ * The closed list of final domain labels a spaced `@` address may end in
+ * (WO-6 amendment R3). Lower-case only; an unlisted TLD is not detected.
+ */
+const EMAIL_SPACED_TLD: ReadonlySet<string> = new Set([
+  'com', 'net', 'org', 'edu', 'gov', 'io', 'dev', 'app', 'ai', 'co', 'me', 'info', 'biz',
+  'tw', 'jp', 'hk', 'cn', 'sg', 'uk', 'de', 'fr', 'us', 'ca', 'au',
+  'test', 'example', 'invalid', 'localhost',
+])
 /** Last local-part segments that name a file, not a mailbox (`package.json [at] github.com`). */
 const EMAIL_FILE_SUFFIX = /\.(?:json|js|ts|mjs|cjs|md|py|txt|ya?ml|html|css|sh|lock|toml|tar|gz|zip)$/i
 /** Longest local part and domain the expansion reads either side of the `@`. */
@@ -263,11 +274,13 @@ export function collectPathCandidates(text: string, push: PushCandidate): void {
 /**
  * Expand every `@` into an address and keep the ones with a valid domain. An
  * obfuscated spelling (`＠`, `(at)`, `[at]`, and `[dot]` or `(dot)` in the
- * domain) also needs a known top-level domain. `@` and `＠` must touch both
- * parts: `a.b @ c.de` is as often a matrix product as an address, and a bare
- * ` at ` as often prose. A bracketed `at` may have spaces around it (never a
- * line break) when the TLD is lower-case and the local part is joined words
- * that do not start with a code root (`self.`, `this.`).
+ * domain) also needs a known top-level domain. `@` or `＠` with up to two
+ * spaces on either side needs a final domain label from a closed list, and a
+ * local part of 2 or more characters with a letter: `layer.weight @ state.dx`
+ * is a matrix product. A bare ` at ` is not detected (prose). A bracketed `at`
+ * may have spaces around it (never a line break) when the TLD is lower-case
+ * and the local part is joined words that do not start with a code root
+ * (`self.`, `this.`).
  * @param text - text to scan.
  * @param push - candidate sink.
  */
@@ -276,10 +289,10 @@ export function collectEmailCandidates(text: string, push: PushCandidate): void 
     const spelledAt = match[0].length > 1
     let localEnd = match.index
     let from = match.index + match[0].length
-    if (spelledAt) {
-      while (localEnd > 0 && EMAIL_SPACE.test(text.charAt(localEnd - 1))) localEnd -= 1
-      while (from < text.length && EMAIL_SPACE.test(text.charAt(from))) from += 1
-    }
+    // A bracketed `at` may have any run of spaces around it; `@` and `＠` at most two.
+    const gap = spelledAt ? Infinity : EMAIL_SIGN_GAP_MAX
+    while (localEnd > 0 && match.index - localEnd < gap && EMAIL_SPACE.test(text.charAt(localEnd - 1))) localEnd -= 1
+    while (from < text.length && from - match.index - match[0].length < gap && EMAIL_SPACE.test(text.charAt(from))) from += 1
     let start = localEnd
     while (start > 0 && start > localEnd - EMAIL_LOCAL_MAX && EMAIL_LOCAL.test(text.charAt(start - 1))) start -= 1
     if (start === localEnd) return
@@ -296,13 +309,20 @@ export function collectEmailCandidates(text: string, push: PushCandidate): void 
     while (end > from && (text.charAt(end - 1) === '.' || text.charAt(end - 1) === '-')) end -= 1
     const domain = text.slice(from, end).replaceAll(EMAIL_SPELLED_DOT, '.')
     if (!EMAIL_DOMAIN.test(domain)) return
+    const tld = domain.slice(domain.lastIndexOf('.') + 1)
+    if (!spelledAt && (localEnd !== match.index || from !== match.index + 1)) {
+      // Spaced `@`: matrix code (`layer.weight @ state.dx`) ends in an attribute, not a listed TLD.
+      const local = text.slice(start, localEnd)
+      if (EMAIL_SPACED_TLD.has(tld) && local.length >= 2 && /[A-Za-z]/.test(local)) push(start, end, 'EMAIL', PRIORITY_PII)
+      return
+    }
     const obfuscated = spelledAt || spelledDot || match[0] !== '@' || localEnd !== match.index || from !== match.index + 1
-    if (obfuscated && !EMAIL_SPELLED_TLD.test(domain.slice(domain.lastIndexOf('.') + 1))) return
+    if (obfuscated && !EMAIL_SPELLED_TLD.test(tld)) return
     if (localEnd !== match.index || from !== match.index + match[0].length) {
       const local = text.slice(start, localEnd)
       if (!EMAIL_WORD_LOCAL.test(local) || EMAIL_FILE_SUFFIX.test(local)) return
       // `a.T (at) b.mT` and `self.q (at) self.k` read as code: a mixed-case TLD or a code root before the dot.
-      if (!/^[a-z]+$/.test(domain.slice(domain.lastIndexOf('.') + 1))) return
+      if (!/^[a-z]+$/.test(tld)) return
       if (HOST_CODE_ROOTS.has(local.slice(0, local.search(/[._+]/)))) return
     }
     push(start, end, 'EMAIL', PRIORITY_PII)

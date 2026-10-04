@@ -107,13 +107,9 @@ describe('WO-6 review D4: identity and restore across spellings', () => {
   })
 })
 
-// WO-6 round 3 dropped the spaced `@`/`＠` and bare ` at ` forms (prose and
-// matrix code are lexically identical), so these former positives are now
-// asserted unmasked.
-describe('WO-6 round 3: spaced @ and bare at are not detected', () => {
-  it.each([
-    '請寄到 chen.meiling ＠ example.tw，謝謝',
-  ])('keeps %j', async (text) => {
-    expect(await mask(text)).toBe(text)
+// WO-6 amendment R3 restored spaced `@` for listed TLDs, so this round-3 negative masks again.
+describe('WO-6 round 4: spaced @ at a listed TLD', () => {
+  it('masks 請寄到 chen.meiling ＠ example.tw，謝謝', async () => {
+    expect(await mask('請寄到 chen.meiling ＠ example.tw，謝謝')).toBe('請寄到 ⟦EMAIL_1⟧，謝謝')
   })
 })

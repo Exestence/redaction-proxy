@@ -73,6 +73,11 @@ describe('configured terms split by a separator', () => {
 describe('obfuscated email addresses', () => {
   it.each([
     ['mail wang.yichun(at)example.com now', 'mail ⟦EMAIL_1⟧ now'],
+    ['CONTACT=wang.yichun @ example.tw', 'CONTACT=⟦EMAIL_1⟧'],
+    ['寄到 liu_kuanting ＠ school.test 謝謝', '寄到 ⟦EMAIL_1⟧ 謝謝'],
+    ['CONTACT=cheng.yuhsiang41 @ example.tw', 'CONTACT=⟦EMAIL_1⟧'],
+    ['寄給 lin.yating  @  ntu.edu.tw 吧', '寄給 ⟦EMAIL_1⟧ 吧'],
+    ['john @ example.com', '⟦EMAIL_1⟧'],
     ['寄到 liu_kuanting＠school.test 謝謝', '寄到 ⟦EMAIL_1⟧ 謝謝'],
     ['mail wang.yichun [at] example.com now', 'mail ⟦EMAIL_1⟧ now'],
     ['mail wang.yichun@example[dot]com now', 'mail ⟦EMAIL_1⟧ now'],
@@ -89,10 +94,16 @@ describe('obfuscated email addresses', () => {
     'y = x @ self.weight',
     'released v1.2 at github.com',
     'package.json at github.com',
-    'find us @ shop.tw',
     'wang.yichun at example.com',
     'mail is down; socket.io at github.com has the fix and more',
     'cc Amy\n@bob.dev please review',
+    'A.T @ B.mt',
+    'h = inputs.T @ model.fc',
+    'mail wang.yichun   @ example.tw',
+    'mail wang.yichun @ example.xyz',
+    'x @ foo.com',
+    '12 @ foo.com',
+    'see @ localhost',
   ])('keeps %j', async (text) => {
     expect(await mask(text)).toBe(text)
   })
@@ -178,13 +189,10 @@ describe('the call guard on a full-width host', () => {
   })
 })
 
-// WO-6 round 3 dropped the spaced `@`/`＠` and bare ` at ` forms (prose and
-// matrix code are lexically identical), so these former positives are now
-// asserted unmasked.
-describe('WO-6 round 3: spaced @ and bare at are not detected', () => {
+// WO-6 round 3 dropped the bare ` at ` form (prose is lexically identical to
+// an address), so these former positives are asserted unmasked.
+describe('WO-6 round 3: bare at is not detected', () => {
   it.each([
-    'CONTACT=wang.yichun @ example.tw',
-    '寄到 liu_kuanting ＠ school.test 謝謝',
     'mail wang.yichun at example.com now',
     '信箱：wang.yichun at example.com',
     'Contact: hsu_yawen AT corp.test',
