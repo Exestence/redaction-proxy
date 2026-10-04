@@ -46,6 +46,10 @@ const EMAIL_SPELLED_TLD = /^(?:[a-z]{2}|com|net|org|edu|gov|mil|info|biz|dev|app
  * `find us @ shop.tw`) or a version (`v1.2`) is not one.
  */
 const EMAIL_WORD_LOCAL = /^[A-Za-z][A-Za-z0-9]*(?:[._+][A-Za-z][A-Za-z0-9]*)+$/
+/** Words that make a bare ` at ` an address, in a window before the local part that no sentence end crosses. */
+const EMAIL_KEYWORD = /(?:mail|信箱|電郵|郵件|聯絡|寄到|contact)[^\n;!?。；！？]*$/i
+/** How many characters before the local part the email word may start. */
+const EMAIL_KEYWORD_WINDOW = 16
 /** Last local-part segments that name a file, not a mailbox (`package.json at github.com`). */
 const EMAIL_FILE_SUFFIX = /\.(?:json|js|ts|mjs|cjs|md|py|txt|ya?ml|html|css|sh|lock|toml|tar|gz|zip)$/i
 /** Longest local part and domain the expansion reads either side of the `@`. */
@@ -264,8 +268,11 @@ export function collectPathCandidates(text: string, push: PushCandidate): void {
  * Expand every `@` into an address and keep the ones with a valid domain. An
  * obfuscated spelling (spaces around `@`, `＠`, `(at)`, `[at]`, ` at `, and
  * `[dot]` or `(dot)` in the domain) also needs a known top-level domain, and a
- * spaced one also needs a local part of joined words. Spaces never cross a
- * line break.
+ * spaced one also needs a lower-case top-level domain and a local part of
+ * joined words that does not start with a code root (`self.`, `this.`). A bare
+ * ` at ` also needs an email word (`email`, `mail`, `信箱`, `聯絡`, `寄到`,
+ * `contact`, ...) within 16 characters before the local part. Spaces never
+ * cross a line break.
  * @param text - text to scan.
  * @param push - candidate sink.
  */
@@ -296,11 +303,16 @@ export function collectEmailCandidates(text: string, push: PushCandidate): void 
     if (!EMAIL_DOMAIN.test(domain)) return
     const obfuscated = spelledAt || spelledDot || match[0] !== '@' || localEnd !== match.index || from !== match.index + 1
     if (obfuscated && !EMAIL_SPELLED_TLD.test(domain.slice(domain.lastIndexOf('.') + 1))) return
-    const spaced = /^ at $/i.test(match[0]) || localEnd !== match.index || from !== match.index + match[0].length
-    if (spaced) {
+    const bareAt = /^ at $/i.test(match[0])
+    if (bareAt || localEnd !== match.index || from !== match.index + match[0].length) {
       const local = text.slice(start, localEnd)
       if (!EMAIL_WORD_LOCAL.test(local) || EMAIL_FILE_SUFFIX.test(local)) return
+      // `A.T @ B.mT` and `self.q @ self.k` are code: a mixed-case TLD or a code root before the dot.
+      if (!/^[a-z]+$/.test(domain.slice(domain.lastIndexOf('.') + 1))) return
+      if (HOST_CODE_ROOTS.has(local.slice(0, local.search(/[._+]/)))) return
     }
+    // A bare ` at ` reads as prose (`socket.io at github.com`) unless an email word precedes it.
+    if (bareAt && !EMAIL_KEYWORD.test(text.slice(Math.max(0, start - EMAIL_KEYWORD_WINDOW), start))) return
     push(start, end, 'EMAIL', PRIORITY_PII)
   })
 }

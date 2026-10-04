@@ -77,6 +77,8 @@ describe('obfuscated email addresses', () => {
     ['mail wang.yichun(at)example.com now', 'mail ⟦EMAIL_1⟧ now'],
     ['mail wang.yichun [at] example.com now', 'mail ⟦EMAIL_1⟧ now'],
     ['mail wang.yichun at example.com now', 'mail ⟦EMAIL_1⟧ now'],
+    ['信箱：wang.yichun at example.com', '信箱：⟦EMAIL_1⟧'],
+    ['Contact: hsu_yawen AT corp.test', 'Contact: ⟦EMAIL_1⟧'],
     ['mail wang.yichun@example[dot]com now', 'mail ⟦EMAIL_1⟧ now'],
     ['mail wang.yichun [at] example (dot) com now', 'mail ⟦EMAIL_1⟧ now'],
   ])('masks %j', async (text, expected) => {
@@ -92,6 +94,8 @@ describe('obfuscated email addresses', () => {
     'released v1.2 at github.com',
     'package.json at github.com',
     'find us @ shop.tw',
+    'wang.yichun at example.com',
+    'mail is down; socket.io at github.com has the fix and more',
     'cc Amy\n@bob.dev please review',
   ])('keeps %j', async (text) => {
     expect(await mask(text)).toBe(text)
