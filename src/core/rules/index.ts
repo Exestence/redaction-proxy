@@ -3,8 +3,9 @@
  * identification and business numbers, telephone numbers, payment card
  * numbers, credentials, high-entropy runs, private addresses, internal host
  * names, and configured literal terms, with every rule run again over an NFKC
- * projection and over a percent-decoded projection, and every detected value
- * propagated to its other occurrences.
+ * projection, over a percent-decoded projection, and over the NFKC projection
+ * of the decoded text, and every detected value propagated to its other
+ * occurrences.
  *
  * @module redaction-proxy/core/rules
  */
@@ -15,7 +16,7 @@ import type { RedactionDetection, RedactionDetector, RedactionPropagation } from
 import type { Candidate, PushCandidate } from './candidate.ts'
 import { mergeCandidates } from './candidate.ts'
 import type { OffsetProjection } from './normalize.ts'
-import { projectNfkc, projectPercent } from './normalize.ts'
+import { composeProjections, projectNfkc, projectPercent } from './normalize.ts'
 import { propagateValues } from './propagate.ts'
 import { screenText } from './screen.ts'
 import type { ConfiguredTerm } from './rules.ts'
@@ -59,7 +60,7 @@ export interface RulesRedactionConfig {
 }
 
 /** Detector version recorded with every scan; changes whenever a rule's matches change. */
-export const DETECTOR_VERSION = 'rules-4'
+export const DETECTOR_VERSION = 'rules-5'
 
 /** Shared addresses that are public by construction and carry no private value. */
 export const DEFAULT_ALLOWLIST: readonly string[] = ['git@github.com', 'noreply@github.com']
@@ -244,8 +245,14 @@ export class RulesDetector implements RedactionDetector {
     // `%E6...` in a query string hides nothing. Terms run here too: their own
     // NFKC projection is taken of the decoded text, and the map below carries
     // each span to the whole encoded range, which is what the registry binds.
+    // A fourth pass folds the decoded text through NFKC, so an encoded zero-width
+    // character or full-width digit hides nothing either.
     const percent = projectPercent(text)
-    if (percent !== undefined) this.collectProjected(text, percent, candidates, false)
+    if (percent !== undefined) {
+      this.collectProjected(text, percent, candidates, false)
+      const folded = projectNfkc(percent.norm)
+      if (folded.norm !== percent.norm) this.collectProjected(text, composeProjections(percent, folded), candidates, true)
+    }
     return mergeCandidates(candidates)
   }
 
