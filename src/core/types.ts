@@ -230,4 +230,13 @@ export interface RedactionDetector {
     texts: readonly string[],
     values: ReadonlyMap<string, string>,
   ): readonly RedactionPropagation[] | Promise<readonly RedactionPropagation[]>
+  /**
+   * Identity key of one value. Values with equal keys share one placeholder
+   * identity, and {@link restore} returns the first of them the call bound.
+   * Without this member every distinct value is its own key.
+   * @param value - one detected original.
+   * @param category - the category it is masked under.
+   * @returns the key its identity is allocated by.
+   */
+  identityKey?(value: string, category: string): string
 }

@@ -32,7 +32,6 @@ describe('leaks', () => {
     '-----BEGIN EC PRIVATE KEY-----\nMIIabc\n',
     'ssh to nas.lan at 10.1.2.3',
     '機密專案 kickoff',
-    'Nimbus, nimbus and NIMBUS',
     '{"home":"\\/Users\\/alice\\/x"}',
     'C:\\\\Users\\\\alice\\\\AppData',
     '身分證 A123456789 電話 0912-345-678',
@@ -44,6 +43,14 @@ describe('leaks', () => {
     for (const original of result.registry.originals()) expect(masked).not.toContain(original)
     const back = restore(masked, result.registry)
     expect(back.ok && back.text).toBe(text)
+  })
+
+  it('masks every spelling of a configured term under one identity and restores the first spelling', async () => {
+    const result = await maskAll(['Nimbus, nimbus and NIMBUS'])
+    expect(result.masked[0]).toBe('⟦PROJECT_1⟧, ⟦PROJECT_1⟧ and ⟦PROJECT_1⟧')
+    expect(result.registry.originals()).toEqual(['Nimbus', 'nimbus', 'NIMBUS'])
+    const back = restore(result.masked[0] ?? '', result.registry)
+    expect(back.ok && back.text).toBe('Nimbus, Nimbus and Nimbus')
   })
 })
 
@@ -72,6 +79,7 @@ describe('pathological inputs', () => {
     'password=', 'Bearer ', 'Cookie: ', '0912', 'A1234567', 'eyJ', '\\u4e2d', '.local', '10.1.',
     'key', 'sid', 'session', 'token', 'KEY_', 'a_key=b ', '.lan.', '4111 1111 ', 'A123456789 ',
     '-----BEGIN RSA PRIVATE KEY-----\n', 'TAG_1 ', '/Users/a/', 'a@b.co ', 'password=a ', '0912345678 ',
+    ' @ ', 'a.b at ', '(at)', 'a [dot] ', 'a(dot)', ' ', '09-1234-', 'A 1', '統編 1234-', 'Nimbus ', '機密 ',
   ])('masks 200KB of %j within 2s', async unit => {
     const text = unit.repeat(Math.ceil(SIZE / unit.length)).slice(0, SIZE)
     const started = performance.now()

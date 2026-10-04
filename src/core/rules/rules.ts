@@ -21,17 +21,43 @@ const HOST_NAME_MAX = 253
 
 const HOME = /(?<![.\-])(?:[a-z]:)?(?:\\\/|\\{1,2}|\/)(?:users|home)(?:\\\/|\\{1,2}|\/)[^/\\\s"'`,;()[\]{}<>|*?:]+/gi
 const HOME_TILDE = /(?<![.\-\w])~[A-Za-z][^/\\\s"'`,;()[\]{}<>|*?:~]*(?=\/)/g
-// Anchored on `@` and expanded in JavaScript: a greedy local part followed by a
-// required `@` would rescan every start position of a text that has no `@`.
-const EMAIL_AT = /@/g
+// Anchored on the `@` (or a spelled-out `at`) and expanded in JavaScript: a
+// greedy local part followed by a required `@` would rescan every start
+// position of a text that has no `@`. Whitespace around the anchor is walked
+// in JavaScript too, so a long whitespace run is not rescanned per position.
+const EMAIL_AT = /[@＠]|[([]at[)\]]| at /gi
+const EMAIL_SPACE = /\s/
 const EMAIL_LOCAL = /[A-Za-z0-9._%+-]/
 const EMAIL_DOMAIN_CHAR = /[A-Za-z0-9.-]/
 const EMAIL_DOMAIN = /^[A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)*\.[A-Za-z]{2,}$/
+/** A domain whose dots may be spelled `[dot]` or `(dot)`, read from a sticky position. */
+const EMAIL_SPELLED_DOMAIN = /[A-Za-z0-9-]+(?:(?:\.|\s*[([]dot[)\]]\s*)[A-Za-z0-9-]+)*/iy
+const EMAIL_SPELLED_DOT = /\s*[([]dot[)\]]\s*/gi
+const EMAIL_SPELLED_DOT_AT = /\s*[([]dot[)\]]/iy
+/**
+ * Top-level domains an obfuscated address may end in: any two-letter country
+ * code, or one of these. A spaced `@` in code (`x @ self.weight`) and `at` in
+ * prose end in other words.
+ */
+const EMAIL_SPELLED_TLD = /^(?:[a-z]{2}|com|net|org|edu|gov|mil|info|biz|dev|app|cloud|tech|site|online|xyz|test|example)$/i
+/**
+ * Local part of a ` at ` address: letter-led words joined by `.`, `_`, or `+`,
+ * so a lone English word (`met at github.com`) or a version (`v1.2`) is not one.
+ */
+const EMAIL_WORD_LOCAL = /^[A-Za-z][A-Za-z0-9]*(?:[._+][A-Za-z][A-Za-z0-9]*)+$/
+/** Last local-part segments that name a file, not a mailbox (`package.json at github.com`). */
+const EMAIL_FILE_SUFFIX = /\.(?:json|js|ts|mjs|cjs|md|py|txt|ya?ml|html|css|sh|lock|toml|tar|gz|zip)$/i
 /** Longest local part and domain the expansion reads either side of the `@`. */
 const EMAIL_LOCAL_MAX = 128
 const EMAIL_DOMAIN_MAX = 256
 
 const TWID = /(?<![A-Za-z0-9])[A-Z][1289]\d{8}(?![A-Za-z0-9])/g
+/**
+ * An identification number with one separator, after the letter
+ * (`A 123456789`) or after the fourth character (`A123-456789`), the two
+ * places forms and OCR put one. Any other split is not matched.
+ */
+const TWID_SPLIT = /(?<![A-Za-z0-9-])[A-Z](?:[- \u3000][1289]\d{8}|[1289]\d{2}[- \u3000]\d{6})(?![A-Za-z0-9]|[- \u3000]\d)/g
 /** A separator inside a telephone number: a hyphen, an ideographic space, or a space. */
 const PHONE_GAP = '[-\\u3000 ]?'
 const PHONE_MOBILE = new RegExp(
@@ -40,12 +66,19 @@ const PHONE_MOBILE = new RegExp(
   + `|\\d{1,2}${PHONE_GAP}\\d{3,4}${PHONE_GAP}\\d{3,4}))(?!\\d)`,
   'g',
 )
+/**
+ * A mobile number grouped 2-4-4 with one consistent separator: `09-1234-5678`,
+ * `09 1234 5678`. Not a group of a longer run such as a UUID.
+ */
+const PHONE_MOBILE_SPLIT = /(?<![A-Za-z0-9-])09([- \u3000])(\d{4})\1\d{4}(?![A-Za-z0-9]|\1[A-Za-z0-9])/g
+/** A middle group that reads as a year, which makes `09-2026-1005` a date. */
+const PHONE_YEAR = /^(?:19|20)\d\d$/
 const PHONE_KEYWORD = new RegExp(
   '(?:電話|电话|手機|手机|傳真|传真|聯絡|联络|phone|tel|fax|mobile)'
   + '[^\\n]{0,8}?(\\(?(?<!\\d)0\\d{1,2}\\)?[-\\s]{0,2}\\d{3,4}[-\\s]?\\d{3,4}(?!\\d))',
   'gi',
 )
-const TAX_ID = /(?:統一編號|統編|營利事業|tax[ _-]?id|taxid|vat)[^\n]{0,8}?((?<!\d)\d{8}(?!\d))/gi
+const TAX_ID = /(?:統一編號|統編|營利事業|tax[ _-]?id|taxid|vat)[^\n]{0,8}?((?<!\d)(?:\d{8}|\d{1,7}[- \u3000]\d{1,7})(?!\d|[- \u3000]\d))/gi
 const CARD_RUN = /(?<!\d)\d{4,}(?:[ -]\d{3,})*/g
 const PRIVATE_IP = new RegExp(
   '(?<![\\d.])(?:10\\.\\d{1,3}\\.\\d{1,3}\\.\\d{1,3}'
@@ -65,6 +98,14 @@ const SECRET_CONTEXT = /secret|token|password|api[_-]?key|authorization|credenti
 
 /** Identifiers whose member access reads as code rather than a host name. */
 const HOST_CODE_ROOTS = new Set(['this', 'ctx', 'self', 'globalThis', 'window', 'req', 'res', 'opts', 'config'])
+
+/** Weights of the Taiwan business-number checksum. */
+const TAX_ID_WEIGHTS = [1, 2, 1, 2, 1, 2, 4, 1]
+/** Separators a configured term's parts may be joined or split by. */
+const TERM_SEPARATOR = '[\\s\\-_‧・·]'
+const TERM_SEPARATORS = /[\s\-_‧・·]+/g
+/** One CJK character, which is a part of its own: CJK text has no word spaces. */
+const TERM_CJK = /[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}\p{Script=Hangul}]/u
 
 /** Letter values of the Taiwan identification-number checksum. */
 const TW_LETTER_VALUES = 'ABCDEFGHJKLMNPQRSTUVXYWZIO'
@@ -92,6 +133,75 @@ export function isTaiwanNationalId(candidate: string): boolean {
   let sum = 0
   for (const [i, weight] of weights.entries()) sum += (digits.charCodeAt(i) - 48) * weight
   return sum % 10 === 0
+}
+
+/**
+ * Whether eight digits pass the Taiwan business-number (統一編號) checksum:
+ * the digit sums of the weighted products total a multiple of 5, or one less
+ * than a multiple of 5 when the seventh digit is 7.
+ * @param digits - eight decimal digits.
+ * @returns whether the checksum holds.
+ */
+export function isTaiwanBusinessNumber(digits: string): boolean {
+  if (!/^\d{8}$/.test(digits)) return false
+  let sum = 0
+  for (const [i, weight] of TAX_ID_WEIGHTS.entries()) {
+    const product = (digits.charCodeAt(i) - 48) * weight
+    sum += Math.floor(product / 10) + (product % 10)
+  }
+  return sum % 5 === 0 || (digits.charAt(6) === '7' && (sum + 1) % 5 === 0)
+}
+
+/**
+ * Split a projected, lower-cased term into the parts a separator may fall
+ * between: at existing separators, at every change between letters, digits,
+ * and CJK, and around every CJK character.
+ * @param needle - the term's lower-cased NFKC projection.
+ * @returns the parts in order, without separators.
+ */
+function termParts(needle: string): string[] {
+  const kind = (char: string): string => (TERM_CJK.test(char) ? 'cjk' : /\p{N}/u.test(char) ? 'digit' : 'other')
+  const parts: string[] = []
+  for (const word of needle.split(TERM_SEPARATORS)) {
+    let part = ''
+    let last = ''
+    for (const char of word) {
+      const now = kind(char)
+      if (part.length > 0 && (now === 'cjk' || now !== last)) {
+        parts.push(part)
+        part = ''
+      }
+      part += char
+      last = now
+    }
+    if (part.length > 0) parts.push(part)
+  }
+  return parts
+}
+
+/**
+ * The pattern one configured term matches on a lower-cased projection: its
+ * parts in order, with at most one separator between two parts.
+ * @param value - the configured term.
+ * @returns a global pattern, or `undefined` for a term of one part.
+ */
+function termPattern(value: string): RegExp | undefined {
+  const parts = termParts(projectNfkc(value).lower)
+  if (parts.length < 2) return undefined
+  const escape = (part: string): string => part.replaceAll(/[.*+?^${}()|[\]\\/]/g, '\\$&')
+  return new RegExp(parts.map(escape).join(`${TERM_SEPARATOR}?`), 'gu')
+}
+
+/**
+ * Identity key of a configured term's spelling: its projection, lower-cased,
+ * with every separator removed, so `星河計畫`, `星河 計畫`, and `星河-計畫`
+ * share one placeholder.
+ * @param value - one spelling.
+ * @param category - `TERM` or `PROJECT`.
+ * @returns the key, prefixed so it never equals another category's raw value.
+ */
+export function termIdentityKey(value: string, category: string): string {
+  return `\u0000${category}\u0000${projectNfkc(value).lower.replaceAll(TERM_SEPARATORS, '')}`
 }
 
 /**
@@ -150,19 +260,44 @@ export function collectPathCandidates(text: string, push: PushCandidate): void {
 }
 
 /**
- * Expand every `@` into an address and keep the ones with a valid domain.
+ * Expand every `@` into an address and keep the ones with a valid domain. An
+ * obfuscated spelling (spaces around `@`, `＠`, `(at)`, `[at]`, ` at `, and
+ * `[dot]` or `(dot)` in the domain) also needs a known top-level domain, and
+ * ` at ` also needs a local part of joined words.
  * @param text - text to scan.
  * @param push - candidate sink.
  */
 export function collectEmailCandidates(text: string, push: PushCandidate): void {
   runAll(EMAIL_AT, text, (match) => {
-    let start = match.index
-    while (start > 0 && start > match.index - EMAIL_LOCAL_MAX && EMAIL_LOCAL.test(text.charAt(start - 1))) start -= 1
-    let end = match.index + 1
-    while (end < text.length && end < match.index + EMAIL_DOMAIN_MAX && EMAIL_DOMAIN_CHAR.test(text.charAt(end))) end += 1
-    while (end > match.index + 1 && (text.charAt(end - 1) === '.' || text.charAt(end - 1) === '-')) end -= 1
-    if (start === match.index) return
-    if (!EMAIL_DOMAIN.test(text.slice(match.index + 1, end))) return
+    const spelledAt = match[0].length > 1
+    let localEnd = match.index
+    let from = match.index + match[0].length
+    if (!/^ at $/i.test(match[0])) {
+      while (localEnd > 0 && EMAIL_SPACE.test(text.charAt(localEnd - 1))) localEnd -= 1
+      while (from < text.length && EMAIL_SPACE.test(text.charAt(from))) from += 1
+    }
+    let start = localEnd
+    while (start > 0 && start > localEnd - EMAIL_LOCAL_MAX && EMAIL_LOCAL.test(text.charAt(start - 1))) start -= 1
+    if (start === localEnd) return
+    let end = from
+    while (end < text.length && end < from + EMAIL_DOMAIN_MAX && EMAIL_DOMAIN_CHAR.test(text.charAt(end))) end += 1
+    EMAIL_SPELLED_DOT_AT.lastIndex = end
+    const spelledDot = EMAIL_SPELLED_DOT_AT.test(text)
+    if (spelledDot) {
+      EMAIL_SPELLED_DOMAIN.lastIndex = from
+      // The walk above already matched at `from`, so the spelled pattern does too.
+      // oxlint-disable-next-line typescript/no-non-null-assertion -- see above.
+      end = Math.min(from + EMAIL_SPELLED_DOMAIN.exec(text)![0].length, from + EMAIL_DOMAIN_MAX)
+    }
+    while (end > from && (text.charAt(end - 1) === '.' || text.charAt(end - 1) === '-')) end -= 1
+    const domain = text.slice(from, end).replaceAll(EMAIL_SPELLED_DOT, '.')
+    if (!EMAIL_DOMAIN.test(domain)) return
+    const obfuscated = spelledAt || spelledDot || match[0] !== '@' || localEnd !== match.index || from !== match.index + 1
+    if (obfuscated && !EMAIL_SPELLED_TLD.test(domain.slice(domain.lastIndexOf('.') + 1))) return
+    if (/^ at $/i.test(match[0])) {
+      const local = text.slice(start, localEnd)
+      if (!EMAIL_WORD_LOCAL.test(local) || EMAIL_FILE_SUFFIX.test(local)) return
+    }
     push(start, end, 'EMAIL', PRIORITY_PII)
   })
 }
@@ -180,9 +315,31 @@ export function collectNumberCandidates(text: string, rules: ReadonlySet<string>
       if (!isTaiwanNationalId(match[0])) return
       push(match.index, match.index + match[0].length, 'TWID', PRIORITY_PII)
     })
+    runAll(TWID_SPLIT, text, (match) => {
+      if (!isTaiwanNationalId(match[0].replace(/[- \u3000]/, ''))) return
+      push(match.index, match.index + match[0].length, 'TWID', PRIORITY_PII)
+    })
+  }
+  // Business numbers are proposed before telephone numbers: a number after both
+  // `聯絡` and `統編` yields two candidates with equal offsets and priority, and
+  // the merge keeps the first proposed of those.
+  if (rules.has('tax-id')) {
+    runAll(TAX_ID, text, (match) => {
+      // oxlint-disable-next-line typescript/no-non-null-assertion -- the pattern has one group.
+      const value = match[1]!
+      if (value.length !== 8 && !isTaiwanBusinessNumber(value.replace(/[- \u3000]/, ''))) return
+      const at = match.index + match[0].lastIndexOf(value)
+      push(at, at + value.length, 'TAXID', PRIORITY_PII)
+    })
   }
   if (rules.has('phone')) {
     runAll(PHONE_MOBILE, text, (match) => {
+      push(match.index, match.index + match[0].length, 'PHONE', PRIORITY_PII)
+    })
+    runAll(PHONE_MOBILE_SPLIT, text, (match) => {
+      // ponytail: a year-shaped middle group drops 2% of real 2-4-4 numbers (09-19xx, 09-20xx); a date-word context check is the upgrade.
+      // oxlint-disable-next-line typescript/no-non-null-assertion -- the pattern has two groups.
+      if (PHONE_YEAR.test(match[2]!)) return
       push(match.index, match.index + match[0].length, 'PHONE', PRIORITY_PII)
     })
     runAll(PHONE_KEYWORD, text, (match) => {
@@ -190,14 +347,6 @@ export function collectNumberCandidates(text: string, rules: ReadonlySet<string>
       const value = match[1]!
       const at = match.index + match[0].lastIndexOf(value)
       push(at, at + value.length, 'PHONE', PRIORITY_PII)
-    })
-  }
-  if (rules.has('tax-id')) {
-    runAll(TAX_ID, text, (match) => {
-      // oxlint-disable-next-line typescript/no-non-null-assertion -- the pattern has one group.
-      const value = match[1]!
-      const at = match.index + match[0].lastIndexOf(value)
-      push(at, at + value.length, 'TAXID', PRIORITY_PII)
     })
   }
 }
@@ -253,8 +402,15 @@ export function collectCardCandidates(text: string, push: PushCandidate): void {
  * @param text - text to scan.
  * @param rules - which of `ip` and `host` are enabled.
  * @param push - candidate sink.
+ * @param originalAt - the submitted character an offset of `text` came from;
+ *   on a projection, the call guard reads `（` there rather than its fold `(`.
  */
-export function collectNetworkCandidates(text: string, rules: ReadonlySet<string>, push: PushCandidate): void {
+export function collectNetworkCandidates(
+  text: string,
+  rules: ReadonlySet<string>,
+  push: PushCandidate,
+  originalAt: (offset: number) => string = offset => text.charAt(offset),
+): void {
   if (rules.has('ip')) {
     runAll(PRIVATE_IP, text, (match) => {
       if (match[0].split('.').some(octet => Number(octet) > 255)) return
@@ -270,7 +426,7 @@ export function collectNetworkCandidates(text: string, rules: ReadonlySet<string
     const end = match.index + match[0].length
     if (start === match.index) return
     if (text.charAt(start - 1) === '.') return
-    if (text.charAt(end) === '(') return
+    if (originalAt(end) === '(') return
     const first = HOST_FIRST_WORD.exec(text.slice(start))
     if (first !== null && HOST_CODE_ROOTS.has(first[0])) return
     push(start, end, 'HOST', PRIORITY_PII)
@@ -330,11 +486,24 @@ export function collectTermCandidates(text: string, terms: readonly ConfiguredTe
   const projection = projectNfkc(text)
   let lowerText: string | undefined
   for (const term of terms) {
-    // Configuration refuses a term that projects to nothing, so the needle is never empty.
-    const needle = projectNfkc(term.value).lower
-    for (let at = projection.lower.indexOf(needle); at >= 0; at = projection.lower.indexOf(needle, at + 1)) {
-      // oxlint-disable-next-line typescript/no-non-null-assertion -- both offsets are inside the projection.
-      push(projection.startMap[at]!, projection.endMap[at + needle.length - 1]!, term.category, PRIORITY_TERM)
+    const pattern = termPattern(term.value)
+    if (pattern === undefined) {
+      // Configuration refuses a term that projects to nothing, so the needle is never empty.
+      const needle = projectNfkc(term.value).lower
+      for (let at = projection.lower.indexOf(needle); at >= 0; at = projection.lower.indexOf(needle, at + 1)) {
+        // oxlint-disable-next-line typescript/no-non-null-assertion -- both offsets are inside the projection.
+        push(projection.startMap[at]!, projection.endMap[at + needle.length - 1]!, term.category, PRIORITY_TERM)
+      }
+    } else {
+      for (let match = pattern.exec(projection.lower); match !== null; match = pattern.exec(projection.lower)) {
+        // oxlint-disable-next-line typescript/no-non-null-assertion -- both offsets are inside the projection.
+        push(projection.startMap[match.index]!, projection.endMap[match.index + match[0].length - 1]!, term.category, PRIORITY_TERM)
+        // Overlapping occurrences are found too, as the single-part search finds
+        // them. A `u` pattern backs a lastIndex inside a surrogate pair up to the
+        // pair's start, so the step is one whole code point.
+        // oxlint-disable-next-line typescript/no-non-null-assertion -- the match is not empty.
+        pattern.lastIndex = match.index + (projection.lower.codePointAt(match.index)! > 0xffff ? 2 : 1)
+      }
     }
     if (isAsciiPrintable(term.value)) continue
     lowerText ??= text.toLowerCase()

@@ -26,6 +26,7 @@ import {
   collectNumberCandidates,
   collectPathCandidates,
   collectTermCandidates,
+  termIdentityKey,
 } from './rules.ts'
 import { collectSecretCandidates } from './secret.ts'
 
@@ -57,7 +58,7 @@ export interface RulesRedactionConfig {
 }
 
 /** Detector version recorded with every scan; changes whenever a rule's matches change. */
-export const DETECTOR_VERSION = 'rules-2'
+export const DETECTOR_VERSION = 'rules-3'
 
 /** Shared addresses that are public by construction and carry no private value. */
 export const DEFAULT_ALLOWLIST: readonly string[] = ['git@github.com', 'noreply@github.com']
@@ -193,8 +194,14 @@ export class RulesDetector implements RedactionDetector {
    * @param text - the text or its NFKC projection.
    * @param out - candidate sink.
    * @param skipTerms - whether to skip configured literals, which project themselves.
+   * @param originalAt - on a projection, the submitted character each offset came from.
    */
-  private collect(text: string, out: Candidate[], skipTerms: boolean): void {
+  private collect(
+    text: string,
+    out: Candidate[],
+    skipTerms: boolean,
+    originalAt?: (offset: number) => string,
+  ): void {
     const push: PushCandidate = (start, end, category, priority) => {
       if (this.allowlist.has(text.slice(start, end).toLowerCase())) return
       out.push({ start, end, category, priority })
@@ -203,7 +210,7 @@ export class RulesDetector implements RedactionDetector {
     if (this.rules.has('email')) collectEmailCandidates(text, push)
     collectNumberCandidates(text, this.rules, push)
     if (this.rules.has('card')) collectCardCandidates(text, push)
-    collectNetworkCandidates(text, this.rules, push)
+    collectNetworkCandidates(text, this.rules, push, originalAt)
     if (this.rules.has('api-key')) collectSecretCandidates(text, push)
     if (this.rules.has('entropy')) collectEntropyCandidates(text, push)
     if (!skipTerms) collectTermCandidates(text, this.terms, push)
@@ -231,7 +238,7 @@ export class RulesDetector implements RedactionDetector {
     const projection = projectNfkc(text)
     if (projection.norm !== text) {
       const folded: Candidate[] = []
-      this.collect(projection.norm, folded, true)
+      this.collect(projection.norm, folded, true, offset => text.charAt(projection.startMap[offset] ?? text.length))
       for (const candidate of folded) {
         candidates.push({
           ...candidate,
@@ -243,6 +250,17 @@ export class RulesDetector implements RedactionDetector {
       }
     }
     return mergeCandidates(candidates)
+  }
+
+  /**
+   * Identity key of one value: every spelling of a configured term shares one
+   * key, and so one placeholder; any other value is its own key.
+   * @param value - one detected original.
+   * @param category - the category it is masked under.
+   * @returns the key its identity is allocated by.
+   */
+  identityKey(value: string, category: string): string {
+    return category === 'TERM' || category === 'PROJECT' ? termIdentityKey(value, category) : value
   }
 
   /**
