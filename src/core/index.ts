@@ -30,6 +30,7 @@ export {
   DETECTOR_VERSION,
   RULE_NAMES,
   RulesDetector,
+  isTaiwanBusinessNumber,
   isTaiwanNationalId,
   resolveRulesConfig,
 } from './rules/index.ts'

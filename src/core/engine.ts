@@ -118,12 +118,20 @@ export function applySpans(text: string, spans: readonly RedactionTextSpan[]): s
 
 /** Mutable in-memory placeholder bindings owned by one mask call. */
 class Registry implements RedactionRegistry {
+  /** First original bound to each identity; restore returns it. */
   private readonly byId = new Map<RedactionId, string>()
-  private readonly byOriginal = new Map<string, RedactionId>()
+  private readonly keyById = new Map<RedactionId, string>()
+  private readonly byKey = new Map<string, RedactionId>()
+  /** Every bound original, including later spellings that share an identity. */
+  private readonly spellings = new Map<string, RedactionId>()
   private readonly last = new Map<string, number>()
   private readonly reserved: Set<RedactionId>
 
-  constructor(lastIds: Readonly<Record<string, number>>, reserved: readonly RedactionId[]) {
+  constructor(
+    lastIds: Readonly<Record<string, number>>,
+    reserved: readonly RedactionId[],
+    private readonly keyOf: (value: string, category: string) => string,
+  ) {
     for (const [category, n] of Object.entries(lastIds)) this.last.set(category, n)
     this.reserved = new Set(reserved)
   }
@@ -139,23 +147,31 @@ class Registry implements RedactionRegistry {
   }
 
   bind(id: RedactionId, original: string): void {
-    const bound = this.byId.get(id)
-    const known = this.byOriginal.get(original)
-    if ((bound !== undefined && bound !== original) || (known !== undefined && known !== id)) {
+    const { category, n } = parseId(id)
+    const key = this.keyOf(original, category)
+    const bound = this.keyById.get(id)
+    const known = this.byKey.get(key)
+    if ((bound !== undefined && bound !== key) || (known !== undefined && known !== id)) {
       throw new RedactionError('conflict', `redaction id ${id} is recorded for two different values`)
     }
     if (this.reserved.has(id)) {
       throw new RedactionError('conflict', `redaction id ${id} occurs literally in original text and is also bound`)
     }
-    this.byId.set(id, original)
-    this.byOriginal.set(original, id)
-    const { category, n } = parseId(id)
+    if (!this.byId.has(id)) this.byId.set(id, original)
+    this.keyById.set(id, key)
+    this.byKey.set(key, id)
+    this.spellings.set(original, id)
     this.last.set(category, Math.max(this.last.get(category) ?? 0, n))
   }
 
   allocate(original: string, category: string): RedactionId {
-    const known = this.byOriginal.get(original)
-    if (known !== undefined) return known
+    const spelled = this.spellings.get(original)
+    if (spelled !== undefined) return spelled
+    const known = this.byKey.get(this.keyOf(original, category))
+    if (known !== undefined) {
+      this.bind(known, original)
+      return known
+    }
     let n = (this.last.get(category) ?? 0) + 1
     while (this.reserved.has(RedactionId(`${category}_${n}`))) n += 1
     const id = RedactionId(`${category}_${n}`)
@@ -172,15 +188,18 @@ class Registry implements RedactionRegistry {
   }
 
   originals(): string[] {
-    return [...this.byId.values()]
+    return [...this.spellings.keys()]
+  }
+
+  /** Every bound original with its identity, later spellings included. */
+  bindings(): IterableIterator<[string, RedactionId]> {
+    return this.spellings.entries()
   }
 
   subset(ids: Iterable<RedactionId>): RedactionRegistry {
-    const subset = new Registry({}, [])
-    for (const id of ids) {
-      const original = this.byId.get(id)
-      if (original !== undefined) subset.bind(id, original)
-    }
+    const keep = new Set(ids)
+    const subset = new Registry({}, [], this.keyOf)
+    for (const [original, id] of this.spellings) if (keep.has(id)) subset.bind(id, original)
     return subset
   }
 }
@@ -311,9 +330,11 @@ export function foldRedactionScan<S>(index: RedactionIndex<S>, scan: RedactionSc
  * every value of the call is bound, {@link RedactionDetector.propagate} runs over every text,
  * including the ones whose spans were reused, and the parts of its ranges
  * that no located span covers become new spans of those locations. An
- * original that already has an identity keeps it; a new original receives
- * the next number of its category after every identity in `index` and in
- * the reused spans.
+ * original that already has an identity keeps it, and so does an original
+ * whose {@link RedactionDetector.identityKey} equals a bound one's; a new
+ * original receives the next number of its category after every identity in
+ * `index` and in the reused spans. An identity shared by several spellings
+ * restores to the first spelling the call bound.
  * A bare `CATEGORY_n` literal of a policy category in a submitted text
  * reserves that identity. The registry is rebuilt from `index` and `texts`
  * on every call, so a Session keeps one identity space as long as every
@@ -337,7 +358,8 @@ export async function mask<S>(
     throw new RedactionError('policy', `redaction index was recorded under policy ${index.policyDigest}, not ${detector.policyDigest}`)
   }
   const entries = new Map(index.entries.map(entry => [locationKey(entry), entry]))
-  const registry = new Registry(index.lastIds, index.reserved)
+  const keyOf = detector.identityKey?.bind(detector) ?? ((value: string): string => value)
+  const registry = new Registry(index.lastIds, index.reserved, keyOf)
   const reserved: RedactionId[] = []
   const categories = new Set(detector.categories)
   for (const text of texts) {
@@ -398,10 +420,7 @@ export async function mask<S>(
     for (const detection of detections) record(at, detection)
   }
   const values = new Map<string, string>()
-  for (const id of registry.ids()) {
-    // oxlint-disable-next-line typescript/no-non-null-assertion -- `id` came from the registry.
-    values.set(registry.original(id)!, parseId(id).category)
-  }
+  for (const [original, id] of registry.bindings()) values.set(original, parseId(id).category)
   for (const propagation of await detector.propagate?.(texts.map(text => text.text), values) ?? []) {
     if (!Number.isInteger(propagation.text) || propagation.text < 0 || propagation.text >= texts.length) {
       throw new RangeError(`redaction propagation names text ${String(propagation.text)}, which was not submitted`)

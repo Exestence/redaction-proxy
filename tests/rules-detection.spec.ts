@@ -25,6 +25,7 @@ describe('telephone and business numbers', () => {
     ['tel (02)2345-6789', 'tel ⟦PHONE_1⟧'],
     ['統一編號 12345678', '統一編號 ⟦TAXID_1⟧'],
     ['tax_id: 87654321', 'tax_id: ⟦TAXID_1⟧'],
+    ['統編 12345678 2026年', '統編 ⟦TAXID_1⟧ 2026年'],
   ])('masks %j', async (text, expected) => {
     expect(await mask(text)).toBe(expected)
   })

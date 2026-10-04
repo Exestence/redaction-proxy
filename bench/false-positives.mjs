@@ -45,6 +45,7 @@ for (const root of ['packages', 'docs', 'scripts']) walk(join(work, root))
 
 const detector = new RulesDetector()
 const byCategory = new Map()
+const codeByCategory = new Map()
 const refused = new Map()
 let lines = 0
 let codeLines = 0
@@ -70,6 +71,7 @@ for (const file of files) {
   for (const span of result.applied) {
     const category = span.id.slice(0, span.id.lastIndexOf('_'))
     byCategory.set(category, (byCategory.get(category) ?? 0) + 1)
+    if (!isDoc) codeByCategory.set(category, (codeByCategory.get(category) ?? 0) + 1)
     if (!isDoc && category === 'KEY') codeKeys += 1
   }
 }
@@ -81,6 +83,7 @@ console.log(`corpus: ${REPO} @ ${sha} (packages, docs, scripts; ${TEXT.source})`
 console.log(`files ${files.length}, lines ${lines}, code lines ${codeLines}, ${ms.toFixed(0)} ms`)
 console.log(`KEY spans in code files: ${codeKeys} = ${per1k(codeKeys, codeLines)} per 1k code lines (all false positives)`)
 for (const [category, count] of [...byCategory].sort((a, b) => b[1] - a[1])) {
-  console.log(`  ${category.padEnd(8)} ${String(count).padStart(6)}  ${per1k(count, lines)} per 1k lines`)
+  const code = codeByCategory.get(category) ?? 0
+  console.log(`  ${category.padEnd(8)} ${String(count).padStart(6)}  ${per1k(count, lines)} per 1k lines; code ${String(code).padStart(6)}  ${per1k(code, codeLines)} per 1k code lines`)
 }
 console.log(`refused files: ${[...refused].map(([code, n]) => `${code} ${n}`).join(', ') || 'none'}; restore failures: ${restoreFailures}`)

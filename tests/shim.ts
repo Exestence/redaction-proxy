@@ -31,6 +31,9 @@ export abstract class RedactionService {
   protected propagate(_texts: readonly string[], _values: ReadonlyMap<string, string>): readonly RedactionPropagation[] | Promise<readonly RedactionPropagation[]> {
     return []
   }
+  protected identityKey(value: string, _category: string): string {
+    return value
+  }
 
   mask(texts: readonly RedactionText[], index: RedactionIndex): Promise<RedactionMaskResult> {
     return mask({
@@ -39,6 +42,7 @@ export abstract class RedactionService {
       categories: this.categories,
       detect: text => this.detect(text),
       propagate: (all, values) => this.propagate(all, values),
+      identityKey: (value, category) => this.identityKey(value, category),
     }, texts, index)
   }
 
@@ -67,6 +71,10 @@ export class RulesRedactionService extends RedactionService {
 
   protected override propagate(texts: readonly string[], values: ReadonlyMap<string, string>): readonly RedactionPropagation[] {
     return this.detector.propagate(texts, values)
+  }
+
+  protected override identityKey(value: string, category: string): string {
+    return this.detector.identityKey(value, category)
   }
 }
 
