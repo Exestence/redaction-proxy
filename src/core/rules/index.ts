@@ -30,7 +30,7 @@ import {
 } from './rules.ts'
 import { collectSecretCandidates } from './secret.ts'
 
-export { isTaiwanNationalId } from './rules.ts'
+export { isTaiwanBusinessNumber, isTaiwanNationalId } from './rules.ts'
 
 /** Built-in rule names. */
 export type RedactionRuleName =

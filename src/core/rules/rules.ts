@@ -26,7 +26,7 @@ const HOME_TILDE = /(?<![.\-\w])~[A-Za-z][^/\\\s"'`,;()[\]{}<>|*?:~]*(?=\/)/g
 // position of a text that has no `@`. Whitespace around the anchor is walked
 // in JavaScript too, so a long whitespace run is not rescanned per position.
 const EMAIL_AT = /[@＠]|[([]at[)\]]| at /gi
-const EMAIL_SPACE = /\s/
+const EMAIL_SPACE = /[ \t\u3000]/
 const EMAIL_LOCAL = /[A-Za-z0-9._%+-]/
 const EMAIL_DOMAIN_CHAR = /[A-Za-z0-9.-]/
 const EMAIL_DOMAIN = /^[A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)*\.[A-Za-z]{2,}$/
@@ -41,8 +41,9 @@ const EMAIL_SPELLED_DOT_AT = /\s*[([]dot[)\]]/iy
  */
 const EMAIL_SPELLED_TLD = /^(?:[a-z]{2}|com|net|org|edu|gov|mil|info|biz|dev|app|cloud|tech|site|online|xyz|test|example)$/i
 /**
- * Local part of a ` at ` address: letter-led words joined by `.`, `_`, or `+`,
- * so a lone English word (`met at github.com`) or a version (`v1.2`) is not one.
+ * Local part of an address spaced from its `@` or `at`: letter-led words joined
+ * by `.`, `_`, or `+`, so a lone English word (`met at github.com`,
+ * `find us @ shop.tw`) or a version (`v1.2`) is not one.
  */
 const EMAIL_WORD_LOCAL = /^[A-Za-z][A-Za-z0-9]*(?:[._+][A-Za-z][A-Za-z0-9]*)+$/
 /** Last local-part segments that name a file, not a mailbox (`package.json at github.com`). */
@@ -70,7 +71,7 @@ const PHONE_MOBILE = new RegExp(
  * A mobile number grouped 2-4-4 with one consistent separator: `09-1234-5678`,
  * `09 1234 5678`. Not a group of a longer run such as a UUID.
  */
-const PHONE_MOBILE_SPLIT = /(?<![A-Za-z0-9-])09([- \u3000])(\d{4})\1\d{4}(?![A-Za-z0-9]|\1[A-Za-z0-9])/g
+const PHONE_MOBILE_SPLIT = /(?<![A-Za-z0-9-])09([- \u3000])(\d{4})\1\d{4}(?![A-Za-z0-9]|\1\d|-[A-Za-z0-9])/g
 /** A middle group that reads as a year, which makes `09-2026-1005` a date. */
 const PHONE_YEAR = /^(?:19|20)\d\d$/
 const PHONE_KEYWORD = new RegExp(
@@ -78,7 +79,7 @@ const PHONE_KEYWORD = new RegExp(
   + '[^\\n]{0,8}?(\\(?(?<!\\d)0\\d{1,2}\\)?[-\\s]{0,2}\\d{3,4}[-\\s]?\\d{3,4}(?!\\d))',
   'gi',
 )
-const TAX_ID = /(?:統一編號|統編|營利事業|tax[ _-]?id|taxid|vat)[^\n]{0,8}?((?<!\d)(?:\d{8}|\d{1,7}[- \u3000]\d{1,7})(?!\d|[- \u3000]\d))/gi
+const TAX_ID = /(?:統一編號|統編|營利事業|tax[ _-]?id|taxid|vat)[^\n]{0,8}?((?<!\d)(?:\d{8}(?!\d)|\d{1,7}[- \u3000]\d{1,7}(?!\d|[- \u3000]\d)))/gi
 const CARD_RUN = /(?<!\d)\d{4,}(?:[ -]\d{3,})*/g
 const PRIVATE_IP = new RegExp(
   '(?<![\\d.])(?:10\\.\\d{1,3}\\.\\d{1,3}\\.\\d{1,3}'
@@ -262,8 +263,9 @@ export function collectPathCandidates(text: string, push: PushCandidate): void {
 /**
  * Expand every `@` into an address and keep the ones with a valid domain. An
  * obfuscated spelling (spaces around `@`, `＠`, `(at)`, `[at]`, ` at `, and
- * `[dot]` or `(dot)` in the domain) also needs a known top-level domain, and
- * ` at ` also needs a local part of joined words.
+ * `[dot]` or `(dot)` in the domain) also needs a known top-level domain, and a
+ * spaced one also needs a local part of joined words. Spaces never cross a
+ * line break.
  * @param text - text to scan.
  * @param push - candidate sink.
  */
@@ -294,7 +296,8 @@ export function collectEmailCandidates(text: string, push: PushCandidate): void 
     if (!EMAIL_DOMAIN.test(domain)) return
     const obfuscated = spelledAt || spelledDot || match[0] !== '@' || localEnd !== match.index || from !== match.index + 1
     if (obfuscated && !EMAIL_SPELLED_TLD.test(domain.slice(domain.lastIndexOf('.') + 1))) return
-    if (/^ at $/i.test(match[0])) {
+    const spaced = /^ at $/i.test(match[0]) || localEnd !== match.index || from !== match.index + match[0].length
+    if (spaced) {
       const local = text.slice(start, localEnd)
       if (!EMAIL_WORD_LOCAL.test(local) || EMAIL_FILE_SUFFIX.test(local)) return
     }

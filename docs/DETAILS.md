@@ -85,7 +85,7 @@ flowchart TD
 
 | 規則 | 類別 | 細節 |
 | --- | --- | --- |
-| `email` | `EMAIL` | 以 `@` 為錨點、有上限地向兩側展開。也接受防爬寫法：`@` 兩側有空白、`＠`、`(at)`、`[at]`、` at `，以及網域中的 `[dot]`、`(dot)`；這些寫法要求頂級網域是兩字母國碼或常見 gTLD（`com`、`org`、`dev`、`test` 等），` at ` 另要求本地部分是以 `.`、`_`、`+` 連接的字（`wang.yichun`），所以 `met at github.com`、`v1.2 at github.com`、`package.json at github.com` 不算。 |
+| `email` | `EMAIL` | 以 `@` 為錨點、有上限地向兩側展開。也接受防爬寫法：`@` 兩側有空白、`＠`、`(at)`、`[at]`、` at `，以及網域中的 `[dot]`、`(dot)`；這些寫法要求頂級網域是兩字母國碼或常見 gTLD（`com`、`org`、`dev`、`test` 等），`@` 或 `at` 兩側有空白時（含 ` at `）另要求本地部分是以 `.`、`_`、`+` 連接的字（`wang.yichun`），所以 `met at github.com`、`find us @ shop.tw`、`v1.2 at github.com`、`package.json at github.com` 不算，單字的 `john @ example.com` 也不算；空白不跨行。 |
 | `user-path` | `PATH` | 只遮家目錄前綴（`/Users/x`、`/home/x`、`C:\Users\x`、`~x/`），含 JSON 跳脫形式；路徑其餘部分保持可讀。 |
 | `api-key` | `KEY` | PEM、AWS `AKIA`/`ASIA`、GitHub `ghp_` 系列、`sk-`、Slack `xox` 與 webhook、Google `AIza`、JWT、`Authorization`/`Bearer`、URL 中的帳密、`curl -u`、`--password x`，以及鍵名代表憑證的 `key=value` 指派（含中英文關鍵詞）。 |
 | `tw-national-id` | `TWID` | 身分證字號（第二碼 1/2）與居留證號（第二碼 8/9），**驗證檢查碼**。也接受字母後（`A 123456789`）或第四字元後（`A123-456789`）的一個空白或連字號；其他位置的分隔不算。 |

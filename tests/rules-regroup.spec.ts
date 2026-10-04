@@ -91,6 +91,8 @@ describe('obfuscated email addresses', () => {
     'y = x @ self.weight',
     'released v1.2 at github.com',
     'package.json at github.com',
+    'find us @ shop.tw',
+    'cc Amy\n@bob.dev please review',
   ])('keeps %j', async (text) => {
     expect(await mask(text)).toBe(text)
   })
@@ -145,6 +147,7 @@ describe('mobile numbers grouped 2-4-4', () => {
   it.each([
     ['"owner": "09-8471-4724"', '"owner": "⟦PHONE_1⟧"'],
     ['在 09 0075 1778 上重現', '在 ⟦PHONE_1⟧ 上重現'],
+    ['call 09 1234 5678 now', 'call ⟦PHONE_1⟧ now'],
   ])('masks %j', async (text, expected) => {
     expect(await mask(text)).toBe(expected)
   })
