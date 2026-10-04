@@ -73,11 +73,6 @@ describe('configured terms split by a separator', () => {
 describe('obfuscated email addresses', () => {
   it.each([
     ['mail wang.yichun(at)example.com now', 'mail ⟦EMAIL_1⟧ now'],
-    ['CONTACT=wang.yichun @ example.tw', 'CONTACT=⟦EMAIL_1⟧'],
-    ['寄到 liu_kuanting ＠ school.test 謝謝', '寄到 ⟦EMAIL_1⟧ 謝謝'],
-    ['CONTACT=cheng.yuhsiang41 @ example.tw', 'CONTACT=⟦EMAIL_1⟧'],
-    ['寄給 lin.yating  @  ntu.edu.tw 吧', '寄給 ⟦EMAIL_1⟧ 吧'],
-    ['john @ example.com', '⟦EMAIL_1⟧'],
     ['寄到 liu_kuanting＠school.test 謝謝', '寄到 ⟦EMAIL_1⟧ 謝謝'],
     ['mail wang.yichun [at] example.com now', 'mail ⟦EMAIL_1⟧ now'],
     ['mail wang.yichun@example[dot]com now', 'mail ⟦EMAIL_1⟧ now'],
@@ -196,6 +191,20 @@ describe('WO-6 round 3: bare at is not detected', () => {
     'mail wang.yichun at example.com now',
     '信箱：wang.yichun at example.com',
     'Contact: hsu_yawen AT corp.test',
+  ])('keeps %j', async (text) => {
+    expect(await mask(text)).toBe(text)
+  })
+})
+
+// WO-6 amendment R4: spaced `@` is not detected (the classifier is the only
+// guard), so these spaced-`@` addresses are asserted unmasked.
+describe('WO-6 round 5: spaced @ is not detected', () => {
+  it.each([
+    'CONTACT=wang.yichun @ example.tw',
+    '寄到 liu_kuanting ＠ school.test 謝謝',
+    'CONTACT=cheng.yuhsiang41 @ example.tw',
+    '寄給 lin.yating  @  ntu.edu.tw 吧',
+    'john @ example.com',
   ])('keeps %j', async (text) => {
     expect(await mask(text)).toBe(text)
   })

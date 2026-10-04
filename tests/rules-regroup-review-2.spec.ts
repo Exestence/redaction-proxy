@@ -80,9 +80,12 @@ describe('WO-6 round 3: bare at is not detected', () => {
   })
 })
 
-// WO-6 amendment R3 restored spaced `@` for listed TLDs, so this round-3 negative masks again.
-describe('WO-6 round 4: spaced @ at a listed TLD', () => {
-  it('masks 信箱：wang.yichun ＠ gmail.com', async () => {
-    expect(await mask('信箱：wang.yichun ＠ gmail.com')).toBe('信箱：⟦EMAIL_1⟧')
+// WO-6 amendment R4: spaced `@` is not detected (the classifier is the only
+// guard), so these spaced-`@` addresses are asserted unmasked.
+describe('WO-6 round 5: spaced @ is not detected', () => {
+  it.each([
+    '信箱：wang.yichun ＠ gmail.com',
+  ])('keeps %j', async (text) => {
+    expect(await mask(text)).toBe(text)
   })
 })

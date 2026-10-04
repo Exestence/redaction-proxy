@@ -61,15 +61,24 @@ describe('WO-6 review 3 D3: required fixes (red at c94e1f3)', () => {
 
 describe('WO-6 review 3 D3: unseen positives (each carries an amendment keyword)', () => {
   it.each([
-    ['email: wang.yichun @ gmail.com', 'email: ⟦EMAIL_1⟧'],
-    ['E-mail: wang_yc @ company.com.tw', 'E-mail: ⟦EMAIL_1⟧'],
-    ['信箱 lin_yating @ ntu.edu.tw', '信箱 ⟦EMAIL_1⟧'],
-    ['電子郵件：chen.mei ＠ example.com.tw', '電子郵件：⟦EMAIL_1⟧'],
-    ['mail to huang.jy ＠ company.co', 'mail to ⟦EMAIL_1⟧'],
-    ['聯絡 kevin.lin  @  startup.io', '聯絡 ⟦EMAIL_1⟧'],
-    ['寄到 lin.wei ＠ gmail.com', '寄到 ⟦EMAIL_1⟧'],
     ['wang.yichun＠gmail.com', '⟦EMAIL_1⟧'],
   ])('masks %j', async (text, expected) => {
     expect(await mask(text)).toBe(expected)
+  })
+})
+
+// WO-6 amendment R4: spaced `@` is not detected (the classifier is the only
+// guard), so these spaced-`@` addresses are asserted unmasked.
+describe('WO-6 round 5: spaced @ is not detected', () => {
+  it.each([
+    'email: wang.yichun @ gmail.com',
+    'E-mail: wang_yc @ company.com.tw',
+    '信箱 lin_yating @ ntu.edu.tw',
+    '電子郵件：chen.mei ＠ example.com.tw',
+    'mail to huang.jy ＠ company.co',
+    '聯絡 kevin.lin  @  startup.io',
+    '寄到 lin.wei ＠ gmail.com',
+  ])('keeps %j', async (text) => {
+    expect(await mask(text)).toBe(text)
   })
 })
