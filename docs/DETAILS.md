@@ -313,7 +313,7 @@ POST /v1/chat/completions -> 200 masked 3 (EMAIL 1, TWID 1, PATH 1) restored 3 u
 
 ## 13. 測試
 
-`pnpm test`（vitest）執行 19 個檔案、887 個測試：
+`pnpm test`（vitest）執行 19 個檔案、888 個測試：
 
 | 檔案 | 內容 |
 | --- | --- |

@@ -2,7 +2,7 @@
 
 [繁體中文](README.zh-TW.md) · [Technical details (zh-TW)](docs/DETAILS.md)
 
-A small proxy that runs on your machine. Before your AI tool sends a prompt to a cloud LLM, it replaces email addresses, national ID numbers (Taiwan and, opt-in in the library, 10 other countries and regions), IBANs, phone numbers, API keys, home-directory paths, and similar values with placeholders such as `⟦EMAIL_1⟧`; when the model's reply comes back, it puts the original values back, streamed replies included. It works with any OpenAI-compatible or Anthropic-compatible client and needs no local model. It **reduces** leakage of personal data and secrets; it does **not** make a conversation private.
+A small proxy that runs on your machine. Before your AI tool sends a prompt to a cloud LLM, it replaces email addresses, national ID numbers from Taiwan and 10 other countries and regions, IBANs, phone numbers, API keys, home-directory paths, and similar values with placeholders such as `⟦EMAIL_1⟧`; when the model's reply comes back, it puts the original values back, streamed replies included. It works with any OpenAI-compatible or Anthropic-compatible client and needs no local model. It **reduces** leakage of personal data and secrets; it does **not** make a conversation private.
 
 > Status: private, pre-release, not published to npm. Tested against a local fake upstream only.
 
@@ -146,7 +146,7 @@ See the [technical details](docs/DETAILS.md#12-完整設定) for the matching en
 
 | Item | Result | What it means |
 | --- | --- | --- |
-| Tests | 887, all passing | Rules, engine, adversarial inputs, and streamed and non-streamed requests for all three APIs against a fake upstream. |
+| Tests | 888, all passing | Rules, engine, adversarial inputs, and streamed and non-streamed requests for all three APIs against a fake upstream. |
 | Credential false positives | **0.76** per 1,000 code lines | Measured on DeepSeek Harness source, which holds no real key (698k code lines): about one spot every 1,300 lines is mistaken for a key and masked. |
 | Restore failures | 0 | Every file that was masked restores byte for byte. |
 | Speed | about 850k lines in 5 s | Apple M5 Max. |
