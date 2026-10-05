@@ -13,16 +13,16 @@
 import type { PushCandidate } from './candidate.ts'
 import { PRIORITY_PII } from './candidate.ts'
 import {
-  isChinaResidentIdChecksumValid,
+  hasChinaResidentIdCheckCharacter,
   isEuVatNumber,
-  isFrenchNir,
+  hasFrenchNirKey,
   isGermanTaxId,
-  isHongKongIdentityNumber,
-  isIbanChecksumValid,
-  isItalianFiscalCode,
-  isKoreaResidentNumberChecksumValid,
-  isMyNumber,
-  isSpanishIdentityNumber,
+  hasHongKongIdCheckCharacter,
+  hasIbanCheckDigits,
+  hasItalianFiscalCodeCheckLetter,
+  hasKoreaResidentNumberCheckDigit,
+  hasMyNumberCheckDigit,
+  hasSpanishIdCheckLetter,
 } from './checksum.ts'
 import { KEYWORD_GAP } from './rules.ts'
 
@@ -234,7 +234,10 @@ const KOREA_RRN_BIRTH_DATE_LENGTH = 6
 /** Index of the digit that encodes gender and birth century. */
 const KOREA_RRN_GENDER_DIGIT_INDEX = 6
 
-/** Words that introduce a telephone number in the languages the mobile rules serve. */
+/**
+ * Words that introduce a telephone number in the languages the mobile rules serve.
+ * Kept apart from `PHONE_KEYWORD` in `rules.ts`: merging would change the default `phone` rule's matches and digest.
+ */
 const PHONE_KEYWORDS = [
   '手机', '手機', '电话', '電話', '联系', '聯繫', '联络', '聯絡', '携帯', 'ケータイ', 'mobile', 'phone', 'telephone', 'tel', 'cell',
 ]
@@ -326,7 +329,7 @@ function isBirthDate(yyyymmdd: string): boolean {
  * @returns whether both hold.
  */
 function isIban(iban: string): boolean {
-  return IBAN_LENGTHS.get(iban.slice(0, COUNTRY_CODE_LENGTH)) === iban.length && isIbanChecksumValid(iban)
+  return IBAN_LENGTHS.get(iban.slice(0, COUNTRY_CODE_LENGTH)) === iban.length && hasIbanCheckDigits(iban)
 }
 
 /**
@@ -374,7 +377,7 @@ function isUsItin(digits: string): boolean {
  */
 function isChinaResidentId(value: string): boolean {
   if (!CHINA_PROVINCE_CODES.has(value.slice(0, CHINA_PROVINCE_CODE_LENGTH))) return false
-  return isBirthDate(value.slice(CHINA_BIRTH_DATE_START, CHINA_BIRTH_DATE_END)) && isChinaResidentIdChecksumValid(value)
+  return isBirthDate(value.slice(CHINA_BIRTH_DATE_START, CHINA_BIRTH_DATE_END)) && hasChinaResidentIdCheckCharacter(value)
 }
 
 /**
@@ -389,7 +392,7 @@ function isKoreaResidentNumber(digits: string): boolean {
   const century = KOREA_RRN_CENTURY_START[digits.charAt(KOREA_RRN_GENDER_DIGIT_INDEX)]!
   const year = century + Number(digits.slice(0, KOREA_RRN_BIRTH_YEAR_LENGTH))
   const monthAndDay = digits.slice(KOREA_RRN_BIRTH_YEAR_LENGTH, KOREA_RRN_BIRTH_DATE_LENGTH)
-  return isBirthDate(`${year}${monthAndDay}`) && isKoreaResidentNumberChecksumValid(digits)
+  return isBirthDate(`${year}${monthAndDay}`) && hasKoreaResidentNumberCheckDigit(digits)
 }
 
 /**
@@ -428,17 +431,17 @@ const INTERNATIONAL_RULES: Readonly<Record<InternationalRuleName, ValidatedRule>
   'de-tax-id': { patterns: [valueAfterKeyword(GERMAN_TAX_ID_KEYWORDS, GERMAN_TAX_ID_VALUE)], isValid: isGermanTaxId },
   'fr-nir': {
     patterns: [FRENCH_NIR_SPACED, valueAfterKeyword(FRENCH_NIR_KEYWORDS, FRENCH_NIR_VALUE)],
-    isValid: isFrenchNir,
+    isValid: hasFrenchNirKey,
   },
-  'es-dni': { patterns: [SPANISH_ID], isValid: isSpanishIdentityNumber },
-  'it-fiscal-code': { patterns: [ITALIAN_FISCAL_CODE], isValid: isItalianFiscalCode },
+  'es-dni': { patterns: [SPANISH_ID], isValid: hasSpanishIdCheckLetter },
+  'it-fiscal-code': { patterns: [ITALIAN_FISCAL_CODE], isValid: hasItalianFiscalCodeCheckLetter },
   'cn-resident-id': { patterns: [CHINA_RESIDENT_ID], isValid: isChinaResidentId },
   'cn-mobile': { patterns: mobilePatterns(CHINA_MOBILE), isValid: acceptsEveryMatch },
   'hk-id': {
     patterns: [HONG_KONG_ID_BRACKETED, valueAfterKeyword(HONG_KONG_ID_KEYWORDS, HONG_KONG_ID_VALUE)],
-    isValid: isHongKongIdentityNumber,
+    isValid: hasHongKongIdCheckCharacter,
   },
-  'jp-my-number': { patterns: [valueAfterKeyword(MY_NUMBER_KEYWORDS, MY_NUMBER_VALUE)], isValid: isMyNumber },
+  'jp-my-number': { patterns: [valueAfterKeyword(MY_NUMBER_KEYWORDS, MY_NUMBER_VALUE)], isValid: hasMyNumberCheckDigit },
   'jp-mobile': { patterns: mobilePatterns(JAPAN_MOBILE), isValid: acceptsEveryMatch },
   'kr-rrn': { patterns: [KOREA_RRN], isValid: isKoreaResidentNumber },
 }

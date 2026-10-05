@@ -220,7 +220,7 @@ function iso7064Mod11Of10(digits: string): boolean {
  * @param iban - country code, check digits, and BBAN, upper case, without spaces.
  * @returns whether the rearranged number leaves remainder 1 modulo 97.
  */
-export function isIbanChecksumValid(iban: string): boolean {
+export function hasIbanCheckDigits(iban: string): boolean {
   return mod97(lettersToDigits(iban.slice(IBAN_HEADER_LENGTH) + iban.slice(0, IBAN_HEADER_LENGTH))) === IBAN_REMAINDER
 }
 
@@ -229,7 +229,7 @@ export function isIbanChecksumValid(iban: string): boolean {
  * @param value - eight digits, or `X`, `Y`, or `Z` and seven digits, then the letter.
  * @returns whether the letter matches the number modulo 23.
  */
-export function isSpanishIdentityNumber(value: string): boolean {
+export function hasSpanishIdCheckLetter(value: string): boolean {
   const number = (NIE_PREFIX_DIGITS[value.charAt(0)] ?? value.charAt(0)) + value.slice(1, -1)
   return DNI_LETTERS.charAt(Number(number) % DNI_LETTERS.length) === value.slice(-1)
 }
@@ -250,7 +250,7 @@ function fiscalCodeEvenValue(value: number): number {
  * @param code - sixteen upper-case characters.
  * @returns whether the last character matches the other fifteen.
  */
-export function isItalianFiscalCode(code: string): boolean {
+export function hasItalianFiscalCodeCheckLetter(code: string): boolean {
   let sum = 0
   for (const [i, char] of [...code.slice(0, -1)].entries()) {
     const value = alphanumericValue(char)
@@ -266,7 +266,7 @@ export function isItalianFiscalCode(code: string): boolean {
  * @param value - seventeen digits and a digit or `X`.
  * @returns whether the check character holds.
  */
-export function isChinaResidentIdChecksumValid(value: string): boolean {
+export function hasChinaResidentIdCheckCharacter(value: string): boolean {
   return CHINA_RESIDENT_ID_CHECKS.charAt(weightedSum(value, CHINA_RESIDENT_ID_WEIGHTS) % MOD_11) === value.slice(-1).toUpperCase()
 }
 
@@ -275,7 +275,7 @@ export function isChinaResidentIdChecksumValid(value: string): boolean {
  * @param value - one or two letters, six digits, and a digit or `A`, without brackets.
  * @returns whether the weighted sum including the check value is divisible by eleven.
  */
-export function isHongKongIdentityNumber(value: string): boolean {
+export function hasHongKongIdCheckCharacter(value: string): boolean {
   const values = [...value.slice(0, -1)].map(alphanumericValue)
   if (values.length < HKID_WEIGHTS.length) values.unshift(HKID_BLANK_VALUE)
   // oxlint-disable-next-line typescript/no-non-null-assertion -- values holds one entry per weight.
@@ -290,7 +290,7 @@ export function isHongKongIdentityNumber(value: string): boolean {
  * @param digits - thirteen digits.
  * @returns whether the thirteenth digit matches the weighted sum of the first twelve.
  */
-export function isKoreaResidentNumberChecksumValid(digits: string): boolean {
+export function hasKoreaResidentNumberCheckDigit(digits: string): boolean {
   const check = (MOD_11 - (weightedSum(digits, KOREA_RRN_WEIGHTS) % MOD_11)) % DECIMAL_BASE
   return check === digitValue(digits.slice(-1))
 }
@@ -300,7 +300,7 @@ export function isKoreaResidentNumberChecksumValid(digits: string): boolean {
  * @param digits - twelve digits.
  * @returns whether the twelfth digit matches the first eleven.
  */
-export function isMyNumber(digits: string): boolean {
+export function hasMyNumberCheckDigit(digits: string): boolean {
   const reversedBody = [...digits.slice(0, -1)].reverse().join('')
   const remainder = weightedSum(reversedBody, MY_NUMBER_WEIGHTS) % MOD_11
   const check = remainder <= MY_NUMBER_ZERO_CHECK_MAX ? 0 : MOD_11 - remainder
@@ -312,7 +312,7 @@ export function isMyNumber(digits: string): boolean {
  * @param value - thirteen characters (department `2A` or `2B` allowed) and the two key digits.
  * @returns whether the key equals 97 minus the number modulo 97.
  */
-export function isFrenchNir(value: string): boolean {
+export function hasFrenchNirKey(value: string): boolean {
   const department = value.slice(NIR_DEPARTMENT_START, NIR_DEPARTMENT_END)
   const numericDepartment = NIR_CORSICA_DEPARTMENTS[department] ?? department
   const number = value.slice(0, NIR_DEPARTMENT_START) + numericDepartment + value.slice(NIR_DEPARTMENT_END, NIR_KEY_START)
@@ -339,39 +339,50 @@ export function isGermanTaxId(digits: string): boolean {
   return iso7064Mod11Of10(digits)
 }
 
-/** Format and check of each supported EU VAT prefix. */
-const EU_VAT_CHECKS: Readonly<Record<string, (number: string) => boolean>> = {
-  AT: number => /^U\d{8}$/.test(number) && isAustrianUid(number.slice(1)),
-  BE: number => /^[01]\d{9}$/.test(number) && MOD_97 - mod97(number.slice(0, -VAT_CHECK_PAIR_LENGTH)) === Number(number.slice(-VAT_CHECK_PAIR_LENGTH)),
-  DE: number => /^[1-9]\d{8}$/.test(number) && iso7064Mod11Of10(number),
-  ES: number => /^(?:\d{8}|[XYZ]\d{7})[A-Z]$/.test(number) && isSpanishIdentityNumber(number),
-  FR: number => /^\d{11}$/.test(number) && isFrenchVatKey(number),
-  IT: number => /^\d{11}$/.test(number) && luhn(number),
-  NL: number => /^\d{9}B\d{2}$/.test(number) && isDutchVatNumber(number),
-  PL: number => /^\d{10}$/.test(number) && weightedSum(number, POLAND_NIP_WEIGHTS) % MOD_11 === digitValue(number.slice(-1)),
+/** Format and check-digit test of the characters after each supported EU VAT prefix. */
+const EU_VAT_CHECKS: Readonly<Record<string, readonly [format: RegExp, hasCheckDigit: (number: string) => boolean]>> = {
+  AT: [/^U\d{8}$/, hasAustrianUidCheckDigit],
+  BE: [/^[01]\d{9}$/, hasBelgianVatCheckDigits],
+  DE: [/^[1-9]\d{8}$/, iso7064Mod11Of10],
+  ES: [/^(?:\d{8}|[XYZ]\d{7})[A-Z]$/, hasSpanishIdCheckLetter],
+  FR: [/^\d{11}$/, hasFrenchVatKey],
+  IT: [/^\d{11}$/, luhn],
+  NL: [/^\d{9}B\d{2}$/, hasDutchVatCheckDigit],
+  PL: [/^\d{10}$/, hasPolishNipCheckDigit],
 }
 
 /**
- * Whether the digits after an EU VAT number's country prefix pass that
- * country's check. Only the countries listed here have a check this module
- * implements; any other prefix fails.
+ * Whether the characters after an EU VAT number's country prefix have that
+ * country's format and pass its check. Only the countries listed here have a
+ * check this module implements; any other prefix fails.
  * @param country - two-letter VAT prefix.
  * @param number - the characters after the prefix.
  * @returns whether the number is valid for the country.
  */
 export function isEuVatNumber(country: string, number: string): boolean {
   const check = EU_VAT_CHECKS[country]
-  return check !== undefined && check(number)
+  return check !== undefined && check[0].test(number) && check[1](number)
 }
 
 /**
- * Whether an Austrian UID's eighth digit matches its first seven.
- * @param digits - the eight digits after `ATU`.
+ * Whether an Austrian UID's last digit matches the seven digits before it.
+ * @param number - `U` and eight digits.
  * @returns whether the check digit holds.
  */
-function isAustrianUid(digits: string): boolean {
+function hasAustrianUidCheckDigit(number: string): boolean {
+  const digits = number.slice(1)
   const sum = productDigitSum(digits, AUSTRIA_UID_WEIGHTS)
   return (DECIMAL_BASE - ((sum + AUSTRIA_UID_OFFSET) % DECIMAL_BASE)) % DECIMAL_BASE === digitValue(digits.slice(-1))
+}
+
+/**
+ * Whether a Belgian VAT number's last two digits are 97 minus the rest modulo 97.
+ * @param number - ten digits.
+ * @returns whether the check digits hold.
+ */
+function hasBelgianVatCheckDigits(number: string): boolean {
+  const body = number.slice(0, -VAT_CHECK_PAIR_LENGTH)
+  return MOD_97 - mod97(body) === Number(number.slice(-VAT_CHECK_PAIR_LENGTH))
 }
 
 /**
@@ -379,7 +390,7 @@ function isAustrianUid(digits: string): boolean {
  * @param number - two key digits and the nine-digit SIREN.
  * @returns whether the key holds.
  */
-function isFrenchVatKey(number: string): boolean {
+function hasFrenchVatKey(number: string): boolean {
   const siren = number.slice(VAT_CHECK_PAIR_LENGTH)
   return (FRANCE_VAT_KEY_BASE + FRANCE_VAT_KEY_FACTOR * mod97(siren)) % MOD_97 === Number(number.slice(0, VAT_CHECK_PAIR_LENGTH))
 }
@@ -390,7 +401,16 @@ function isFrenchVatKey(number: string): boolean {
  * @param number - nine digits, `B`, and two digits.
  * @returns whether either check holds.
  */
-function isDutchVatNumber(number: string): boolean {
+function hasDutchVatCheckDigit(number: string): boolean {
   return weightedSum(number, NETHERLANDS_ELEVEN_TEST_WEIGHTS) % MOD_11 === 0
     || mod97(lettersToDigits(`NL${number}`)) === IBAN_REMAINDER
+}
+
+/**
+ * Whether a Polish NIP's last digit is the weighted sum of the nine before it modulo 11.
+ * @param number - ten digits.
+ * @returns whether the check digit holds.
+ */
+function hasPolishNipCheckDigit(number: string): boolean {
+  return weightedSum(number, POLAND_NIP_WEIGHTS) % MOD_11 === digitValue(number.slice(-1))
 }
