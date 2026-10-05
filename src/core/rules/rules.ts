@@ -90,13 +90,15 @@ const PRIVATE_IP = new RegExp(
 /**
  * Variants of the rules with an ASCII left boundary that match right after a
  * high escape: `%E6` or `%FF` before a value is a stray byte, not a letter or
- * digit of a longer token.
+ * digit of a longer token. Only digit-initial values get a variant: in Big5
+ * and Shift-JIS an ASCII letter after a lead byte is the character's trail
+ * byte (`%A4A` is 乙), so a letter-initial identification number has none.
  */
-const TWID_AFTER_ESCAPE = afterHighEscape(TWID, '(?<![A-Za-z0-9])')
-const TWID_SPLIT_AFTER_ESCAPE = afterHighEscape(TWID_SPLIT, '(?<![A-Za-z0-9-])')
 const PHONE_MOBILE_AFTER_ESCAPE = afterHighEscape(PHONE_MOBILE, '(?<![0-9A-Za-z])')
 const TAX_ID_AFTER_ESCAPE = afterHighEscape(TAX_ID, '(?<!\\d)')
 const CARD_RUN_AFTER_ESCAPE = afterHighEscape(CARD_RUN, '(?<!\\d)')
+const PHONE_MOBILE_SPLIT_AFTER_ESCAPE = afterHighEscape(PHONE_MOBILE_SPLIT, '(?<![A-Za-z0-9-])')
+const PHONE_KEYWORD_AFTER_ESCAPE = afterHighEscape(PHONE_KEYWORD, '(?<!\\d)')
 const PRIVATE_IP_AFTER_ESCAPE = afterHighEscape(PRIVATE_IP, '(?<![\\d.])')
 const HOST_SUFFIX = /\.(?:local|lan|internal)(?![a-z0-9-])/gi
 const HOST_CHAR = /[A-Za-z0-9.-]/
@@ -335,18 +337,14 @@ export function collectNumberCandidates(
   afterEscape = false,
 ): void {
   if (rules.has('tw-national-id')) {
-    for (const pattern of afterEscape ? [TWID, TWID_AFTER_ESCAPE] : [TWID]) {
-      runAll(pattern, text, (match) => {
-        if (!isTaiwanNationalId(match[0])) return
-        push(match.index, match.index + match[0].length, 'TWID', PRIORITY_PII)
-      })
-    }
-    for (const pattern of afterEscape ? [TWID_SPLIT, TWID_SPLIT_AFTER_ESCAPE] : [TWID_SPLIT]) {
-      runAll(pattern, text, (match) => {
-        if (!isTaiwanNationalId(match[0].replace(/[- \u3000]/, ''))) return
-        push(match.index, match.index + match[0].length, 'TWID', PRIORITY_PII)
-      })
-    }
+    runAll(TWID, text, (match) => {
+      if (!isTaiwanNationalId(match[0])) return
+      push(match.index, match.index + match[0].length, 'TWID', PRIORITY_PII)
+    })
+    runAll(TWID_SPLIT, text, (match) => {
+      if (!isTaiwanNationalId(match[0].replace(/[- \u3000]/, ''))) return
+      push(match.index, match.index + match[0].length, 'TWID', PRIORITY_PII)
+    })
   }
   // Business numbers are proposed before telephone numbers: a number after both
   // `聯絡` and `統編` yields two candidates with equal offsets and priority, and
@@ -368,18 +366,22 @@ export function collectNumberCandidates(
         push(match.index, match.index + match[0].length, 'PHONE', PRIORITY_PII)
       })
     }
-    runAll(PHONE_MOBILE_SPLIT, text, (match) => {
-      // ponytail: a year-shaped middle group drops 2% of real 2-4-4 numbers (09-19xx, 09-20xx); a date-word context check is the upgrade.
-      // oxlint-disable-next-line typescript/no-non-null-assertion -- the pattern has two groups.
-      if (PHONE_YEAR.test(match[2]!)) return
-      push(match.index, match.index + match[0].length, 'PHONE', PRIORITY_PII)
-    })
-    runAll(PHONE_KEYWORD, text, (match) => {
-      // oxlint-disable-next-line typescript/no-non-null-assertion -- the pattern has one group.
-      const value = match[1]!
-      const at = match.index + match[0].lastIndexOf(value)
-      push(at, at + value.length, 'PHONE', PRIORITY_PII)
-    })
+    for (const pattern of afterEscape ? [PHONE_MOBILE_SPLIT, PHONE_MOBILE_SPLIT_AFTER_ESCAPE] : [PHONE_MOBILE_SPLIT]) {
+      runAll(pattern, text, (match) => {
+        // ponytail: a year-shaped middle group drops 2% of real 2-4-4 numbers (09-19xx, 09-20xx); a date-word context check is the upgrade.
+        // oxlint-disable-next-line typescript/no-non-null-assertion -- the pattern has two groups.
+        if (PHONE_YEAR.test(match[2]!)) return
+        push(match.index, match.index + match[0].length, 'PHONE', PRIORITY_PII)
+      })
+    }
+    for (const pattern of afterEscape ? [PHONE_KEYWORD, PHONE_KEYWORD_AFTER_ESCAPE] : [PHONE_KEYWORD]) {
+      runAll(pattern, text, (match) => {
+        // oxlint-disable-next-line typescript/no-non-null-assertion -- the pattern has one group.
+        const value = match[1]!
+        const at = match.index + match[0].lastIndexOf(value)
+        push(at, at + value.length, 'PHONE', PRIORITY_PII)
+      })
+    }
   }
 }
 

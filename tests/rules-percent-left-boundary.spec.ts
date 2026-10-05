@@ -26,8 +26,8 @@ describe('a high escape before a value is a left boundary', () => {
     ['?q=%FF0912-345-678', '?q=%FF⟦PHONE_1⟧'],
     ['?q=%E60912345678', '?q=%E6⟦PHONE_1⟧'],
     ['?q=%c0%2B886%20912%20345%20678', '?q=%c0⟦PHONE_1⟧'],
-    ['?q=%E6A123456789', '?q=%E6⟦TWID_1⟧'],
-    ['?q=%e6F%20222333444', '?q=%e6⟦TWID_1⟧'],
+    ['?q=%E609-1234-5678', '?q=%E6⟦PHONE_1⟧'],
+    ['?q=tel%3A%E602-2345-6789', '?q=tel%3A%E6⟦PHONE_1⟧'],
     ['?q=tax%20id%20%E612345678', '?q=tax%20id%20%E6⟦TAXID_1⟧'],
     ['?q=%E7%B5%B1%E7%B7%A8%c012345678', '?q=%E7%B5%B1%E7%B7%A8%c0⟦TAXID_1⟧'],
     ['?q=%E65454%205454%205454%205454', '?q=%E6⟦CARD_1⟧'],
@@ -73,6 +73,13 @@ describe('a high escape before a value is a left boundary', () => {
     // Binary-ish escape runs followed by digits that are no value.
     'data:image/jpeg,%FF%D8%FF%E0%00%10JFIF%00%01%01%00%00%01%00%01%00%00%FF%DB%00C%00%08%06%06',
     '?blob=%FF%D8%FF%E01234567890123%FF%D920261005',
+    // Big5 and Shift-JIS: the letter after the lead byte is the character's
+    // trail byte (代碼, 乙, 万, ケース), so no identification number starts there.
+    'http://www.example.gov.tw/query.asp?kw=%A5N%BDX123456787&page=1',
+    'http://www.example.gov.tw/search?q=%A4A202610052&x=a%20b',
+    '?q=%C9E202610056',
+    'http://www.example.co.jp/cgi-bin/find?q=%83P%81%5B%83X100482136',
+    'http://www.example.gov.tw/q.asp?kw=%A5N%BDX%20123456787',
   ])('leaves %j unmasked', async (text) => {
     const { masked } = await roundTrip(text)
     expect(masked[0]).toBe(text)
