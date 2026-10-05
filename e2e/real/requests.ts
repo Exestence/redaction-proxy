@@ -100,3 +100,15 @@ function toolFields(api: WireApi): Record<string, unknown> {
     }
   }
 }
+
+/**
+ * @param api - wire API of the request.
+ * @param body - a request body that {@link buildRequestBody} built, before or after the proxy masked it.
+ * @returns the user prompt in it.
+ * @throws {Error} when the body holds no prompt string.
+ */
+export function promptOf(api: WireApi, body: Record<string, unknown>): string {
+  const prompt = api === 'responses' ? body.input : (body.messages as { content?: unknown }[] | undefined)?.[0]?.content
+  if (typeof prompt !== 'string') throw new Error(`the ${api} request holds no prompt string`)
+  return prompt
+}

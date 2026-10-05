@@ -3,11 +3,12 @@
 import { createServer } from 'node:http'
 import type { Server } from 'node:http'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
-import { runProvider } from '../e2e/real/harness.ts'
+import { isSuccessfulRun, runProvider } from '../e2e/real/harness.ts'
+import type { CaseResult } from '../e2e/real/harness.ts'
 import { PROVIDERS } from '../e2e/real/providers.ts'
 import { extractReplyText } from '../e2e/real/replies.ts'
 import type { Scenario } from '../e2e/real/requests.ts'
-import { findLeakedOriginals, verifyRestoration } from '../e2e/real/verify.ts'
+import { findLeakedOriginals, mapPlaceholders, verifyRestoration } from '../e2e/real/verify.ts'
 import { listen } from '../src/proxy/server.ts'
 
 const CHUNK_SIZE = 3
@@ -107,6 +108,14 @@ describe('real-service harness against a fake upstream', () => {
     for (const result of results) expect(result, `${result.scenario}: ${result.detail}`).toMatchObject({ status: 'pass' })
   })
 
+  it('fails a run that verified no restoration', () => {
+    const result = (status: 'pass' | 'inconclusive' | 'fail'): CaseResult => ({ provider: 'p', scenario: 's', status, detail: '' })
+    expect(isSuccessfulRun([result('pass'), result('inconclusive')])).toBe(true)
+    expect(isSuccessfulRun([result('inconclusive')])).toBe(false)
+    expect(isSuccessfulRun([])).toBe(false)
+    expect(isSuccessfulRun([result('pass'), result('fail')])).toBe(false)
+  })
+
   it('skips a provider without a key', async () => {
     expect(await runProvider(PROVIDERS[0]!, {})).toEqual([])
   })
@@ -127,31 +136,44 @@ describe('real-service harness against a fake upstream', () => {
 
 describe('verification', () => {
   const originals = ['a@example.com', 'A123456789']
+  const placeholders = new Map([['EMAIL_1', 'a@example.com'], ['TWID_1', 'A123456789']])
 
-  it('passes a reply whose placeholders became originals', () => {
-    expect(verifyRestoration('to ⟦EMAIL_1⟧ and ⟦EMAIL_1⟧', 'to a@example.com and a@example.com', originals))
+  it('maps each placeholder of the masked prompt to the original it replaced', () => {
+    expect(mapPlaceholders('mail ⟦EMAIL_1⟧ id ⟦TWID_1⟧', 'mail a@example.com id A123456789', originals)).toEqual(placeholders)
+    expect(mapPlaceholders('mail ⟦EMAIL_1⟧ id A123456789', 'mail a@example.com id A123456789', originals)?.size).toBe(1)
+    expect(mapPlaceholders('mail ⟦EMAIL_1⟧!', 'mail a@example.com', originals)).toBeUndefined()
+  })
+
+  it('passes a reply whose placeholders became their originals', () => {
+    expect(verifyRestoration('to ⟦EMAIL_1⟧ and ⟦EMAIL_1⟧', 'to a@example.com and a@example.com', placeholders))
       .toEqual({ status: 'pass', placeholders: 2 })
   })
 
   it('fails a reply that kept a placeholder', () => {
-    expect(verifyRestoration('to ⟦EMAIL_1⟧', 'to ⟦EMAIL_1⟧', originals).status).toBe('fail')
+    expect(verifyRestoration('to ⟦EMAIL_1⟧', 'to ⟦EMAIL_1⟧', placeholders).status).toBe('fail')
   })
 
   it('fails a reply that changed outside the placeholders', () => {
-    expect(verifyRestoration('to ⟦EMAIL_1⟧.', 'to a@example.com!', originals).status).toBe('fail')
+    expect(verifyRestoration('to ⟦EMAIL_1⟧.', 'to a@example.com!', placeholders).status).toBe('fail')
   })
 
-  it('fails one placeholder restored to two different values', () => {
-    expect(verifyRestoration('⟦X_1⟧ ⟦X_1⟧', 'a@example.com A123456789', originals).status).toBe('fail')
+  it('fails a placeholder restored to another original', () => {
+    expect(verifyRestoration('⟦EMAIL_1⟧ ⟦TWID_1⟧', 'A123456789 a@example.com', placeholders).status).toBe('fail')
   })
 
-  it('is inconclusive when the model echoed no placeholder', () => {
-    expect(verifyRestoration('no', 'no', originals).status).toBe('inconclusive')
+  it('leaves a placeholder the model invented as written', () => {
+    expect(verifyRestoration('⟦EMAIL_1⟧ ⟦EMAIL_9⟧', 'a@example.com ⟦EMAIL_9⟧', placeholders)).toEqual({ status: 'pass', placeholders: 1 })
+  })
+
+  it('is inconclusive when the model echoed no placeholder of the request', () => {
+    expect(verifyRestoration('no', 'no', placeholders).status).toBe('inconclusive')
+    expect(verifyRestoration('⟦EMAIL_9⟧', '⟦EMAIL_9⟧', placeholders).status).toBe('inconclusive')
   })
 
   it('finds originals sent verbatim or JSON-escaped', () => {
     expect(findLeakedOriginals('{"x":"A123456789"}', originals)).toEqual(['A123456789'])
     expect(findLeakedOriginals(JSON.stringify({ x: 'C:\\Users\\lin' }), ['C:\\Users\\lin'])).toEqual(['C:\\Users\\lin'])
+    expect(findLeakedOriginals('{"x":"a\\u0040example.com"}', originals)).toEqual(['a@example.com'])
   })
 
   it('reads message text and tool arguments from JSON and event streams', () => {

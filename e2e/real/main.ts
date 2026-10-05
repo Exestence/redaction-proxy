@@ -1,12 +1,12 @@
 /**
  * Real-service harness entry point: `pnpm run e2e:real`. Runs every service
- * whose key is set, skips the others, and exits non-zero when a scenario fails
- * or errors. Prints scenario outcomes only, never a key or a prompt.
+ * whose key is set, skips the others, and exits non-zero unless at least one
+ * scenario passed and none failed or errored. Prints scenario outcomes only, never a key or a prompt.
  *
  * @module e2e/real/main
  */
 
-import { runProvider } from './harness.ts'
+import { isSuccessfulRun, runProvider } from './harness.ts'
 import type { CaseResult } from './harness.ts'
 import { PROVIDERS } from './providers.ts'
 
@@ -17,6 +17,6 @@ for (const provider of PROVIDERS) {
   for (const result of providerResults) console.log(`${result.status.padEnd(12)} ${result.provider} ${result.scenario}: ${result.detail}`)
   results.push(...providerResults)
 }
-const failed = results.filter(result => result.status === 'fail' || result.status === 'error')
-console.log(`\n${results.length - failed.length} of ${results.length} scenarios without failure`)
-process.exitCode = failed.length === 0 ? 0 : 1
+const countOf = (status: CaseResult['status']): number => results.filter(result => result.status === status).length
+console.log(`\n${countOf('pass')} passed, ${countOf('inconclusive')} inconclusive, ${countOf('fail')} failed, ${countOf('error')} errored`)
+process.exitCode = isSuccessfulRun(results) ? 0 : 1

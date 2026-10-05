@@ -11,11 +11,11 @@ import { createProxyServer, listen } from '../../src/proxy/server.ts'
 import { ROUTES, authHeaders } from './providers.ts'
 import type { Provider } from './providers.ts'
 import { extractReplyText } from './replies.ts'
-import { buildRequestBody, describeScenario, scenariosFor, syntheticRecord } from './requests.ts'
+import { buildRequestBody, describeScenario, promptOf, scenariosFor, syntheticRecord } from './requests.ts'
 import type { Scenario } from './requests.ts'
 import { startTee } from './tee.ts'
 import type { Tee } from './tee.ts'
-import { findLeakedOriginals, verifyRestoration } from './verify.ts'
+import { findLeakedOriginals, mapPlaceholders, verifyRestoration } from './verify.ts'
 
 /** Outcome of one scenario. */
 export interface Outcome {
@@ -79,11 +79,12 @@ export async function runProvider(provider: Provider, env: NodeJS.ProcessEnv): P
 
 async function runScenario(rig: Rig, scenario: Scenario): Promise<Outcome> {
   const record = syntheticRecord(RECORD_SEED)
+  const requestBody = buildRequestBody(scenario, rig.model, record)
   const exchangesBefore = rig.tee.exchanges.length
   const response = await fetch(rig.proxyUrl + ROUTES[scenario.api], {
     method: 'POST',
     headers: { 'content-type': 'application/json', ...authHeaders(rig.provider, rig.key) },
-    body: JSON.stringify(buildRequestBody(scenario, rig.model, record)),
+    body: JSON.stringify(requestBody),
   })
   const clientBody = await response.text()
   if (!response.ok) return { status: 'error', detail: `HTTP ${response.status}: ${excerptWithoutKey(clientBody, rig.key)}` }
@@ -91,14 +92,31 @@ async function runScenario(rig: Rig, scenario: Scenario): Promise<Outcome> {
   if (exchange === undefined) return { status: 'error', detail: 'the upstream received no request' }
   const leaked = findLeakedOriginals(exchange.requestBody, record.originals)
   if (leaked.length > 0) return { status: 'fail', detail: `${leaked.length} of ${record.originals.length} original values reached the upstream` }
+  const placeholders = mapPlaceholders(
+    promptOf(scenario.api, JSON.parse(exchange.requestBody) as Record<string, unknown>),
+    promptOf(scenario.api, requestBody),
+    record.originals,
+  )
+  if (placeholders === undefined) return { status: 'fail', detail: 'the upstream prompt is not the client prompt with each original replaced by a placeholder' }
   const verdict = verifyRestoration(
     extractReplyText(scenario.api, exchange.responseBody),
     extractReplyText(scenario.api, clientBody),
-    record.originals,
+    placeholders,
   )
   return verdict.status === 'pass'
     ? { status: 'pass', detail: `upstream saw placeholders only; ${verdict.placeholders} placeholder(s) restored` }
     : { status: verdict.status, detail: verdict.reason }
+}
+
+/**
+ * A run succeeds when no scenario failed or errored and at least one passed;
+ * a run of only inconclusive scenarios verified no restoration.
+ * @param results - every scenario of every service that ran.
+ * @returns whether the run succeeded.
+ */
+export function isSuccessfulRun(results: readonly CaseResult[]): boolean {
+  return results.some(result => result.status === 'pass')
+    && results.every(result => result.status === 'pass' || result.status === 'inconclusive')
 }
 
 /**
