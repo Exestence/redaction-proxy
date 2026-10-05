@@ -24,7 +24,7 @@ The prompt asks the model to echo one synthetic line (e-mail, Taiwan mobile numb
 2. the prompt the service received is the client's prompt with each original replaced by a placeholder;
 3. the client's reply equals the service's reply with each of those placeholders replaced by the original it stood for. This holds whatever the model chose to say, streamed or not.
 
-A scenario is `inconclusive` when the model echoed no placeholder of the request, so restoration was not exercised. The run exits non-zero when a scenario fails or errors, or when no scenario passed. `pnpm test` runs the same harness against a fake upstream (`tests/real-e2e-harness.spec.ts`).
+A scenario is `inconclusive` when the model echoed no placeholder of the request, so restoration was not exercised. The run exits non-zero when a scenario fails or errors, or when services ran and no scenario passed; with no key set it exits 0. `pnpm test` runs the same harness against a fake upstream (`tests/real-e2e-harness.spec.ts`).
 
 | Variable | Default | Meaning |
 | --- | --- | --- |

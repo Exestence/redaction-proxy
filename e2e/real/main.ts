@@ -1,7 +1,7 @@
 /**
  * Real-service harness entry point: `pnpm run e2e:real`. Runs every service
- * whose key is set, skips the others, and exits non-zero unless at least one
- * scenario passed and none failed or errored. Prints scenario outcomes only, never a key or a prompt.
+ * whose key is set, skips the others, and exits non-zero when a service ran but
+ * no scenario passed or one failed or errored. With no key set it exits 0. Prints scenario outcomes only, never a key or a prompt.
  *
  * @module e2e/real/main
  */
@@ -19,4 +19,4 @@ for (const provider of PROVIDERS) {
 }
 const countOf = (status: CaseResult['status']): number => results.filter(result => result.status === status).length
 console.log(`\n${countOf('pass')} passed, ${countOf('inconclusive')} inconclusive, ${countOf('fail')} failed, ${countOf('error')} errored`)
-process.exitCode = isSuccessfulRun(results) ? 0 : 1
+process.exitCode = results.length === 0 || isSuccessfulRun(results) ? 0 : 1
