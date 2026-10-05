@@ -94,9 +94,11 @@ const LEFT_EDGE = '(?<![A-Za-z0-9])'
 const RIGHT_EDGE = '(?![A-Za-z0-9])'
 /**
  * Like {@link LEFT_EDGE}, and not a group of a longer hyphenated run such as a
- * UUID or of a longer run of space-separated digit groups such as a table row.
+ * UUID. A space-separated value is also not the later part of a longer run of
+ * space-separated digit groups such as a table row; a hyphenated value after
+ * a digit and a space, as in a list of identifiers, still counts.
  */
-const GROUPED_LEFT_EDGE = '(?<![A-Za-z0-9-]|\\d )'
+const GROUPED_LEFT_EDGE = '(?<![A-Za-z0-9-])(?!(?<=\\d )\\d+ )'
 /** Characters between a keyword and its value: a colon, a space, a short word such as `is`. */
 const KEYWORD_GAP = '[^\\n]{0,8}?'
 /** Separators removed from a matched value before its check runs. */
