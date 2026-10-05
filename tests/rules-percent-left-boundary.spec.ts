@@ -30,7 +30,7 @@ describe('a high escape before a value is a left boundary', () => {
     ['?q=%e6F%20222333444', '?q=%e6⟦TWID_1⟧'],
     ['?q=tax%20id%20%E612345678', '?q=tax%20id%20%E6⟦TAXID_1⟧'],
     ['?q=%E7%B5%B1%E7%B7%A8%c012345678', '?q=%E7%B5%B1%E7%B7%A8%c0⟦TAXID_1⟧'],
-    ['?q=%FF4111%201111%201111%201111', '?q=%FF⟦CARD_1⟧'],
+    ['?q=%E65454%205454%205454%205454', '?q=%E6⟦CARD_1⟧'],
     ['?q=%E65454-5454-5454-5454', '?q=%E6⟦CARD_1⟧'],
     ['?q=%E66011000000000004', '?q=%E6⟦CARD_1⟧'],
     ['?q=%c0192.168.1.20', '?q=%c0⟦IP_1⟧'],
@@ -48,6 +48,11 @@ describe('a high escape before a value is a left boundary', () => {
     const { masked, restored } = await roundTrip('password = Xk9fQ2mZ7pL4wR', 'see %E6Xk9fQ2mZ7pL4wR')
     expect(masked).toEqual(['password = ⟦KEY_1⟧', 'see %E6⟦KEY_1⟧'])
     expect(restored).toEqual(['password = Xk9fQ2mZ7pL4wR', 'see %E6Xk9fQ2mZ7pL4wR'])
+  })
+
+  it('keeps masking a value after an escape that ends in a letter, as before', async () => {
+    const { masked } = await roundTrip('?q=%FF4111%201111%201111%201111')
+    expect(masked[0]).toBe('?q=%FF⟦CARD_1⟧')
   })
 
   it('still does not propagate into a longer token after a low escape', async () => {
