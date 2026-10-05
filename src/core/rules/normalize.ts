@@ -179,6 +179,42 @@ export function composeProjections(outer: OffsetProjection, inner: OffsetProject
 }
 
 /**
+ * A `%XX` escape of a byte at or above 0x80. Bytes below 0x80 always decode, so
+ * an escape of this form is a stray or truncated byte (or a once-decoded
+ * `%25XX`), or a byte of an encoded non-ASCII character; in every case it is
+ * not a letter or digit of the value that follows it.
+ */
+export const HIGH_ESCAPE = /%[89A-Fa-f][0-9A-Fa-f]/
+const HIGH_ESCAPE_END = /%[89A-Fa-f][0-9A-Fa-f]$/
+const AFTER_HIGH_ESCAPE = '(?<=%[89A-Fa-f][0-9A-Fa-f])'
+
+/**
+ * Derive the variant of a pattern that matches only where a high escape ends:
+ * its ASCII left boundary `anchor` is replaced by "a high escape ends here".
+ * A text holding a high escape runs both patterns, so the variant only adds
+ * matches.
+ * @param pattern - the pattern with its usual left boundary.
+ * @param anchor - the left-boundary source text, replaced at its first occurrence.
+ * @returns a new pattern with the same flags.
+ * @throws {Error} when `anchor` is not in the pattern's source.
+ */
+export function afterHighEscape(pattern: RegExp, anchor: string): RegExp {
+  const at = pattern.source.indexOf(anchor)
+  if (at < 0) throw new Error(`afterHighEscape: ${anchor} is not in /${pattern.source}/`)
+  return new RegExp(pattern.source.slice(0, at) + AFTER_HIGH_ESCAPE + pattern.source.slice(at + anchor.length), pattern.flags)
+}
+
+/**
+ * Whether a high escape ends right before an offset.
+ * @param text - text holding the offset.
+ * @param at - the offset.
+ * @returns whether `text` holds `%XX` with a byte at or above 0x80 ending at `at`.
+ */
+export function endsHighEscape(text: string, at: number): boolean {
+  return at >= 3 && HIGH_ESCAPE_END.test(text.slice(at - 3, at))
+}
+
+/**
  * Whether a character is an ASCII letter or digit.
  * @param char - one character, or the empty string past either end of a text.
  * @returns whether the character is `[A-Za-z0-9]`.

@@ -16,7 +16,7 @@ import type { RedactionDetection, RedactionDetector, RedactionPropagation } from
 import type { Candidate, PushCandidate } from './candidate.ts'
 import { mergeCandidates } from './candidate.ts'
 import type { OffsetProjection } from './normalize.ts'
-import { composeProjections, projectNfkc, projectPercent } from './normalize.ts'
+import { HIGH_ESCAPE, composeProjections, projectNfkc, projectPercent } from './normalize.ts'
 import { propagateValues } from './propagate.ts'
 import { screenText } from './screen.ts'
 import type { ConfiguredTerm } from './rules.ts'
@@ -60,7 +60,7 @@ export interface RulesRedactionConfig {
 }
 
 /** Detector version recorded with every scan; changes whenever a rule's matches change. */
-export const DETECTOR_VERSION = 'rules-5'
+export const DETECTOR_VERSION = 'rules-6'
 
 /** Shared addresses that are public by construction and carry no private value. */
 export const DEFAULT_ALLOWLIST: readonly string[] = ['git@github.com', 'noreply@github.com']
@@ -210,12 +210,14 @@ export class RulesDetector implements RedactionDetector {
       if (this.allowlist.has(text.slice(start, end).toLowerCase())) return
       out.push({ start, end, category, priority })
     }
+    // A stray `%E6` or `%FF` right before a number or a token is a left boundary on every pass.
+    const afterEscape = HIGH_ESCAPE.test(text)
     if (this.rules.has('user-path')) collectPathCandidates(text, push)
     if (this.rules.has('email')) collectEmailCandidates(text, push)
-    collectNumberCandidates(text, this.rules, push)
-    if (this.rules.has('card')) collectCardCandidates(text, push)
-    collectNetworkCandidates(text, this.rules, push, originalAt)
-    if (this.rules.has('api-key')) collectSecretCandidates(text, push)
+    collectNumberCandidates(text, this.rules, push, afterEscape)
+    if (this.rules.has('card')) collectCardCandidates(text, push, afterEscape)
+    collectNetworkCandidates(text, this.rules, push, originalAt, afterEscape)
+    if (this.rules.has('api-key')) collectSecretCandidates(text, push, afterEscape)
     if (this.rules.has('entropy')) collectEntropyCandidates(text, push)
     if (!skipTerms) collectTermCandidates(text, this.terms, push)
   }
