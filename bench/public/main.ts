@@ -7,7 +7,7 @@
  * @module bench/public/main
  */
 
-import { mkdirSync, rmSync, writeFileSync } from 'node:fs'
+import { mkdirSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { parseArgs } from 'node:util'
 import { DETECTOR_VERSION, RulesDetector } from '../../src/core/index.ts'
@@ -22,9 +22,7 @@ import type { CoreSystem, SystemRun } from './systems.ts'
 
 const DEFAULT_SEED = 20261005
 const DEFAULT_SAMPLES_PER_CELL = 50
-const BENCH_DIRECTORY = join(import.meta.dirname, '..')
-const WORK_DIRECTORY = join(BENCH_DIRECTORY, '.work')
-const RESULTS_DIRECTORY = join(BENCH_DIRECTORY, 'results')
+const RESULTS_DIRECTORY = join(import.meta.dirname, '..', 'results')
 
 const { values: args } = parseArgs({
   options: {
@@ -36,18 +34,15 @@ const seed = positiveInteger(args.seed, '--seed')
 const samplesPerCell = positiveInteger(args['per-cell'], '--per-cell')
 
 const samples = buildDataset({ seed, samplesPerCell })
-rmSync(WORK_DIRECTORY, { recursive: true, force: true })
-mkdirSync(WORK_DIRECTORY, { recursive: true })
 
 // Add a name-detection model or international rules here as one more core system.
 const coreSystems: CoreSystem[] = [{ name: 'redaction-proxy rules', detector: new RulesDetector() }]
 const runs: SystemRun[] = []
 for (const system of coreSystems) runs.push(await runCoreDetector(system, samples))
 const skipped: BenchmarkResult['skipped'] = []
-const presidio = runPresidio(samples, WORK_DIRECTORY)
+const presidio = runPresidio(samples)
 if ('skipped' in presidio) skipped.push({ name: 'Presidio', reason: presidio.reason })
 else runs.push(presidio)
-rmSync(WORK_DIRECTORY, { recursive: true, force: true })
 
 const result: BenchmarkResult = {
   seed,

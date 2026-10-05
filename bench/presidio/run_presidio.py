@@ -14,6 +14,7 @@ and the run is marked non-default.
 import json
 import sys
 import time
+from importlib.metadata import version
 
 import spacy
 from presidio_analyzer import AnalyzerEngine
@@ -60,7 +61,8 @@ def main(dataset_path: str, output_path: str) -> None:
     analyzer, model = create_analyzer()
     anonymizer = AnonymizerEngine()
     with open(dataset_path, encoding="utf-8") as dataset, open(output_path, "w", encoding="utf-8") as output:
-        output.write(json.dumps({"model": model, "defaultConfig": model == DEFAULT_MODEL}) + "\n")
+        header = {"version": version("presidio-analyzer"), "model": model, "defaultConfig": model == DEFAULT_MODEL}
+        output.write(json.dumps(header) + "\n")
         for line in dataset:
             outcome = process_sample(analyzer, anonymizer, json.loads(line))
             output.write(json.dumps(outcome, ensure_ascii=False) + "\n")

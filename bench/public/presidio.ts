@@ -7,7 +7,8 @@
  */
 
 import { spawnSync } from 'node:child_process'
-import { existsSync, readFileSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import type { Sample } from './dataset.ts'
 import type { SampleOutcome, SystemRun } from './systems.ts'
@@ -25,6 +26,8 @@ export interface Skipped {
 
 /** First line of the runner's output. */
 interface RunHeader {
+  /** Installed presidio-analyzer version. */
+  version: string
   model: string
   defaultConfig: boolean
 }
@@ -35,23 +38,30 @@ interface RunLine extends SampleOutcome {
 }
 
 /**
- * Run Presidio over the dataset.
+ * Run Presidio over the dataset. The samples cross to Python as JSONL in a
+ * private temporary directory that is removed before this returns.
  * @param samples - the dataset.
- * @param workDirectory - directory for the exchanged JSONL files.
  * @returns Presidio's outcomes, or why it was skipped.
+ * @throws {Error} when the runner's output is malformed.
  */
-export function runPresidio(samples: readonly Sample[], workDirectory: string): SystemRun | Skipped {
+export function runPresidio(samples: readonly Sample[]): SystemRun | Skipped {
   if (!existsSync(PYTHON)) return { skipped: true, reason: `no Python environment at bench/presidio/.venv; ${SETUP_HINT}` }
-  const input = join(workDirectory, 'presidio-input.jsonl')
-  const output = join(workDirectory, 'presidio-output.jsonl')
-  writeFileSync(input, samples.map(sample => JSON.stringify({ id: sample.id, text: sample.text })).join('\n'))
-  const run = spawnSync(PYTHON, [RUNNER, input, output], { encoding: 'utf8', stdio: ['ignore', 'inherit', 'pipe'] })
-  if (run.status !== 0) return { skipped: true, reason: `${lastLine(run.stderr)}; ${SETUP_HINT}` }
-  return parseRun(readFileSync(output, 'utf8'))
+  const workDirectory = mkdtempSync(join(tmpdir(), 'public-bench-'))
+  try {
+    const input = join(workDirectory, 'presidio-input.jsonl')
+    const output = join(workDirectory, 'presidio-output.jsonl')
+    writeFileSync(input, samples.map(sample => JSON.stringify({ id: sample.id, text: sample.text })).join('\n'))
+    const run = spawnSync(PYTHON, [RUNNER, input, output], { encoding: 'utf8', stdio: ['ignore', 'inherit', 'pipe'] })
+    if (run.status !== 0) return { skipped: true, reason: `${lastLine(run.stderr)}; ${SETUP_HINT}` }
+    return parseRun(readFileSync(output, 'utf8'))
+  } finally {
+    rmSync(workDirectory, { recursive: true, force: true })
+  }
 }
 
 function parseRun(jsonl: string): SystemRun {
-  const [headerLine = '{}', ...lines] = jsonl.trim().split('\n')
+  const [headerLine, ...lines] = jsonl.trim().split('\n')
+  if (headerLine === undefined || headerLine === '') throw new Error('the Presidio runner wrote no output')
   const header = JSON.parse(headerLine) as RunHeader
   const outcomes = new Map<string, SampleOutcome>()
   for (const line of lines) {
@@ -59,7 +69,7 @@ function parseRun(jsonl: string): SystemRun {
     outcomes.set(id, outcome)
   }
   return {
-    name: `Presidio 2.2 (${header.model})`,
+    name: `Presidio ${header.version} (${header.model})`,
     note: header.defaultConfig
       ? 'default analyzer and anonymizer, language "en" for every sample'
       : 'default recognizers on the small spaCy model, not the default en_core_web_lg; language "en" for every sample',
