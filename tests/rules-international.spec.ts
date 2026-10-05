@@ -33,6 +33,8 @@ describe('international rules', () => {
     ['to GB82WEST12345698765432 today', 'to ⟦IBAN_1⟧ today'],
     ['NL91ABNA0417164300', '⟦IBAN_1⟧'],
     ['FR1420041010050500013M02606', '⟦IBAN_1⟧'],
+    ['RU02 0445 2560 0407 0281 0412 3456 7890 1', '⟦IBAN_1⟧'],
+    ['OM810180000001299123456', '⟦IBAN_1⟧'],
     ['call +44 20 7946 0958 now', 'call ⟦PHONE_1⟧ now'],
     ['US office +1 (415) 555-0132', 'US office ⟦PHONE_1⟧'],
     ['phone=+8613812345678', 'phone=⟦PHONE_1⟧'],
