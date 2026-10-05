@@ -1,6 +1,9 @@
 // International rules: opt-in detection of identifiers issued outside Taiwan.
 // Every value is synthetic: registry or specification examples, or numbers
 // built from sequential digits with their check digit computed independently.
+import { mkdtempSync, rmSync, writeFileSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import {
   DEFAULT_RULE_NAMES,
@@ -154,7 +157,22 @@ describe('international rule configuration', () => {
     expect(() => resolveRulesConfig({ rules: ['br-cpf'] } as never)).toThrow('unknown rule "br-cpf"')
   })
 
-  it('enables every rule in the proxy unless the config file names its own', () => {
-    expect(loadConfig(undefined, {}).redaction.rules).toEqual([...RULE_NAMES])
+  it('enables every rule but e164-phone in the proxy unless the config file names its own', () => {
+    expect(loadConfig(undefined, {}).redaction.rules).toEqual(RULE_NAMES.filter(rule => rule !== 'e164-phone'))
+    const dir = mkdtempSync(join(tmpdir(), 'proxy-config-'))
+    const path = join(dir, 'config.json')
+    writeFileSync(path, JSON.stringify({ redaction: { rules: ['e164-phone'] } }))
+    try {
+      expect(loadConfig(path, {}).redaction.rules).toEqual(['e164-phone'])
+    } finally {
+      rmSync(dir, { recursive: true })
+    }
+  })
+
+  it('leaves a diff line that starts with a timestamp alone under the proxy default', async () => {
+    const proxyDefault = new RulesDetector(loadConfig(undefined, {}).redaction)
+    const line = '+2026-02-27 17:06:23 INFO started\n+1792055696732,7623,ok'
+    expect(await maskWith(proxyDefault, line)).toBe(line)
+    expect(await maskWith(everyRule, line)).not.toBe(line)
   })
 })

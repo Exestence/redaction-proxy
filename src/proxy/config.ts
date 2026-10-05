@@ -25,7 +25,7 @@ export interface ProxyConfig {
   openaiApiKey?: string
   /** Key sent upstream as `x-api-key` only when an Anthropic-style client sends none. */
   anthropicApiKey?: string
-  /** Rules detector configuration; `rules` defaults to every built-in rule. */
+  /** Rules detector configuration; `rules` defaults to every built-in rule except `e164-phone`. */
   redaction: RulesRedactionConfig
   /**
    * `replace` (default) rewrites control characters, U+FFFD, lone surrogates,
@@ -38,11 +38,14 @@ export interface ProxyConfig {
 }
 
 /**
- * The proxy enables every built-in rule unless the file names its own. The
- * core's narrower default exists to keep the policy digest that hosts persist
- * with their span index; the proxy keeps no index, so its digest is never compared.
+ * The proxy enables every built-in rule except `e164-phone` unless the file
+ * names its own. The core's narrower default exists to keep the policy digest
+ * that hosts persist with their span index; the proxy keeps no index, so its
+ * digest is never compared. `e164-phone` stays opt-in because it has no check
+ * digit and a diff's `+` marker makes every added numeric or timestamp line
+ * read as an international number.
  */
-const PROXY_DEFAULT_RULES = RULE_NAMES
+const PROXY_DEFAULT_RULES = RULE_NAMES.filter(rule => rule !== 'e164-phone')
 
 const FILE_KEYS = new Set(['port', 'openaiUpstream', 'anthropicUpstream', 'redaction', 'screen', 'debugMasked'])
 

@@ -127,7 +127,7 @@ curl http://127.0.0.1:8787/v1/chat/completions \
 | `redaction.terms` | 無 | 要遮的人名等字詞，不分大小寫。 |
 | `redaction.projectNames` | 無 | 要遮的專案代號。 |
 | `redaction.allowlist` | `git@github.com`、`noreply@github.com` | 永遠不遮的值。 |
-| `redaction.rules` | 全部 | 要啟用的內建規則。代理啟用全部規則；核心函式庫的預設不含國際規則（見[技術細節](docs/DETAILS.md#國際規則)）。 |
+| `redaction.rules` | `e164-phone` 以外全部 | 要啟用的內建規則。代理啟用 `e164-phone` 以外的全部規則（它會把數字開頭的 diff 新增行當成電話）；核心函式庫的預設不含國際規則（見[技術細節](docs/DETAILS.md#國際規則)）。 |
 | `screen` | `replace` | 遇到控制字元時改成可見字元（`replace`）或拒絕請求（`refuse`）。 |
 | `debugMasked` | `false` | 在日誌中記錄遮罩後的請求本文。 |
 

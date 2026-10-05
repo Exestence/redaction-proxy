@@ -127,7 +127,7 @@ Pass a JSON file with `node lib/cli.js --config redaction.json`; environment var
 | `redaction.terms` | none | Names and other words to mask, case-insensitive. |
 | `redaction.projectNames` | none | Project code names to mask. |
 | `redaction.allowlist` | `git@github.com`, `noreply@github.com` | Values never masked. |
-| `redaction.rules` | all | Built-in rules to enable. The proxy enables every rule; the core library's default leaves the international rules off (see the [technical details](docs/DETAILS.md#國際規則)). |
+| `redaction.rules` | all but `e164-phone` | Built-in rules to enable. The proxy enables every rule except `e164-phone`, which masks numeric diff lines; the core library's default leaves the international rules off (see the [technical details](docs/DETAILS.md#國際規則)). |
 | `screen` | `replace` | On control characters, replace them with visible stand-ins (`replace`) or refuse the request (`refuse`). |
 | `debugMasked` | `false` | Log each masked request body. |
 
