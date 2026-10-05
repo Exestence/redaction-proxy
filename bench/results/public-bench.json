@@ -1,344 +1,344 @@
 {
   "seed": 20261005,
-  "samplesPerCell": 5,
-  "sampleCount": 120,
-  "goldCount": 300,
-  "negativeCount": 182,
+  "samplesPerCell": 50,
+  "sampleCount": 1200,
+  "goldCount": 3122,
+  "negativeCount": 1966,
   "detectorVersion": "rules-6",
   "systems": [
     {
       "name": "redaction-proxy rules",
       "overall": {
         "recall": {
-          "hits": 235,
-          "total": 300
+          "hits": 2453,
+          "total": 3122
         },
         "leak": {
-          "hits": 65,
-          "total": 300
+          "hits": 668,
+          "total": 3122
         },
         "precision": {
-          "hits": 235,
-          "total": 248
+          "hits": 2454,
+          "total": 2557
         },
         "restoreExact": {
-          "hits": 120,
-          "total": 120
+          "hits": 1200,
+          "total": 1200
         }
       },
       "byCategory": {
         "PERSON": {
           "recall": {
             "hits": 0,
-            "total": 37
+            "total": 390
           },
           "leak": {
-            "hits": 37,
-            "total": 37
+            "hits": 390,
+            "total": 390
           }
         },
         "EMAIL": {
           "recall": {
-            "hits": 58,
-            "total": 58
+            "hits": 573,
+            "total": 573
           },
           "leak": {
             "hits": 0,
-            "total": 58
+            "total": 573
           }
         },
         "PHONE": {
           "recall": {
-            "hits": 5,
-            "total": 13
+            "hits": 61,
+            "total": 193
           },
           "leak": {
-            "hits": 8,
-            "total": 13
+            "hits": 132,
+            "total": 193
           }
         },
         "NATIONAL_ID": {
           "recall": {
-            "hits": 7,
-            "total": 27
+            "hits": 60,
+            "total": 207
           },
           "leak": {
-            "hits": 20,
-            "total": 27
+            "hits": 146,
+            "total": 207
           }
         },
         "CARD": {
           "recall": {
-            "hits": 21,
-            "total": 21
+            "hits": 209,
+            "total": 209
           },
           "leak": {
             "hits": 0,
-            "total": 21
+            "total": 209
           }
         },
         "SECRET": {
           "recall": {
-            "hits": 47,
-            "total": 47
+            "hits": 517,
+            "total": 517
           },
           "leak": {
             "hits": 0,
-            "total": 47
+            "total": 517
           }
         },
         "HOME_PATH": {
           "recall": {
-            "hits": 38,
-            "total": 38
+            "hits": 417,
+            "total": 417
           },
           "leak": {
             "hits": 0,
-            "total": 38
+            "total": 417
           }
         },
         "PRIVATE_IP": {
           "recall": {
-            "hits": 31,
-            "total": 31
+            "hits": 296,
+            "total": 296
           },
           "leak": {
             "hits": 0,
-            "total": 31
+            "total": 296
           }
         },
         "INTERNAL_HOST": {
           "recall": {
-            "hits": 28,
-            "total": 28
+            "hits": 320,
+            "total": 320
           },
           "leak": {
             "hits": 0,
-            "total": 28
+            "total": 320
           }
         }
       },
       "byLanguage": {
         "en": {
           "recall": {
-            "hits": 56,
-            "total": 75
+            "hits": 576,
+            "total": 771
           },
           "leak": {
-            "hits": 19,
-            "total": 75
+            "hits": 195,
+            "total": 771
           },
           "precision": {
-            "hits": 56,
-            "total": 59
+            "hits": 576,
+            "total": 602
           },
           "restoreExact": {
-            "hits": 30,
-            "total": 30
+            "hits": 300,
+            "total": 300
           }
         },
         "zh-TW": {
           "recall": {
-            "hits": 68,
-            "total": 77
+            "hits": 669,
+            "total": 770
           },
           "leak": {
-            "hits": 9,
-            "total": 77
+            "hits": 101,
+            "total": 770
           },
           "precision": {
-            "hits": 68,
-            "total": 72
+            "hits": 669,
+            "total": 690
           },
           "restoreExact": {
-            "hits": 30,
-            "total": 30
+            "hits": 300,
+            "total": 300
           }
         },
         "zh-CN": {
           "recall": {
-            "hits": 58,
-            "total": 75
+            "hits": 592,
+            "total": 786
           },
           "leak": {
-            "hits": 17,
-            "total": 75
+            "hits": 193,
+            "total": 786
           },
           "precision": {
-            "hits": 58,
-            "total": 62
+            "hits": 593,
+            "total": 617
           },
           "restoreExact": {
-            "hits": 30,
-            "total": 30
+            "hits": 300,
+            "total": 300
           }
         },
         "ja": {
           "recall": {
-            "hits": 53,
-            "total": 73
+            "hits": 616,
+            "total": 795
           },
           "leak": {
-            "hits": 20,
-            "total": 73
+            "hits": 179,
+            "total": 795
           },
           "precision": {
-            "hits": 53,
-            "total": 55
+            "hits": 616,
+            "total": 648
           },
           "restoreExact": {
-            "hits": 30,
-            "total": 30
+            "hits": 300,
+            "total": 300
           }
         }
       },
       "byFormat": {
         "chat": {
           "recall": {
-            "hits": 27,
-            "total": 46
+            "hits": 267,
+            "total": 492
           },
           "leak": {
-            "hits": 19,
-            "total": 46
+            "hits": 225,
+            "total": 492
           },
           "precision": {
-            "hits": 27,
-            "total": 27
+            "hits": 267,
+            "total": 267
           },
           "restoreExact": {
-            "hits": 20,
-            "total": 20
+            "hits": 200,
+            "total": 200
           }
         },
         "code": {
           "recall": {
-            "hits": 49,
-            "total": 60
+            "hits": 502,
+            "total": 600
           },
           "leak": {
-            "hits": 11,
-            "total": 60
+            "hits": 98,
+            "total": 600
           },
           "precision": {
-            "hits": 49,
-            "total": 49
+            "hits": 502,
+            "total": 604
           },
           "restoreExact": {
-            "hits": 20,
-            "total": 20
+            "hits": 200,
+            "total": 200
           }
         },
         "log": {
           "recall": {
-            "hits": 40,
-            "total": 40
+            "hits": 400,
+            "total": 400
           },
           "leak": {
             "hits": 0,
-            "total": 40
+            "total": 400
           },
           "precision": {
-            "hits": 40,
-            "total": 53
+            "hits": 400,
+            "total": 401
           },
           "restoreExact": {
-            "hits": 20,
-            "total": 20
+            "hits": 200,
+            "total": 200
           }
         },
         "config": {
           "recall": {
-            "hits": 60,
-            "total": 60
+            "hits": 600,
+            "total": 600
           },
           "leak": {
             "hits": 0,
-            "total": 60
+            "total": 600
           },
           "precision": {
-            "hits": 60,
-            "total": 60
+            "hits": 600,
+            "total": 600
           },
           "restoreExact": {
-            "hits": 20,
-            "total": 20
+            "hits": 200,
+            "total": 200
           }
         },
         "email": {
           "recall": {
-            "hits": 19,
-            "total": 54
+            "hits": 256,
+            "total": 602
           },
           "leak": {
-            "hits": 35,
-            "total": 54
+            "hits": 345,
+            "total": 602
           },
           "precision": {
-            "hits": 19,
-            "total": 19
+            "hits": 257,
+            "total": 257
           },
           "restoreExact": {
-            "hits": 20,
-            "total": 20
+            "hits": 200,
+            "total": 200
           }
         },
         "stacktrace": {
           "recall": {
-            "hits": 40,
-            "total": 40
+            "hits": 428,
+            "total": 428
           },
           "leak": {
             "hits": 0,
-            "total": 40
+            "total": 428
           },
           "precision": {
-            "hits": 40,
-            "total": 40
+            "hits": 428,
+            "total": 428
           },
           "restoreExact": {
-            "hits": 20,
-            "total": 20
+            "hits": 200,
+            "total": 200
           }
         }
       },
       "negativeHits": {
         "commit-hash": {
-          "hits": 0,
-          "total": 7
+          "hits": 102,
+          "total": 221
         },
         "sha256": {
-          "hits": 0,
-          "total": 7
+          "hits": 1,
+          "total": 200
         },
         "uuid": {
-          "hits": 13,
-          "total": 56
+          "hits": 0,
+          "total": 478
         },
         "version": {
           "hits": 0,
-          "total": 27
+          "total": 289
         },
         "order-number": {
           "hits": 0,
-          "total": 46
+          "total": 380
         },
         "tracking-number": {
           "hits": 0,
-          "total": 7
+          "total": 101
         },
         "epoch-millis": {
           "hits": 0,
-          "total": 13
+          "total": 81
         },
         "code-identifier": {
           "hits": 0,
-          "total": 19
+          "total": 216
         }
       },
       "latency": {
-        "p50": 0.07899999999999352,
-        "p95": 0.28487499999999955
+        "p50": 0.0534590000000037,
+        "p95": 0.10891700000000526
       }
     },
     {
@@ -346,291 +346,291 @@
       "note": "default recognizers on the small spaCy model, not the default en_core_web_lg; language \"en\" for every sample",
       "overall": {
         "recall": {
-          "hits": 138,
-          "total": 300
+          "hits": 1630,
+          "total": 3122
         },
         "leak": {
-          "hits": 117,
-          "total": 300
+          "hits": 1064,
+          "total": 3122
         },
         "precision": {
-          "hits": 185,
-          "total": 360
+          "hits": 2079,
+          "total": 3761
         }
       },
       "byCategory": {
         "PERSON": {
           "recall": {
-            "hits": 7,
-            "total": 37
+            "hits": 107,
+            "total": 390
           },
           "leak": {
-            "hits": 30,
-            "total": 37
+            "hits": 283,
+            "total": 390
           }
         },
         "EMAIL": {
           "recall": {
-            "hits": 34,
-            "total": 58
+            "hits": 573,
+            "total": 573
           },
           "leak": {
-            "hits": 18,
-            "total": 58
+            "hits": 0,
+            "total": 573
           }
         },
         "PHONE": {
           "recall": {
-            "hits": 12,
-            "total": 13
+            "hits": 174,
+            "total": 193
           },
           "leak": {
-            "hits": 0,
-            "total": 13
+            "hits": 2,
+            "total": 193
           }
         },
         "NATIONAL_ID": {
           "recall": {
-            "hits": 27,
-            "total": 27
+            "hits": 195,
+            "total": 207
           },
           "leak": {
-            "hits": 0,
-            "total": 27
+            "hits": 12,
+            "total": 207
           }
         },
         "CARD": {
           "recall": {
-            "hits": 21,
-            "total": 21
+            "hits": 209,
+            "total": 209
           },
           "leak": {
             "hits": 0,
-            "total": 21
+            "total": 209
           }
         },
         "SECRET": {
           "recall": {
-            "hits": 3,
-            "total": 47
+            "hits": 41,
+            "total": 517
           },
           "leak": {
-            "hits": 34,
-            "total": 47
+            "hits": 372,
+            "total": 517
           }
         },
         "HOME_PATH": {
           "recall": {
-            "hits": 0,
-            "total": 38
+            "hits": 2,
+            "total": 417
           },
           "leak": {
-            "hits": 28,
-            "total": 38
+            "hits": 294,
+            "total": 417
           }
         },
         "PRIVATE_IP": {
           "recall": {
-            "hits": 31,
-            "total": 31
+            "hits": 296,
+            "total": 296
           },
           "leak": {
             "hits": 0,
-            "total": 31
+            "total": 296
           }
         },
         "INTERNAL_HOST": {
           "recall": {
-            "hits": 3,
-            "total": 28
+            "hits": 33,
+            "total": 320
           },
           "leak": {
-            "hits": 7,
-            "total": 28
+            "hits": 101,
+            "total": 320
           }
         }
       },
       "byLanguage": {
         "en": {
           "recall": {
-            "hits": 41,
-            "total": 75
+            "hits": 452,
+            "total": 771
           },
           "leak": {
-            "hits": 24,
-            "total": 75
+            "hits": 206,
+            "total": 771
           },
           "precision": {
-            "hits": 53,
-            "total": 102
+            "hits": 574,
+            "total": 1033
           }
         },
         "zh-TW": {
           "recall": {
-            "hits": 34,
-            "total": 77
+            "hits": 376,
+            "total": 770
           },
           "leak": {
-            "hits": 26,
-            "total": 77
+            "hits": 278,
+            "total": 770
           },
           "precision": {
-            "hits": 54,
-            "total": 101
+            "hits": 508,
+            "total": 879
           }
         },
         "zh-CN": {
           "recall": {
-            "hits": 34,
-            "total": 75
+            "hits": 383,
+            "total": 786
           },
           "leak": {
-            "hits": 34,
-            "total": 75
+            "hits": 300,
+            "total": 786
           },
           "precision": {
-            "hits": 36,
-            "total": 82
+            "hits": 479,
+            "total": 912
           }
         },
         "ja": {
           "recall": {
-            "hits": 29,
-            "total": 73
+            "hits": 419,
+            "total": 795
           },
           "leak": {
-            "hits": 33,
-            "total": 73
+            "hits": 280,
+            "total": 795
           },
           "precision": {
-            "hits": 42,
-            "total": 75
+            "hits": 518,
+            "total": 937
           }
         }
       },
       "byFormat": {
         "chat": {
           "recall": {
-            "hits": 37,
-            "total": 46
+            "hits": 414,
+            "total": 492
           },
           "leak": {
-            "hits": 7,
-            "total": 46
+            "hits": 73,
+            "total": 492
           },
           "precision": {
-            "hits": 34,
-            "total": 57
+            "hits": 394,
+            "total": 611
           }
         },
         "code": {
           "recall": {
-            "hits": 14,
-            "total": 60
+            "hits": 243,
+            "total": 600
           },
           "leak": {
-            "hits": 30,
-            "total": 60
+            "hits": 241,
+            "total": 600
           },
           "precision": {
-            "hits": 34,
-            "total": 57
+            "hits": 375,
+            "total": 657
           }
         },
         "log": {
           "recall": {
-            "hits": 25,
-            "total": 40
+            "hits": 174,
+            "total": 400
           },
           "leak": {
-            "hits": 9,
-            "total": 40
+            "hits": 116,
+            "total": 400
           },
           "precision": {
-            "hits": 31,
-            "total": 97
+            "hits": 282,
+            "total": 745
           }
         },
         "config": {
           "recall": {
-            "hits": 15,
-            "total": 60
+            "hits": 231,
+            "total": 600
           },
           "leak": {
-            "hits": 32,
-            "total": 60
+            "hits": 259,
+            "total": 600
           },
           "precision": {
-            "hits": 30,
-            "total": 37
+            "hits": 356,
+            "total": 432
           }
         },
         "email": {
           "recall": {
-            "hits": 36,
-            "total": 54
+            "hits": 440,
+            "total": 602
           },
           "leak": {
-            "hits": 17,
-            "total": 54
+            "hits": 150,
+            "total": 602
           },
           "precision": {
-            "hits": 37,
-            "total": 63
+            "hits": 449,
+            "total": 704
           }
         },
         "stacktrace": {
           "recall": {
-            "hits": 11,
-            "total": 40
+            "hits": 128,
+            "total": 428
           },
           "leak": {
-            "hits": 22,
-            "total": 40
+            "hits": 225,
+            "total": 428
           },
           "precision": {
-            "hits": 19,
-            "total": 49
+            "hits": 223,
+            "total": 612
           }
         }
       },
       "negativeHits": {
         "commit-hash": {
-          "hits": 1,
-          "total": 7
+          "hits": 20,
+          "total": 221
         },
         "sha256": {
-          "hits": 0,
-          "total": 7
+          "hits": 20,
+          "total": 200
         },
         "uuid": {
-          "hits": 11,
-          "total": 56
+          "hits": 185,
+          "total": 478
         },
         "version": {
-          "hits": 15,
-          "total": 27
+          "hits": 154,
+          "total": 289
         },
         "order-number": {
-          "hits": 46,
-          "total": 46
+          "hits": 380,
+          "total": 380
         },
         "tracking-number": {
-          "hits": 7,
-          "total": 7
+          "hits": 101,
+          "total": 101
         },
         "epoch-millis": {
-          "hits": 13,
-          "total": 13
+          "hits": 81,
+          "total": 81
         },
         "code-identifier": {
-          "hits": 2,
-          "total": 19
+          "hits": 29,
+          "total": 216
         }
       },
       "latency": {
-        "p50": 5.292291985824704,
-        "p95": 7.1117079933173954
+        "p50": 4.852375015616417,
+        "p95": 6.775374989956617
       }
     }
   ],

@@ -1,60 +1,60 @@
 # Public redaction benchmark
 
-Seed 20261005: 120 synthetic prompts (4 languages × 6 formats × 5), 300 sensitive values, 182 hard negatives. Built-in rules `rules-6`, default configuration. Reproduce with `pnpm run bench:public`.
+Seed 20261005: 1200 synthetic prompts (4 languages × 6 formats × 50), 3122 sensitive values, 1966 hard negatives. Built-in rules `rules-6`, default configuration. Reproduce with `pnpm run bench:public`.
 
 ## Overall
 
 | System | Recall | Precision | Leak rate | Restore exact | p50 ms | p95 ms |
 | --- | --- | --- | --- | --- | --- | --- |
-| redaction-proxy rules | 78.3% | 94.8% | 21.7% | 100.0% | 0.08 | 0.28 |
-| Presidio 2.2 (en_core_web_sm) | 46.0% | 51.4% | 39.0% | n/a | 5.29 | 7.11 |
+| redaction-proxy rules | 78.6% | 96.0% | 21.4% | 100.0% | 0.05 | 0.11 |
+| Presidio 2.2 (en_core_web_sm) | 52.2% | 55.3% | 34.1% | n/a | 4.85 | 6.78 |
 
 ## Recall by category (leak rate in parentheses)
 
 | Category | redaction-proxy rules | Presidio 2.2 (en_core_web_sm) |
 | --- | --- | --- |
-| PERSON | 0.0% (100.0%) | 18.9% (81.1%) |
-| EMAIL | 100.0% (0.0%) | 58.6% (31.0%) |
-| PHONE | 38.5% (61.5%) | 92.3% (0.0%) |
-| NATIONAL_ID | 25.9% (74.1%) | 100.0% (0.0%) |
+| PERSON | 0.0% (100.0%) | 27.4% (72.6%) |
+| EMAIL | 100.0% (0.0%) | 100.0% (0.0%) |
+| PHONE | 31.6% (68.4%) | 90.2% (1.0%) |
+| NATIONAL_ID | 29.0% (70.5%) | 94.2% (5.8%) |
 | CARD | 100.0% (0.0%) | 100.0% (0.0%) |
-| SECRET | 100.0% (0.0%) | 6.4% (72.3%) |
-| HOME_PATH | 100.0% (0.0%) | 0.0% (73.7%) |
+| SECRET | 100.0% (0.0%) | 7.9% (72.0%) |
+| HOME_PATH | 100.0% (0.0%) | 0.5% (70.5%) |
 | PRIVATE_IP | 100.0% (0.0%) | 100.0% (0.0%) |
-| INTERNAL_HOST | 100.0% (0.0%) | 10.7% (25.0%) |
+| INTERNAL_HOST | 100.0% (0.0%) | 10.3% (31.6%) |
 
 ## Recall / precision by language
 
 | Language | redaction-proxy rules | Presidio 2.2 (en_core_web_sm) |
 | --- | --- | --- |
-| en | 74.7% / 94.9% | 54.7% / 52.0% |
-| zh-TW | 88.3% / 94.4% | 44.2% / 53.5% |
-| zh-CN | 77.3% / 93.5% | 45.3% / 43.9% |
-| ja | 72.6% / 96.4% | 39.7% / 56.0% |
+| en | 74.7% / 95.7% | 58.6% / 55.6% |
+| zh-TW | 86.9% / 97.0% | 48.8% / 57.8% |
+| zh-CN | 75.3% / 96.1% | 48.7% / 52.5% |
+| ja | 77.5% / 95.1% | 52.7% / 55.3% |
 
 ## Hard negatives masked (lower is better)
 
 | Kind | redaction-proxy rules | Presidio 2.2 (en_core_web_sm) |
 | --- | --- | --- |
-| commit-hash | 0.0% | 14.3% |
-| sha256 | 0.0% | 0.0% |
-| uuid | 23.2% | 19.6% |
-| version | 0.0% | 55.6% |
+| commit-hash | 46.2% | 9.0% |
+| sha256 | 0.5% | 10.0% |
+| uuid | 0.0% | 38.7% |
+| version | 0.0% | 53.3% |
 | order-number | 0.0% | 100.0% |
 | tracking-number | 0.0% | 100.0% |
 | epoch-millis | 0.0% | 100.0% |
-| code-identifier | 0.0% | 10.5% |
+| code-identifier | 0.0% | 13.4% |
 
 <details><summary>Recall / precision by format</summary>
 
 | Format | redaction-proxy rules | Presidio 2.2 (en_core_web_sm) |
 | --- | --- | --- |
-| chat | 58.7% / 100.0% | 80.4% / 59.6% |
-| code | 81.7% / 100.0% | 23.3% / 59.6% |
-| log | 100.0% / 75.5% | 62.5% / 32.0% |
-| config | 100.0% / 100.0% | 25.0% / 81.1% |
-| email | 35.2% / 100.0% | 66.7% / 58.7% |
-| stacktrace | 100.0% / 100.0% | 27.5% / 38.8% |
+| chat | 54.3% / 100.0% | 84.1% / 64.5% |
+| code | 83.7% / 83.1% | 40.5% / 57.1% |
+| log | 100.0% / 99.8% | 43.5% / 37.9% |
+| config | 100.0% / 100.0% | 38.5% / 82.4% |
+| email | 42.5% / 100.0% | 73.1% / 63.8% |
+| stacktrace | 100.0% / 100.0% | 29.9% / 36.4% |
 
 </details>
 
