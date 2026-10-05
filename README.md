@@ -146,7 +146,7 @@ See the [technical details](docs/DETAILS.md#12-完整設定) for the matching en
 
 | Item | Result | What it means |
 | --- | --- | --- |
-| Tests | 893, all passing | Rules, engine, adversarial inputs, and streamed and non-streamed requests for all three APIs against a fake upstream. |
+| Tests | 894, all passing | Rules, engine, adversarial inputs, and streamed and non-streamed requests for all three APIs against a fake upstream. |
 | Credential false positives | **0.76** per 1,000 code lines | Measured on DeepSeek Harness source, which holds no real key (698k code lines): about one spot every 1,300 lines is mistaken for a key and masked. |
 | Restore failures | 0 | Every file that was masked restores byte for byte. |
 | Speed | about 850k lines in 5 s | Apple M5 Max. |
