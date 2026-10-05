@@ -8,11 +8,14 @@
 // positive because source files carry no working credential. Other categories
 // are reported per 1,000 lines of all files; they are an upper bound on false
 // positives, since documentation does contain example paths and addresses.
+//
+// BENCH_RULES=all measures every built-in rule, the international ones
+// included; by default the bench measures the default rule set.
 
 import { spawnSync } from 'node:child_process'
 import { mkdirSync, readFileSync, readdirSync, rmSync, statSync } from 'node:fs'
 import { join, relative } from 'node:path'
-import { RedactionError, RulesDetector, emptyRedactionIndex, mask, restore } from '../lib/core/index.js'
+import { RULE_NAMES, RedactionError, RulesDetector, emptyRedactionIndex, mask, restore } from '../lib/core/index.js'
 
 const REPO = process.env.CORPUS_REPO ?? '/path/to/deepseek-harness'
 const REF = process.env.CORPUS_REF ?? 'master'
@@ -43,7 +46,7 @@ const walk = directory => {
 }
 for (const root of ['packages', 'docs', 'scripts']) walk(join(work, root))
 
-const detector = new RulesDetector()
+const detector = new RulesDetector(process.env.BENCH_RULES === 'all' ? { rules: [...RULE_NAMES] } : {})
 const byCategory = new Map()
 const codeByCategory = new Map()
 const refused = new Map()
@@ -80,6 +83,7 @@ rmSync(work, { recursive: true, force: true })
 
 const per1k = (count, over) => ((count / over) * 1000).toFixed(2)
 console.log(`corpus: ${REPO} @ ${sha} (packages, docs, scripts; ${TEXT.source})`)
+console.log(`detector ${detector.detectorVersion}, rules ${process.env.BENCH_RULES === 'all' ? 'all' : 'default'}`)
 console.log(`files ${files.length}, lines ${lines}, code lines ${codeLines}, ${ms.toFixed(0)} ms`)
 console.log(`KEY spans in code files: ${codeKeys} = ${per1k(codeKeys, codeLines)} per 1k code lines (all false positives)`)
 for (const [category, count] of [...byCategory].sort((a, b) => b[1] - a[1])) {
