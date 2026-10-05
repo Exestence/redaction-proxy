@@ -296,7 +296,7 @@ export function orderNumber(random: Random): string {
 
 /**
  * @param random - random source.
- * @returns a Unix time in milliseconds from 2025–2027.
+ * @returns a Unix time in milliseconds between November 2023 and January 2027.
  */
 export function epochMillis(random: Random): string {
   return `17${random.digits(11)}`

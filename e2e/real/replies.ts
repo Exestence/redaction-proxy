@@ -8,6 +8,7 @@
 
 import type { WireApi } from './providers.ts'
 
+// Provider responses are untyped JSON read field by field with optional chaining.
 type Json = Record<string, any>
 
 const SSE_DATA_PREFIX = /^data: ?/
@@ -38,8 +39,7 @@ function parseEvents(body: string): Json[] {
 
 function messageText(api: WireApi, response: Json): string {
   switch (api) {
-    case 'chat': return (response.choices ?? []).map((choice: Json) =>
-      (choice.message?.content ?? '') + (choice.message?.tool_calls ?? []).map((call: Json) => call.function?.arguments ?? '').join('')).join('')
+    case 'chat': return chatChoicesText(response, 'message')
     case 'responses': return (response.output ?? []).map((item: Json) => item.type === 'function_call'
       ? item.arguments ?? ''
       : (item.content ?? []).map((part: Json) => part.text ?? '').join('')).join('')
@@ -51,11 +51,16 @@ function messageText(api: WireApi, response: Json): string {
 
 function streamEventText(api: WireApi, event: Json): string {
   switch (api) {
-    case 'chat': return (event.choices ?? []).map((choice: Json) =>
-      (choice.delta?.content ?? '') + (choice.delta?.tool_calls ?? []).map((call: Json) => call.function?.arguments ?? '').join('')).join('')
+    case 'chat': return chatChoicesText(event, 'delta')
     case 'responses': return event.type === 'response.output_text.delta' || event.type === 'response.function_call_arguments.delta'
       ? event.delta ?? ''
       : ''
     case 'messages': return event.type === 'content_block_delta' ? event.delta?.text ?? event.delta?.partial_json ?? '' : ''
   }
+}
+
+/** Chat Completions puts the same fields under `message` in a JSON response and under `delta` in a stream event. */
+function chatChoicesText(response: Json, field: 'message' | 'delta'): string {
+  return (response.choices ?? []).map((choice: Json) =>
+    (choice[field]?.content ?? '') + (choice[field]?.tool_calls ?? []).map((call: Json) => call.function?.arguments ?? '').join('')).join('')
 }
