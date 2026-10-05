@@ -466,19 +466,19 @@
         }
       },
       "latency": {
-        "median": 0.06970900000000313,
-        "p95": 0.20591699999999946
+        "median": 0.05554099999999096,
+        "p95": 0.1591669999999965
       }
     },
     {
-      "name": "Presidio 2.2.364 (en_core_web_sm, cutoff 0)",
-      "note": "Presidio: presidio-analyzer 2.2.364, spaCy 3.8.16, en_core_web_sm 3.8.0, not the default en_core_web_lg; default recognizers; language \"en\" for every prompt; the cutoff is Presidio's `score_threshold`, below which detections are dropped; latency is analysis only",
+      "name": "Presidio 2.2.364 (en_core_web_lg, cutoff 0)",
+      "note": "Presidio: presidio-analyzer 2.2.364, spaCy 3.8.16, en_core_web_lg 3.8.0, the default model; default recognizers; language \"en\" for every prompt; the cutoff is Presidio's `score_threshold`, below which detections are dropped; latency is analysis only",
       "englishAnalyzerOnly": true,
       "byCategory": {
         "PERSON": {
           "outcomes": {
             "fullyMasked": {
-              "hits": 82,
+              "hits": 94,
               "total": 95
             },
             "partlyMasked": {
@@ -486,7 +486,7 @@
               "total": 95
             },
             "untouched": {
-              "hits": 13,
+              "hits": 1,
               "total": 95
             }
           },
@@ -522,11 +522,11 @@
               "total": 48
             },
             "partlyMasked": {
-              "hits": 17,
+              "hits": 16,
               "total": 48
             },
             "untouched": {
-              "hits": 2,
+              "hits": 3,
               "total": 48
             }
           },
@@ -578,15 +578,15 @@
         "SECRET": {
           "outcomes": {
             "fullyMasked": {
-              "hits": 11,
+              "hits": 5,
               "total": 125
             },
             "partlyMasked": {
-              "hits": 18,
+              "hits": 22,
               "total": 125
             },
             "untouched": {
-              "hits": 96,
+              "hits": 98,
               "total": 125
             }
           },
@@ -602,16 +602,16 @@
               "total": 103
             },
             "partlyMasked": {
-              "hits": 33,
+              "hits": 59,
               "total": 103
             },
             "untouched": {
-              "hits": 70,
+              "hits": 44,
               "total": 103
             }
           },
           "coreFullyMasked": {
-            "hits": 6,
+            "hits": 32,
             "total": 103
           }
         },
@@ -638,20 +638,20 @@
         "INTERNAL_HOST": {
           "outcomes": {
             "fullyMasked": {
-              "hits": 9,
+              "hits": 5,
               "total": 79
             },
             "partlyMasked": {
-              "hits": 45,
+              "hits": 51,
               "total": 79
             },
             "untouched": {
-              "hits": 25,
+              "hits": 23,
               "total": 79
             }
           },
           "coreFullyMasked": {
-            "hits": 54,
+            "hits": 55,
             "total": 79
           }
         }
@@ -659,58 +659,58 @@
       "macroAverage": {
         "categories": 9,
         "outcomes": {
-          "fullyMasked": 0.629916512448491,
-          "partlyMasked": 0.15424169659397632,
-          "untouched": 0.2158417909575326
+          "fullyMasked": 0.6329923877908555,
+          "partlyMasked": 0.1919687208407867,
+          "untouched": 0.17503889136835782
         }
       },
       "overall": {
         "outcomes": {
           "fullyMasked": {
-            "hits": 452,
+            "hits": 454,
             "total": 771
           },
           "partlyMasked": {
-            "hits": 113,
+            "hits": 148,
             "total": 771
           },
           "untouched": {
-            "hits": 206,
+            "hits": 169,
             "total": 771
           }
         },
         "coreFullyMasked": {
-          "hits": 105,
+          "hits": 132,
           "total": 230
         },
         "regionPrecision": {
-          "hits": 574,
-          "total": 1033
+          "hits": 617,
+          "total": 988
         }
       },
       "byLanguage": {
         "en": {
           "outcomes": {
             "fullyMasked": {
-              "hits": 452,
+              "hits": 454,
               "total": 771
             },
             "partlyMasked": {
-              "hits": 113,
+              "hits": 148,
               "total": 771
             },
             "untouched": {
-              "hits": 206,
+              "hits": 169,
               "total": 771
             }
           },
           "coreFullyMasked": {
-            "hits": 105,
+            "hits": 132,
             "total": 230
           },
           "regionPrecision": {
-            "hits": 574,
-            "total": 1033
+            "hits": 617,
+            "total": 988
           }
         }
       },
@@ -736,69 +736,69 @@
           },
           "regionPrecision": {
             "hits": 121,
-            "total": 200
+            "total": 171
           }
         },
         "code": {
           "outcomes": {
             "fullyMasked": {
-              "hits": 80,
+              "hits": 77,
               "total": 150
             },
             "partlyMasked": {
-              "hits": 17,
+              "hits": 28,
               "total": 150
             },
             "untouched": {
-              "hits": 53,
+              "hits": 45,
               "total": 150
             }
           },
           "coreFullyMasked": {
-            "hits": 15,
+            "hits": 22,
             "total": 50
           },
           "regionPrecision": {
-            "hits": 97,
-            "total": 153
+            "hits": 106,
+            "total": 152
           }
         },
         "log": {
           "outcomes": {
             "fullyMasked": {
-              "hits": 45,
+              "hits": 44,
               "total": 100
             },
             "partlyMasked": {
-              "hits": 32,
+              "hits": 37,
               "total": 100
             },
             "untouched": {
-              "hits": 23,
+              "hits": 19,
               "total": 100
             }
           },
           "coreFullyMasked": {
-            "hits": 24,
+            "hits": 28,
             "total": 58
           },
           "regionPrecision": {
-            "hits": 77,
-            "total": 179
+            "hits": 81,
+            "total": 211
           }
         },
         "config": {
           "outcomes": {
             "fullyMasked": {
-              "hits": 57,
+              "hits": 55,
               "total": 150
             },
             "partlyMasked": {
-              "hits": 29,
+              "hits": 32,
               "total": 150
             },
             "untouched": {
-              "hits": 64,
+              "hits": 63,
               "total": 150
             }
           },
@@ -807,22 +807,22 @@
             "total": 24
           },
           "regionPrecision": {
-            "hits": 91,
-            "total": 108
+            "hits": 98,
+            "total": 112
           }
         },
         "email": {
           "outcomes": {
             "fullyMasked": {
-              "hits": 127,
+              "hits": 139,
               "total": 154
             },
             "partlyMasked": {
-              "hits": 12,
+              "hits": 11,
               "total": 154
             },
             "untouched": {
-              "hits": 15,
+              "hits": 4,
               "total": 154
             }
           },
@@ -831,32 +831,32 @@
             "total": 27
           },
           "regionPrecision": {
-            "hits": 139,
-            "total": 235
+            "hits": 149,
+            "total": 222
           }
         },
         "stacktrace": {
           "outcomes": {
             "fullyMasked": {
-              "hits": 27,
+              "hits": 23,
               "total": 96
             },
             "partlyMasked": {
-              "hits": 18,
+              "hits": 35,
               "total": 96
             },
             "untouched": {
-              "hits": 51,
+              "hits": 38,
               "total": 96
             }
           },
           "coreFullyMasked": {
-            "hits": 2,
+            "hits": 18,
             "total": 50
           },
           "regionPrecision": {
-            "hits": 49,
-            "total": 158
+            "hits": 62,
+            "total": 120
           }
         }
       },
@@ -866,19 +866,19 @@
           "total": 94
         },
         "uuid": {
-          "hits": 43,
+          "hits": 29,
           "total": 119
         },
         "code-identifier": {
-          "hits": 7,
+          "hits": 4,
           "total": 49
         },
         "version": {
-          "hits": 45,
+          "hits": 42,
           "total": 79
         },
         "commit-hash": {
-          "hits": 2,
+          "hits": 0,
           "total": 55
         },
         "epoch-millis": {
@@ -886,7 +886,7 @@
           "total": 21
         },
         "sha256": {
-          "hits": 7,
+          "hits": 6,
           "total": 50
         },
         "tracking-number": {
@@ -895,19 +895,19 @@
         }
       },
       "latency": {
-        "median": 7.730375014944002,
-        "p95": 9.879999997792765
+        "median": 6.563667004229501,
+        "p95": 8.543208008632064
       }
     },
     {
-      "name": "Presidio 2.2.364 (en_core_web_sm, cutoff 0.4)",
-      "note": "Presidio: presidio-analyzer 2.2.364, spaCy 3.8.16, en_core_web_sm 3.8.0, not the default en_core_web_lg; default recognizers; language \"en\" for every prompt; the cutoff is Presidio's `score_threshold`, below which detections are dropped; latency is analysis only",
+      "name": "Presidio 2.2.364 (en_core_web_lg, cutoff 0.4)",
+      "note": "Presidio: presidio-analyzer 2.2.364, spaCy 3.8.16, en_core_web_lg 3.8.0, the default model; default recognizers; language \"en\" for every prompt; the cutoff is Presidio's `score_threshold`, below which detections are dropped; latency is analysis only",
       "englishAnalyzerOnly": true,
       "byCategory": {
         "PERSON": {
           "outcomes": {
             "fullyMasked": {
-              "hits": 82,
+              "hits": 94,
               "total": 95
             },
             "partlyMasked": {
@@ -915,7 +915,7 @@
               "total": 95
             },
             "untouched": {
-              "hits": 13,
+              "hits": 1,
               "total": 95
             }
           },
@@ -951,11 +951,11 @@
               "total": 48
             },
             "partlyMasked": {
-              "hits": 17,
+              "hits": 16,
               "total": 48
             },
             "untouched": {
-              "hits": 2,
+              "hits": 3,
               "total": 48
             }
           },
@@ -1007,15 +1007,15 @@
         "SECRET": {
           "outcomes": {
             "fullyMasked": {
-              "hits": 11,
+              "hits": 5,
               "total": 125
             },
             "partlyMasked": {
-              "hits": 8,
+              "hits": 6,
               "total": 125
             },
             "untouched": {
-              "hits": 106,
+              "hits": 114,
               "total": 125
             }
           },
@@ -1031,16 +1031,16 @@
               "total": 103
             },
             "partlyMasked": {
-              "hits": 33,
+              "hits": 59,
               "total": 103
             },
             "untouched": {
-              "hits": 70,
+              "hits": 44,
               "total": 103
             }
           },
           "coreFullyMasked": {
-            "hits": 6,
+            "hits": 32,
             "total": 103
           }
         },
@@ -1067,20 +1067,20 @@
         "INTERNAL_HOST": {
           "outcomes": {
             "fullyMasked": {
-              "hits": 9,
+              "hits": 5,
               "total": 79
             },
             "partlyMasked": {
-              "hits": 45,
+              "hits": 51,
               "total": 79
             },
             "untouched": {
-              "hits": 25,
+              "hits": 23,
               "total": 79
             }
           },
           "coreFullyMasked": {
-            "hits": 54,
+            "hits": 55,
             "total": 79
           }
         }
@@ -1088,58 +1088,58 @@
       "macroAverage": {
         "categories": 9,
         "outcomes": {
-          "fullyMasked": 0.629916512448491,
-          "partlyMasked": 0.14535280770508743,
-          "untouched": 0.22473067984642142
+          "fullyMasked": 0.6329923877908555,
+          "partlyMasked": 0.17774649861856448,
+          "untouched": 0.18926111359058004
         }
       },
       "overall": {
         "outcomes": {
           "fullyMasked": {
-            "hits": 452,
+            "hits": 454,
             "total": 771
           },
           "partlyMasked": {
-            "hits": 103,
+            "hits": 132,
             "total": 771
           },
           "untouched": {
-            "hits": 216,
+            "hits": 185,
             "total": 771
           }
         },
         "coreFullyMasked": {
-          "hits": 105,
+          "hits": 132,
           "total": 230
         },
         "regionPrecision": {
-          "hits": 555,
-          "total": 885
+          "hits": 585,
+          "total": 811
         }
       },
       "byLanguage": {
         "en": {
           "outcomes": {
             "fullyMasked": {
-              "hits": 452,
+              "hits": 454,
               "total": 771
             },
             "partlyMasked": {
-              "hits": 103,
+              "hits": 132,
               "total": 771
             },
             "untouched": {
-              "hits": 216,
+              "hits": 185,
               "total": 771
             }
           },
           "coreFullyMasked": {
-            "hits": 105,
+            "hits": 132,
             "total": 230
           },
           "regionPrecision": {
-            "hits": 555,
-            "total": 885
+            "hits": 585,
+            "total": 811
           }
         }
       },
@@ -1165,69 +1165,69 @@
           },
           "regionPrecision": {
             "hits": 121,
-            "total": 187
+            "total": 153
           }
         },
         "code": {
           "outcomes": {
             "fullyMasked": {
-              "hits": 80,
+              "hits": 77,
               "total": 150
             },
             "partlyMasked": {
-              "hits": 16,
+              "hits": 26,
               "total": 150
             },
             "untouched": {
-              "hits": 54,
+              "hits": 47,
               "total": 150
             }
           },
           "coreFullyMasked": {
-            "hits": 15,
+            "hits": 22,
             "total": 50
           },
           "regionPrecision": {
-            "hits": 96,
-            "total": 135
+            "hits": 103,
+            "total": 132
           }
         },
         "log": {
           "outcomes": {
             "fullyMasked": {
-              "hits": 45,
+              "hits": 44,
               "total": 100
             },
             "partlyMasked": {
-              "hits": 32,
+              "hits": 37,
               "total": 100
             },
             "untouched": {
-              "hits": 23,
+              "hits": 19,
               "total": 100
             }
           },
           "coreFullyMasked": {
-            "hits": 24,
+            "hits": 28,
             "total": 58
           },
           "regionPrecision": {
-            "hits": 77,
-            "total": 139
+            "hits": 81,
+            "total": 170
           }
         },
         "config": {
           "outcomes": {
             "fullyMasked": {
-              "hits": 57,
+              "hits": 55,
               "total": 150
             },
             "partlyMasked": {
-              "hits": 23,
+              "hits": 21,
               "total": 150
             },
             "untouched": {
-              "hits": 70,
+              "hits": 74,
               "total": 150
             }
           },
@@ -1236,22 +1236,22 @@
             "total": 24
           },
           "regionPrecision": {
-            "hits": 80,
-            "total": 86
+            "hits": 76,
+            "total": 78
           }
         },
         "email": {
           "outcomes": {
             "fullyMasked": {
-              "hits": 127,
+              "hits": 139,
               "total": 154
             },
             "partlyMasked": {
-              "hits": 12,
+              "hits": 11,
               "total": 154
             },
             "untouched": {
-              "hits": 15,
+              "hits": 4,
               "total": 154
             }
           },
@@ -1260,72 +1260,72 @@
             "total": 27
           },
           "regionPrecision": {
-            "hits": 139,
-            "total": 209
+            "hits": 149,
+            "total": 185
           }
         },
         "stacktrace": {
           "outcomes": {
             "fullyMasked": {
-              "hits": 27,
+              "hits": 23,
               "total": 96
             },
             "partlyMasked": {
-              "hits": 15,
+              "hits": 32,
               "total": 96
             },
             "untouched": {
-              "hits": 54,
+              "hits": 41,
               "total": 96
             }
           },
           "coreFullyMasked": {
-            "hits": 2,
+            "hits": 18,
             "total": 50
           },
           "regionPrecision": {
-            "hits": 42,
-            "total": 129
+            "hits": 55,
+            "total": 93
           }
         }
       },
       "negativeHits": {
         "order-number": {
-          "hits": 60,
+          "hits": 55,
           "total": 94
         },
         "uuid": {
-          "hits": 20,
+          "hits": 5,
           "total": 119
         },
         "code-identifier": {
-          "hits": 7,
+          "hits": 4,
           "total": 49
         },
         "version": {
-          "hits": 16,
+          "hits": 13,
           "total": 79
         },
         "commit-hash": {
-          "hits": 2,
+          "hits": 0,
           "total": 55
         },
         "epoch-millis": {
-          "hits": 0,
+          "hits": 2,
           "total": 21
         },
         "sha256": {
-          "hits": 7,
+          "hits": 6,
           "total": 50
         },
         "tracking-number": {
-          "hits": 12,
+          "hits": 0,
           "total": 27
         }
       },
       "latency": {
-        "median": 7.585583021864295,
-        "p95": 9.773333003977314
+        "median": 6.278832996031269,
+        "p95": 8.134625008096918
       }
     }
   ],
@@ -1869,19 +1869,19 @@
         }
       },
       "latency": {
-        "median": 0.06683300000000258,
-        "p95": 0.14962499999998613
+        "median": 0.052042000000000144,
+        "p95": 0.1045830000000052
       }
     },
     {
-      "name": "Presidio 2.2.364 (en_core_web_sm, cutoff 0)",
-      "note": "Presidio: presidio-analyzer 2.2.364, spaCy 3.8.16, en_core_web_sm 3.8.0, not the default en_core_web_lg; default recognizers; language \"en\" for every prompt; the cutoff is Presidio's `score_threshold`, below which detections are dropped; latency is analysis only",
+      "name": "Presidio 2.2.364 (en_core_web_lg, cutoff 0)",
+      "note": "Presidio: presidio-analyzer 2.2.364, spaCy 3.8.16, en_core_web_lg 3.8.0, the default model; default recognizers; language \"en\" for every prompt; the cutoff is Presidio's `score_threshold`, below which detections are dropped; latency is analysis only",
       "englishAnalyzerOnly": true,
       "byCategory": {
         "PERSON": {
           "outcomes": {
             "fullyMasked": {
-              "hits": 107,
+              "hits": 128,
               "total": 390
             },
             "partlyMasked": {
@@ -1889,7 +1889,7 @@
               "total": 390
             },
             "untouched": {
-              "hits": 283,
+              "hits": 262,
               "total": 390
             }
           },
@@ -1925,11 +1925,11 @@
               "total": 193
             },
             "partlyMasked": {
-              "hits": 17,
+              "hits": 16,
               "total": 193
             },
             "untouched": {
-              "hits": 2,
+              "hits": 3,
               "total": 193
             }
           },
@@ -1941,7 +1941,7 @@
         "NATIONAL_ID": {
           "outcomes": {
             "fullyMasked": {
-              "hits": 195,
+              "hits": 165,
               "total": 207
             },
             "partlyMasked": {
@@ -1949,7 +1949,7 @@
               "total": 207
             },
             "untouched": {
-              "hits": 12,
+              "hits": 42,
               "total": 207
             }
           },
@@ -1981,15 +1981,15 @@
         "SECRET": {
           "outcomes": {
             "fullyMasked": {
-              "hits": 41,
+              "hits": 19,
               "total": 517
             },
             "partlyMasked": {
-              "hits": 104,
+              "hits": 119,
               "total": 517
             },
             "untouched": {
-              "hits": 372,
+              "hits": 379,
               "total": 517
             }
           },
@@ -2001,20 +2001,20 @@
         "HOME_PATH": {
           "outcomes": {
             "fullyMasked": {
-              "hits": 2,
+              "hits": 0,
               "total": 417
             },
             "partlyMasked": {
-              "hits": 121,
+              "hits": 207,
               "total": 417
             },
             "untouched": {
-              "hits": 294,
+              "hits": 210,
               "total": 417
             }
           },
           "coreFullyMasked": {
-            "hits": 39,
+            "hits": 121,
             "total": 417
           }
         },
@@ -2041,20 +2041,20 @@
         "INTERNAL_HOST": {
           "outcomes": {
             "fullyMasked": {
-              "hits": 33,
+              "hits": 10,
               "total": 320
             },
             "partlyMasked": {
-              "hits": 186,
+              "hits": 212,
               "total": 320
             },
             "untouched": {
-              "hits": 101,
+              "hits": 98,
               "total": 320
             }
           },
           "coreFullyMasked": {
-            "hits": 219,
+            "hits": 220,
             "total": 320
           }
         }
@@ -2062,130 +2062,130 @@
       "macroAverage": {
         "categories": 9,
         "outcomes": {
-          "fullyMasked": 0.5894630224588,
-          "partlyMasked": 0.12896236764976796,
-          "untouched": 0.2815746098914322
+          "fullyMasked": 0.5660957183538402,
+          "partlyMasked": 0.16355316814887752,
+          "untouched": 0.2703511134972822
         }
       },
       "overall": {
         "outcomes": {
           "fullyMasked": {
-            "hits": 1630,
+            "hits": 1574,
             "total": 3122
           },
           "partlyMasked": {
-            "hits": 428,
+            "hits": 554,
             "total": 3122
           },
           "untouched": {
-            "hits": 1064,
+            "hits": 994,
             "total": 3122
           }
         },
         "coreFullyMasked": {
-          "hits": 448,
+          "hits": 531,
           "total": 930
         },
         "regionPrecision": {
-          "hits": 2079,
-          "total": 3761
+          "hits": 2192,
+          "total": 3650
         }
       },
       "byLanguage": {
         "en": {
           "outcomes": {
             "fullyMasked": {
-              "hits": 452,
+              "hits": 454,
               "total": 771
             },
             "partlyMasked": {
-              "hits": 113,
+              "hits": 148,
               "total": 771
             },
             "untouched": {
-              "hits": 206,
+              "hits": 169,
               "total": 771
             }
           },
           "coreFullyMasked": {
-            "hits": 105,
+            "hits": 132,
             "total": 230
           },
           "regionPrecision": {
-            "hits": 574,
-            "total": 1033
+            "hits": 617,
+            "total": 988
           }
         },
         "zh-TW": {
           "outcomes": {
             "fullyMasked": {
-              "hits": 376,
+              "hits": 371,
               "total": 770
             },
             "partlyMasked": {
-              "hits": 116,
+              "hits": 135,
               "total": 770
             },
             "untouched": {
-              "hits": 278,
+              "hits": 264,
               "total": 770
             }
           },
           "coreFullyMasked": {
-            "hits": 113,
+            "hits": 124,
             "total": 236
           },
           "regionPrecision": {
-            "hits": 508,
-            "total": 879
+            "hits": 529,
+            "total": 865
           }
         },
         "zh-CN": {
           "outcomes": {
             "fullyMasked": {
-              "hits": 383,
+              "hits": 354,
               "total": 786
             },
             "partlyMasked": {
-              "hits": 103,
+              "hits": 141,
               "total": 786
             },
             "untouched": {
-              "hits": 300,
+              "hits": 291,
               "total": 786
             }
           },
           "coreFullyMasked": {
-            "hits": 109,
+            "hits": 138,
             "total": 226
           },
           "regionPrecision": {
-            "hits": 479,
-            "total": 912
+            "hits": 507,
+            "total": 905
           }
         },
         "ja": {
           "outcomes": {
             "fullyMasked": {
-              "hits": 419,
+              "hits": 395,
               "total": 795
             },
             "partlyMasked": {
-              "hits": 96,
+              "hits": 130,
               "total": 795
             },
             "untouched": {
-              "hits": 280,
+              "hits": 270,
               "total": 795
             }
           },
           "coreFullyMasked": {
-            "hits": 121,
+            "hits": 137,
             "total": 238
           },
           "regionPrecision": {
-            "hits": 518,
-            "total": 937
+            "hits": 539,
+            "total": 892
           }
         }
       },
@@ -2193,7 +2193,7 @@
         "chat": {
           "outcomes": {
             "fullyMasked": {
-              "hits": 414,
+              "hits": 397,
               "total": 492
             },
             "partlyMasked": {
@@ -2201,7 +2201,7 @@
               "total": 492
             },
             "untouched": {
-              "hits": 73,
+              "hits": 90,
               "total": 492
             }
           },
@@ -2210,66 +2210,66 @@
             "total": 92
           },
           "regionPrecision": {
-            "hits": 394,
-            "total": 611
+            "hits": 395,
+            "total": 594
           }
         },
         "code": {
-          "outcomes": {
-            "fullyMasked": {
-              "hits": 243,
-              "total": 600
-            },
-            "partlyMasked": {
-              "hits": 116,
-              "total": 600
-            },
-            "untouched": {
-              "hits": 241,
-              "total": 600
-            }
-          },
-          "coreFullyMasked": {
-            "hits": 81,
-            "total": 200
-          },
-          "regionPrecision": {
-            "hits": 375,
-            "total": 657
-          }
-        },
-        "log": {
-          "outcomes": {
-            "fullyMasked": {
-              "hits": 174,
-              "total": 400
-            },
-            "partlyMasked": {
-              "hits": 110,
-              "total": 400
-            },
-            "untouched": {
-              "hits": 116,
-              "total": 400
-            }
-          },
-          "coreFullyMasked": {
-            "hits": 97,
-            "total": 238
-          },
-          "regionPrecision": {
-            "hits": 282,
-            "total": 745
-          }
-        },
-        "config": {
           "outcomes": {
             "fullyMasked": {
               "hits": 231,
               "total": 600
             },
             "partlyMasked": {
-              "hits": 110,
+              "hits": 153,
+              "total": 600
+            },
+            "untouched": {
+              "hits": 216,
+              "total": 600
+            }
+          },
+          "coreFullyMasked": {
+            "hits": 104,
+            "total": 200
+          },
+          "regionPrecision": {
+            "hits": 403,
+            "total": 644
+          }
+        },
+        "log": {
+          "outcomes": {
+            "fullyMasked": {
+              "hits": 165,
+              "total": 400
+            },
+            "partlyMasked": {
+              "hits": 131,
+              "total": 400
+            },
+            "untouched": {
+              "hits": 104,
+              "total": 400
+            }
+          },
+          "coreFullyMasked": {
+            "hits": 107,
+            "total": 238
+          },
+          "regionPrecision": {
+            "hits": 294,
+            "total": 702
+          }
+        },
+        "config": {
+          "outcomes": {
+            "fullyMasked": {
+              "hits": 216,
+              "total": 600
+            },
+            "partlyMasked": {
+              "hits": 125,
               "total": 600
             },
             "untouched": {
@@ -2278,26 +2278,26 @@
             }
           },
           "coreFullyMasked": {
-            "hits": 67,
+            "hits": 68,
             "total": 99
           },
           "regionPrecision": {
-            "hits": 356,
-            "total": 432
+            "hits": 383,
+            "total": 455
           }
         },
         "email": {
           "outcomes": {
             "fullyMasked": {
-              "hits": 440,
+              "hits": 446,
               "total": 602
             },
             "partlyMasked": {
-              "hits": 12,
+              "hits": 11,
               "total": 602
             },
             "untouched": {
-              "hits": 150,
+              "hits": 145,
               "total": 602
             }
           },
@@ -2306,32 +2306,32 @@
             "total": 101
           },
           "regionPrecision": {
-            "hits": 449,
-            "total": 704
+            "hits": 450,
+            "total": 728
           }
         },
         "stacktrace": {
           "outcomes": {
             "fullyMasked": {
-              "hits": 128,
+              "hits": 119,
               "total": 428
             },
             "partlyMasked": {
-              "hits": 75,
+              "hits": 129,
               "total": 428
             },
             "untouched": {
-              "hits": 225,
+              "hits": 180,
               "total": 428
             }
           },
           "coreFullyMasked": {
-            "hits": 13,
+            "hits": 62,
             "total": 200
           },
           "regionPrecision": {
-            "hits": 223,
-            "total": 612
+            "hits": 267,
+            "total": 527
           }
         }
       },
@@ -2341,19 +2341,19 @@
           "total": 380
         },
         "uuid": {
-          "hits": 185,
+          "hits": 164,
           "total": 478
         },
         "code-identifier": {
-          "hits": 29,
+          "hits": 12,
           "total": 216
         },
         "version": {
-          "hits": 154,
+          "hits": 152,
           "total": 289
         },
         "commit-hash": {
-          "hits": 20,
+          "hits": 5,
           "total": 221
         },
         "epoch-millis": {
@@ -2361,7 +2361,7 @@
           "total": 81
         },
         "sha256": {
-          "hits": 20,
+          "hits": 17,
           "total": 200
         },
         "tracking-number": {
@@ -2370,19 +2370,19 @@
         }
       },
       "latency": {
-        "median": 6.790083978557959,
-        "p95": 9.552333009196445
+        "median": 5.732249992433935,
+        "p95": 8.04183300351724
       }
     },
     {
-      "name": "Presidio 2.2.364 (en_core_web_sm, cutoff 0.4)",
-      "note": "Presidio: presidio-analyzer 2.2.364, spaCy 3.8.16, en_core_web_sm 3.8.0, not the default en_core_web_lg; default recognizers; language \"en\" for every prompt; the cutoff is Presidio's `score_threshold`, below which detections are dropped; latency is analysis only",
+      "name": "Presidio 2.2.364 (en_core_web_lg, cutoff 0.4)",
+      "note": "Presidio: presidio-analyzer 2.2.364, spaCy 3.8.16, en_core_web_lg 3.8.0, the default model; default recognizers; language \"en\" for every prompt; the cutoff is Presidio's `score_threshold`, below which detections are dropped; latency is analysis only",
       "englishAnalyzerOnly": true,
       "byCategory": {
         "PERSON": {
           "outcomes": {
             "fullyMasked": {
-              "hits": 107,
+              "hits": 128,
               "total": 390
             },
             "partlyMasked": {
@@ -2390,7 +2390,7 @@
               "total": 390
             },
             "untouched": {
-              "hits": 283,
+              "hits": 262,
               "total": 390
             }
           },
@@ -2422,27 +2422,27 @@
         "PHONE": {
           "outcomes": {
             "fullyMasked": {
-              "hits": 174,
+              "hits": 167,
               "total": 193
             },
             "partlyMasked": {
-              "hits": 17,
+              "hits": 16,
               "total": 193
             },
             "untouched": {
-              "hits": 2,
+              "hits": 10,
               "total": 193
             }
           },
           "coreFullyMasked": {
-            "hits": 190,
+            "hits": 183,
             "total": 193
           }
         },
         "NATIONAL_ID": {
           "outcomes": {
             "fullyMasked": {
-              "hits": 111,
+              "hits": 69,
               "total": 207
             },
             "partlyMasked": {
@@ -2450,7 +2450,7 @@
               "total": 207
             },
             "untouched": {
-              "hits": 96,
+              "hits": 138,
               "total": 207
             }
           },
@@ -2482,15 +2482,15 @@
         "SECRET": {
           "outcomes": {
             "fullyMasked": {
-              "hits": 41,
+              "hits": 19,
               "total": 517
             },
             "partlyMasked": {
-              "hits": 64,
+              "hits": 45,
               "total": 517
             },
             "untouched": {
-              "hits": 412,
+              "hits": 453,
               "total": 517
             }
           },
@@ -2502,20 +2502,20 @@
         "HOME_PATH": {
           "outcomes": {
             "fullyMasked": {
-              "hits": 2,
+              "hits": 0,
               "total": 417
             },
             "partlyMasked": {
-              "hits": 121,
+              "hits": 207,
               "total": 417
             },
             "untouched": {
-              "hits": 294,
+              "hits": 210,
               "total": 417
             }
           },
           "coreFullyMasked": {
-            "hits": 39,
+            "hits": 121,
             "total": 417
           }
         },
@@ -2542,20 +2542,20 @@
         "INTERNAL_HOST": {
           "outcomes": {
             "fullyMasked": {
-              "hits": 33,
+              "hits": 10,
               "total": 320
             },
             "partlyMasked": {
-              "hits": 186,
+              "hits": 212,
               "total": 320
             },
             "untouched": {
-              "hits": 101,
+              "hits": 98,
               "total": 320
             }
           },
           "coreFullyMasked": {
-            "hits": 219,
+            "hits": 220,
             "total": 320
           }
         }
@@ -2563,130 +2563,130 @@
       "macroAverage": {
         "categories": 9,
         "outcomes": {
-          "fullyMasked": 0.5443744556311026,
-          "partlyMasked": 0.12036576330848277,
-          "untouched": 0.3352597810604146
+          "fullyMasked": 0.5105359910211911,
+          "partlyMasked": 0.14764945011749994,
+          "untouched": 0.3418145588613089
         }
       },
       "overall": {
         "outcomes": {
           "fullyMasked": {
-            "hits": 1546,
+            "hits": 1471,
             "total": 3122
           },
           "partlyMasked": {
-            "hits": 388,
+            "hits": 480,
             "total": 3122
           },
           "untouched": {
-            "hits": 1188,
+            "hits": 1171,
             "total": 3122
           }
         },
         "coreFullyMasked": {
-          "hits": 448,
+          "hits": 524,
           "total": 930
         },
         "regionPrecision": {
-          "hits": 1905,
-          "total": 3086
+          "hits": 1938,
+          "total": 2812
         }
       },
       "byLanguage": {
         "en": {
           "outcomes": {
             "fullyMasked": {
-              "hits": 452,
+              "hits": 454,
               "total": 771
             },
             "partlyMasked": {
-              "hits": 103,
+              "hits": 132,
               "total": 771
             },
             "untouched": {
-              "hits": 216,
+              "hits": 185,
               "total": 771
             }
           },
           "coreFullyMasked": {
-            "hits": 105,
+            "hits": 132,
             "total": 230
           },
           "regionPrecision": {
-            "hits": 555,
-            "total": 885
+            "hits": 585,
+            "total": 811
           }
         },
         "zh-TW": {
           "outcomes": {
             "fullyMasked": {
-              "hits": 324,
+              "hits": 317,
               "total": 770
             },
             "partlyMasked": {
-              "hits": 107,
+              "hits": 111,
               "total": 770
             },
             "untouched": {
-              "hits": 339,
+              "hits": 342,
               "total": 770
             }
           },
           "coreFullyMasked": {
-            "hits": 113,
+            "hits": 124,
             "total": 236
           },
           "regionPrecision": {
-            "hits": 430,
-            "total": 678
+            "hits": 426,
+            "total": 620
           }
         },
         "zh-CN": {
           "outcomes": {
             "fullyMasked": {
-              "hits": 383,
+              "hits": 347,
               "total": 786
             },
             "partlyMasked": {
-              "hits": 92,
+              "hits": 122,
               "total": 786
             },
             "untouched": {
-              "hits": 311,
+              "hits": 317,
               "total": 786
             }
           },
           "coreFullyMasked": {
-            "hits": 109,
+            "hits": 131,
             "total": 226
           },
           "regionPrecision": {
-            "hits": 453,
-            "total": 768
+            "hits": 460,
+            "total": 714
           }
         },
         "ja": {
           "outcomes": {
             "fullyMasked": {
-              "hits": 387,
+              "hits": 353,
               "total": 795
             },
             "partlyMasked": {
-              "hits": 86,
+              "hits": 115,
               "total": 795
             },
             "untouched": {
-              "hits": 322,
+              "hits": 327,
               "total": 795
             }
           },
           "coreFullyMasked": {
-            "hits": 121,
+            "hits": 137,
             "total": 238
           },
           "regionPrecision": {
             "hits": 467,
-            "total": 755
+            "total": 667
           }
         }
       },
@@ -2694,7 +2694,7 @@
         "chat": {
           "outcomes": {
             "fullyMasked": {
-              "hits": 375,
+              "hits": 342,
               "total": 492
             },
             "partlyMasked": {
@@ -2702,177 +2702,177 @@
               "total": 492
             },
             "untouched": {
-              "hits": 112,
+              "hits": 145,
               "total": 492
             }
           },
           "coreFullyMasked": {
-            "hits": 92,
+            "hits": 87,
             "total": 92
           },
           "regionPrecision": {
-            "hits": 355,
-            "total": 500
+            "hits": 340,
+            "total": 449
           }
         },
         "code": {
-          "outcomes": {
-            "fullyMasked": {
-              "hits": 243,
-              "total": 600
-            },
-            "partlyMasked": {
-              "hits": 105,
-              "total": 600
-            },
-            "untouched": {
-              "hits": 252,
-              "total": 600
-            }
-          },
-          "coreFullyMasked": {
-            "hits": 81,
-            "total": 200
-          },
-          "regionPrecision": {
-            "hits": 348,
-            "total": 565
-          }
-        },
-        "log": {
-          "outcomes": {
-            "fullyMasked": {
-              "hits": 174,
-              "total": 400
-            },
-            "partlyMasked": {
-              "hits": 110,
-              "total": 400
-            },
-            "untouched": {
-              "hits": 116,
-              "total": 400
-            }
-          },
-          "coreFullyMasked": {
-            "hits": 97,
-            "total": 238
-          },
-          "regionPrecision": {
-            "hits": 282,
-            "total": 606
-          }
-        },
-        "config": {
           "outcomes": {
             "fullyMasked": {
               "hits": 231,
               "total": 600
             },
             "partlyMasked": {
-              "hits": 95,
+              "hits": 135,
               "total": 600
             },
             "untouched": {
-              "hits": 274,
+              "hits": 234,
               "total": 600
             }
           },
           "coreFullyMasked": {
-            "hits": 67,
+            "hits": 104,
+            "total": 200
+          },
+          "regionPrecision": {
+            "hits": 366,
+            "total": 539
+          }
+        },
+        "log": {
+          "outcomes": {
+            "fullyMasked": {
+              "hits": 165,
+              "total": 400
+            },
+            "partlyMasked": {
+              "hits": 131,
+              "total": 400
+            },
+            "untouched": {
+              "hits": 104,
+              "total": 400
+            }
+          },
+          "coreFullyMasked": {
+            "hits": 107,
+            "total": 238
+          },
+          "regionPrecision": {
+            "hits": 294,
+            "total": 557
+          }
+        },
+        "config": {
+          "outcomes": {
+            "fullyMasked": {
+              "hits": 216,
+              "total": 600
+            },
+            "partlyMasked": {
+              "hits": 87,
+              "total": 600
+            },
+            "untouched": {
+              "hits": 297,
+              "total": 600
+            }
+          },
+          "coreFullyMasked": {
+            "hits": 68,
             "total": 99
           },
           "regionPrecision": {
-            "hits": 327,
-            "total": 350
+            "hits": 306,
+            "total": 322
           }
         },
         "email": {
           "outcomes": {
             "fullyMasked": {
-              "hits": 395,
+              "hits": 398,
               "total": 602
             },
             "partlyMasked": {
-              "hits": 12,
+              "hits": 11,
               "total": 602
             },
             "untouched": {
-              "hits": 195,
+              "hits": 193,
               "total": 602
             }
           },
           "coreFullyMasked": {
-            "hits": 98,
+            "hits": 96,
             "total": 101
           },
           "regionPrecision": {
-            "hits": 404,
-            "total": 583
+            "hits": 402,
+            "total": 548
           }
         },
         "stacktrace": {
           "outcomes": {
             "fullyMasked": {
-              "hits": 128,
+              "hits": 119,
               "total": 428
             },
             "partlyMasked": {
-              "hits": 61,
+              "hits": 111,
               "total": 428
             },
             "untouched": {
-              "hits": 239,
+              "hits": 198,
               "total": 428
             }
           },
           "coreFullyMasked": {
-            "hits": 13,
+            "hits": 62,
             "total": 200
           },
           "regionPrecision": {
-            "hits": 189,
-            "total": 482
+            "hits": 230,
+            "total": 397
           }
         }
       },
       "negativeHits": {
         "order-number": {
-          "hits": 224,
+          "hits": 210,
           "total": 380
         },
         "uuid": {
-          "hits": 68,
+          "hits": 47,
           "total": 478
         },
         "code-identifier": {
-          "hits": 29,
+          "hits": 12,
           "total": 216
         },
         "version": {
-          "hits": 53,
+          "hits": 46,
           "total": 289
         },
         "commit-hash": {
-          "hits": 20,
+          "hits": 5,
           "total": 221
         },
         "epoch-millis": {
-          "hits": 2,
+          "hits": 5,
           "total": 81
         },
         "sha256": {
-          "hits": 20,
+          "hits": 17,
           "total": 200
         },
         "tracking-number": {
-          "hits": 78,
+          "hits": 16,
           "total": 101
         }
       },
       "latency": {
-        "median": 6.594624981516972,
-        "p95": 9.423833020264283
+        "median": 5.61883399495855,
+        "p95": 7.7874999842606485
       }
     }
   ],
