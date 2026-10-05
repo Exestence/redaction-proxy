@@ -4,8 +4,8 @@
  *
  * Plug-in point: any {@link RedactionDetector} runs through
  * {@link runCoreDetector}, so a name-detection model or international rules
- * join the benchmark as one more detector in `main.ts`, alone or composed
- * with the built-in rules.
+ * join the benchmark as one more entry of `coreSystems` in `main.ts`, alone
+ * or composed with the built-in rules.
  *
  * @module bench/public/systems
  */
@@ -26,6 +26,12 @@ export interface SampleOutcome {
   milliseconds: number
 }
 
+/** A detector under test and the name the report gives it. */
+export interface CoreSystem {
+  name: string
+  detector: RedactionDetector
+}
+
 /** One system's outcomes, keyed by sample id. */
 export interface SystemRun {
   name: string
@@ -36,16 +42,15 @@ export interface SystemRun {
 
 /**
  * Mask and restore every sample with a core detector, one sample per mask call as the proxy does per request.
- * @param name - system name for the report.
- * @param detector - detector under test.
+ * @param system - detector under test and its name.
  * @param samples - the dataset.
  * @returns the outcome of every sample.
  */
-export async function runCoreDetector(name: string, detector: RedactionDetector, samples: readonly Sample[]): Promise<SystemRun> {
+export async function runCoreDetector(system: CoreSystem, samples: readonly Sample[]): Promise<SystemRun> {
   const outcomes = new Map<string, SampleOutcome>()
   for (const sample of samples) {
     const started = performance.now()
-    const result = await mask(detector, [{ seq: 0, path: '', text: sample.text }], emptyRedactionIndex())
+    const result = await mask(system.detector, [{ seq: 0, path: '', text: sample.text }], emptyRedactionIndex())
     const masked = result.masked[0] ?? ''
     const restored = restore(masked, result.registry)
     outcomes.set(sample.id, {
@@ -55,5 +60,5 @@ export async function runCoreDetector(name: string, detector: RedactionDetector,
       milliseconds: performance.now() - started,
     })
   }
-  return { name, outcomes }
+  return { name: system.name, outcomes }
 }

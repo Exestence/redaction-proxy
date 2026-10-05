@@ -7,7 +7,7 @@ Seed 20261005: 1200 synthetic prompts (4 languages × 6 formats × 50), 3122 sen
 | System | Recall | Precision | Leak rate | Restore exact | p50 ms | p95 ms |
 | --- | --- | --- | --- | --- | --- | --- |
 | redaction-proxy rules | 78.6% | 96.0% | 21.4% | 100.0% | 0.05 | 0.11 |
-| Presidio 2.2 (en_core_web_sm) | 52.2% | 55.3% | 34.1% | n/a | 4.85 | 6.78 |
+| Presidio 2.2 (en_core_web_sm) | 52.2% | 55.3% | 34.1% | n/a | 4.94 | 7.02 |
 
 ## Recall by category (leak rate in parentheses)
 

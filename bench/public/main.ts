@@ -18,7 +18,7 @@ import { runPresidio } from './presidio.ts'
 import { renderMarkdown } from './report.ts'
 import type { BenchmarkResult } from './report.ts'
 import { runCoreDetector } from './systems.ts'
-import type { SystemRun } from './systems.ts'
+import type { CoreSystem, SystemRun } from './systems.ts'
 
 const DEFAULT_SEED = 20261005
 const DEFAULT_SAMPLES_PER_CELL = 50
@@ -39,8 +39,10 @@ const samples = buildDataset({ seed, samplesPerCell })
 rmSync(WORK_DIRECTORY, { recursive: true, force: true })
 mkdirSync(WORK_DIRECTORY, { recursive: true })
 
-// Add a name-detection model or international rules here as one more core detector.
-const runs: SystemRun[] = [await runCoreDetector('redaction-proxy rules', new RulesDetector(), samples)]
+// Add a name-detection model or international rules here as one more core system.
+const coreSystems: CoreSystem[] = [{ name: 'redaction-proxy rules', detector: new RulesDetector() }]
+const runs: SystemRun[] = []
+for (const system of coreSystems) runs.push(await runCoreDetector(system, samples))
 const skipped: BenchmarkResult['skipped'] = []
 const presidio = runPresidio(samples, WORK_DIRECTORY)
 if ('skipped' in presidio) skipped.push({ name: 'Presidio', reason: presidio.reason })

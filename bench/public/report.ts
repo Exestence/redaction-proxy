@@ -22,6 +22,13 @@ export interface BenchmarkResult {
   skipped: { name: string; reason: string }[]
 }
 
+/** One comparison table: a row per key, a column per system. */
+interface TableSpec<K extends string> {
+  label: string
+  keys: readonly K[]
+  cell: (system: SystemReport, key: K) => string
+}
+
 const PERCENT_DIGITS = 1
 const MILLISECOND_DIGITS = 2
 
@@ -36,14 +43,17 @@ export function renderMarkdown(result: BenchmarkResult): string {
     '## Overall',
     renderOverall(result.systems),
     '## Recall by category (leak rate in parentheses)',
-    renderTable('Category', GOLD_CATEGORIES, result.systems, (system, category) =>
-      `${percent(system.byCategory[category].recall)} (${percent(system.byCategory[category].leak)})`),
+    renderTable(result.systems, {
+      label: 'Category',
+      keys: GOLD_CATEGORIES,
+      cell: (system, category) => `${percent(system.byCategory[category].recall)} (${percent(system.byCategory[category].leak)})`,
+    }),
     '## Recall / precision by language',
-    renderTable('Language', LANGUAGES, result.systems, (system, language) => recallAndPrecision(system.byLanguage[language])),
+    renderTable(result.systems, { label: 'Language', keys: LANGUAGES, cell: (system, language) => recallAndPrecision(system.byLanguage[language]) }),
     '## Hard negatives masked (lower is better)',
-    renderTable('Kind', NEGATIVE_KINDS, result.systems, (system, kind) => percent(system.negativeHits[kind])),
+    renderTable(result.systems, { label: 'Kind', keys: NEGATIVE_KINDS, cell: (system, kind) => percent(system.negativeHits[kind]) }),
     details('Recall / precision by format',
-      renderTable('Format', FORMATS, result.systems, (system, format) => recallAndPrecision(system.byFormat[format]))),
+      renderTable(result.systems, { label: 'Format', keys: FORMATS, cell: (system, format) => recallAndPrecision(system.byFormat[format]) })),
     renderNotes(result),
   ].join('\n\n') + '\n'
 }
@@ -67,8 +77,11 @@ function renderOverall(systems: readonly SystemReport[]): string {
   return markdownTable(['System', 'Recall', 'Precision', 'Leak rate', 'Restore exact', 'p50 ms', 'p95 ms'], rows)
 }
 
-function renderTable<K extends string>(label: string, keys: readonly K[], systems: readonly SystemReport[], cell: (system: SystemReport, key: K) => string): string {
-  return markdownTable([label, ...systems.map(system => system.name)], keys.map(key => [key, ...systems.map(system => cell(system, key))]))
+function renderTable<K extends string>(systems: readonly SystemReport[], spec: TableSpec<K>): string {
+  return markdownTable(
+    [spec.label, ...systems.map(system => system.name)],
+    spec.keys.map(key => [key, ...systems.map(system => spec.cell(system, key))]),
+  )
 }
 
 function renderNotes(result: BenchmarkResult): string {

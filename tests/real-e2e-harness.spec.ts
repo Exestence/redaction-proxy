@@ -6,6 +6,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { runProvider } from '../e2e/real/harness.ts'
 import { PROVIDERS } from '../e2e/real/providers.ts'
 import { extractReplyText } from '../e2e/real/replies.ts'
+import type { Scenario } from '../e2e/real/requests.ts'
 import { findLeakedOriginals, verifyRestoration } from '../e2e/real/verify.ts'
 import { listen } from '../src/proxy/server.ts'
 
@@ -13,6 +14,7 @@ const CHUNK_SIZE = 3
 const FAKE_KEY = 'fake-key-for-tests-0001'
 
 type Json = Record<string, unknown>
+type Shape = Pick<Scenario, 'stream' | 'toolCall'>
 
 let upstream: Server
 let upstreamUrl = ''
@@ -24,41 +26,45 @@ function pieces(text: string): string[] {
   return out
 }
 
-function sse(events: Json[], named: boolean): string {
-  return events.map(event => `${named ? `event: ${String(event.type)}\n` : ''}data: ${JSON.stringify(event)}\n\n`).join('')
+function dataEvents(events: Json[]): string {
+  return events.map(event => `data: ${JSON.stringify(event)}\n\n`).join('')
 }
 
-function chatReply(text: string, tool: boolean, stream: boolean): string {
+function namedEvents(events: Json[]): string {
+  return events.map(event => `event: ${String(event.type)}\n${dataEvents([event])}`).join('')
+}
+
+function chatReply(text: string, { stream, toolCall: tool }: Shape): string {
   const call = (args: string): Json => ({ index: 0, id: 'call_1', type: 'function', function: { name: 'record_contact', arguments: args } })
   if (!stream) return JSON.stringify({ choices: [{ index: 0, message: tool ? { content: null, tool_calls: [call(text)] } : { content: text }, finish_reason: 'stop' }] })
   const deltas = pieces(text).map(piece => ({ choices: [{ index: 0, delta: tool ? { tool_calls: [call(piece)] } : { content: piece }, finish_reason: null }] }))
-  return `${sse([...deltas, { choices: [{ index: 0, delta: {}, finish_reason: 'stop' }] }], false)}data: [DONE]\n\n`
+  return `${dataEvents([...deltas, { choices: [{ index: 0, delta: {}, finish_reason: 'stop' }] }])}data: [DONE]\n\n`
 }
 
-function responsesReply(text: string, tool: boolean, stream: boolean): string {
+function responsesReply(text: string, { stream, toolCall: tool }: Shape): string {
   const item = tool ? { type: 'function_call', id: 'fc_1', call_id: 'call_1', name: 'record_contact', arguments: text } : { type: 'message', id: 'msg_1', content: [{ type: 'output_text', text }] }
   if (!stream) return JSON.stringify({ id: 'resp_1', output: [item] })
   const kind = tool ? 'response.function_call_arguments' : 'response.output_text'
   const deltas = pieces(text).map(delta => ({ type: `${kind}.delta`, item_id: item.id, output_index: 0, content_index: 0, delta }))
   const done = { type: `${kind}.done`, item_id: item.id, output_index: 0, content_index: 0, ...(tool ? { arguments: text } : { text }) }
-  return sse([...deltas, done, { type: 'response.completed', response: { id: 'resp_1', output: [item] } }], true)
+  return namedEvents([...deltas, done, { type: 'response.completed', response: { id: 'resp_1', output: [item] } }])
 }
 
-function messagesReply(text: string, tool: boolean, stream: boolean): string {
+function messagesReply(text: string, { stream, toolCall: tool }: Shape): string {
   const block = tool ? { type: 'tool_use', id: 'toolu_1', name: 'record_contact', input: JSON.parse(text) as Json } : { type: 'text', text }
   if (!stream) return JSON.stringify({ id: 'msg_1', type: 'message', role: 'assistant', content: [block] })
   const start = tool ? { ...block, input: {} } : { type: 'text', text: '' }
   const deltas = pieces(text).map(piece => ({ type: 'content_block_delta', index: 0, delta: tool ? { type: 'input_json_delta', partial_json: piece } : { type: 'text_delta', text: piece } }))
-  return sse([
+  return namedEvents([
     { type: 'message_start', message: { id: 'msg_1', type: 'message', role: 'assistant', content: [] } },
     { type: 'content_block_start', index: 0, content_block: start },
     ...deltas,
     { type: 'content_block_stop', index: 0 },
     { type: 'message_stop' },
-  ], true)
+  ])
 }
 
-const REPLIES: Record<string, (text: string, tool: boolean, stream: boolean) => string> = {
+const REPLIES: Record<string, (text: string, shape: Shape) => string> = {
   '/v1/chat/completions': chatReply,
   '/v1/responses': responsesReply,
   '/v1/messages': messagesReply,
@@ -77,10 +83,10 @@ beforeAll(async () => {
       }
       const body = JSON.parse(raw) as Json
       const ids = [...new Set(raw.match(/⟦[A-Z0-9_]+⟧/g) ?? [])]
-      const tool = body.tools !== undefined
-      const text = tool ? JSON.stringify({ line: ids.join(' ') }) : `Sure: ${ids.join(' and ')}.`
-      res.writeHead(200, { 'content-type': body.stream === true ? 'text/event-stream' : 'application/json' })
-      res.end(REPLIES[req.url ?? '']?.(text, tool, body.stream === true))
+      const shape = { stream: body.stream === true, toolCall: body.tools !== undefined }
+      const text = shape.toolCall ? JSON.stringify({ line: ids.join(' ') }) : `Sure: ${ids.join(' and ')}.`
+      res.writeHead(200, { 'content-type': shape.stream ? 'text/event-stream' : 'application/json' })
+      res.end(REPLIES[req.url ?? '']?.(text, shape))
     })
   })
   upstreamUrl = `http://127.0.0.1:${await listen(upstream, 0)}`
@@ -149,8 +155,8 @@ describe('verification', () => {
   })
 
   it('reads message text and tool arguments from JSON and event streams', () => {
-    expect(extractReplyText('chat', chatReply('hello', false, true))).toBe('hello')
-    expect(extractReplyText('responses', responsesReply('{"line":"x"}', true, false))).toBe('{"line":"x"}')
-    expect(extractReplyText('messages', messagesReply('{"line":"x"}', true, true))).toBe('{"line":"x"}')
+    expect(extractReplyText('chat', chatReply('hello', { stream: true, toolCall: false }))).toBe('hello')
+    expect(extractReplyText('responses', responsesReply('{"line":"x"}', { stream: false, toolCall: true }))).toBe('{"line":"x"}')
+    expect(extractReplyText('messages', messagesReply('{"line":"x"}', { stream: true, toolCall: true }))).toBe('{"line":"x"}')
   })
 })

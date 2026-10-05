@@ -36,7 +36,7 @@ def create_analyzer() -> tuple[AnalyzerEngine, str]:
         configuration = {"nlp_engine_name": "spacy", "models": [{"lang_code": LANGUAGE, "model_name": SMALL_MODEL}]}
         engine = NlpEngineProvider(nlp_configuration=configuration).create_engine()
         return AnalyzerEngine(nlp_engine=engine), SMALL_MODEL
-    print(f"no spaCy model: install {DEFAULT_MODEL} (see bench/presidio/README.md)", file=sys.stderr)
+    print(f"no spaCy model: install {DEFAULT_MODEL} or {SMALL_MODEL}", file=sys.stderr)
     sys.exit(MISSING_MODEL_EXIT_CODE)
 
 
