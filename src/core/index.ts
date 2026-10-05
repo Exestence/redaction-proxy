@@ -27,6 +27,7 @@ export { createStreamRestorer, restoreLenient } from './restore.ts'
 export type { StreamRestoreOptions, StreamRestorer } from './restore.ts'
 export {
   DEFAULT_ALLOWLIST,
+  DEFAULT_RULE_NAMES,
   DETECTOR_VERSION,
   RULE_NAMES,
   RulesDetector,
@@ -34,6 +35,13 @@ export {
   isTaiwanNationalId,
   resolveRulesConfig,
 } from './rules/index.ts'
-export type { RedactionRuleName, ResolvedRulesConfig, RulesRedactionConfig } from './rules/index.ts'
+export type {
+  DefaultRuleName,
+  InternationalRuleName,
+  RedactionRuleName,
+  ResolvedRulesConfig,
+  RulesRedactionConfig,
+} from './rules/index.ts'
+export { INTERNATIONAL_RULE_NAMES, INTERNATIONAL_RULES_VERSION } from './rules/international.ts'
 export { screenText } from './rules/screen.ts'
 export type { ScreenFailure } from './rules/screen.ts'

@@ -5,6 +5,7 @@ import { readFileSync, readdirSync } from 'node:fs'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import {
+  INTERNATIONAL_RULE_NAMES,
   RedactionError,
   RulesDetector,
   createStreamRestorer,
@@ -17,8 +18,10 @@ import type { RedactionRegistry } from '../src/core/index.ts'
 
 const detector = new RulesDetector({ projectNames: ['Nimbus'], terms: ['機密專案'] })
 
-async function maskAll(texts: string[]) {
-  return mask(detector, texts.map((text, seq) => ({ seq, path: '', text })), emptyRedactionIndex())
+const internationalOnly = new RulesDetector({ rules: [...INTERNATIONAL_RULE_NAMES] })
+
+async function maskAll(texts: string[], using = detector) {
+  return mask(using, texts.map((text, seq) => ({ seq, path: '', text })), emptyRedactionIndex())
 }
 
 describe('leaks', () => {
@@ -87,6 +90,22 @@ describe('pathological inputs', () => {
     // test files running in parallel do not count against the budget.
     const started = process.cpuUsage()
     await maskAll([text])
+    const used = process.cpuUsage(started)
+    expect((used.user + used.system) / 1_000).toBeLessThan(2_000)
+  })
+})
+
+describe('pathological inputs to the international rules', () => {
+  const SIZE = 200 * 1024
+  it.each([
+    '+', '+44 ', '+1 (415) ', '+8613812345678', 'DE89 ', 'DE89 3704 ', 'GB82WEST', 'DE12345678', '123-45-',
+    '123 45 ', 'ssn ', 'ssn 1', 'AB 12 34 ', 'AB123456', 'Steuer-ID ', 'tin 1', '1 85 05 ', 'sécurité sociale 1',
+    '12345678', 'X1234567', 'RSSMRA', '11010519491231002', '138-1234-', '手机 138', 'A123456(', 'HKID A',
+    'マイナンバー 1234 ', '090-1234-', '900101-', '1 ',
+  ])('masks 200KB of %j within 2s of CPU time', async unit => {
+    const text = unit.repeat(Math.ceil(SIZE / unit.length)).slice(0, SIZE)
+    const started = process.cpuUsage()
+    await maskAll([text], internationalOnly)
     const used = process.cpuUsage(started)
     expect((used.user + used.system) / 1_000).toBeLessThan(2_000)
   })

@@ -2,7 +2,8 @@
  * Rule-based redaction provider: home paths, email addresses, Taiwan
  * identification and business numbers, telephone numbers, payment card
  * numbers, credentials, high-entropy runs, private addresses, internal host
- * names, and configured literal terms, with every rule run again over an NFKC
+ * names, configured literal terms, and, when enabled, identifiers issued
+ * outside Taiwan, with every rule run again over an NFKC
  * projection, over a percent-decoded projection, and over the NFKC projection
  * of the decoded text, and every detected value propagated to its other
  * occurrences.
@@ -31,11 +32,21 @@ import {
   termIdentityKey,
 } from './rules.ts'
 import { collectSecretCandidates } from './secret.ts'
+import type { InternationalRuleName } from './international.ts'
+import {
+  INTERNATIONAL_COLLECTORS,
+  INTERNATIONAL_RULE_CATEGORIES,
+  INTERNATIONAL_RULE_NAMES,
+  INTERNATIONAL_RULES_VERSION,
+  isInternationalRule,
+} from './international.ts'
 
 export { isTaiwanBusinessNumber, isTaiwanNationalId } from './rules.ts'
 
-/** Built-in rule names. */
-export type RedactionRuleName =
+export type { InternationalRuleName } from './international.ts'
+
+/** Names of the rules enabled by default. */
+export type DefaultRuleName =
   | 'email'
   | 'user-path'
   | 'api-key'
@@ -47,9 +58,15 @@ export type RedactionRuleName =
   | 'host'
   | 'entropy'
 
+/** Built-in rule names. */
+export type RedactionRuleName = DefaultRuleName | InternationalRuleName
+
 /** Rules-provider configuration. */
 export interface RulesRedactionConfig {
-  /** Enabled built-in rules; defaults to every rule. An empty list disables built-in detection. */
+  /**
+   * Enabled built-in rules; defaults to {@link DEFAULT_RULE_NAMES}, which
+   * leaves the international rules off. An empty list disables built-in detection.
+   */
   rules?: RedactionRuleName[]
   /** Literal strings masked case-insensitively under category `TERM`, for example personal names. */
   terms?: string[]
@@ -65,17 +82,24 @@ export const DETECTOR_VERSION = 'rules-6'
 /** Shared addresses that are public by construction and carry no private value. */
 export const DEFAULT_ALLOWLIST: readonly string[] = ['git@github.com', 'noreply@github.com']
 
-/** Every built-in rule name, in declaration order. */
-export const RULE_NAMES: readonly RedactionRuleName[] = [
+/**
+ * Rules enabled when the configuration names none. Enabling any other rule
+ * changes the detector version and so the policy digest; this default keeps
+ * both equal to those of detectors built before the international rules.
+ */
+export const DEFAULT_RULE_NAMES: readonly DefaultRuleName[] = [
   'email', 'user-path', 'api-key', 'tw-national-id', 'phone', 'tax-id', 'card', 'ip', 'host', 'entropy',
 ]
+
+/** Every built-in rule name, in declaration order: the default rules, then the international ones. */
+export const RULE_NAMES: readonly RedactionRuleName[] = [...DEFAULT_RULE_NAMES, ...INTERNATIONAL_RULE_NAMES]
 
 const PERCENT_ESCAPE = /%[0-9A-Fa-f]{2}/
 
 const CONFIG_KEYS: ReadonlySet<string> = new Set(['rules', 'terms', 'projectNames', 'allowlist'])
 
-/** Categories each rule can report, in the order `categories` lists them. */
-const RULE_CATEGORIES: Readonly<Record<RedactionRuleName, readonly string[]>> = {
+/** Categories each default rule can report, in the order `categories` lists them. */
+const DEFAULT_RULE_CATEGORIES: Readonly<Record<DefaultRuleName, readonly string[]>> = {
   'email': ['EMAIL'],
   'user-path': ['PATH'],
   'api-key': ['KEY'],
@@ -87,6 +111,15 @@ const RULE_CATEGORIES: Readonly<Record<RedactionRuleName, readonly string[]>> = 
   'host': ['HOST'],
   // A run beside credential words is reported as a credential instead.
   'entropy': ['ENTROPY', 'KEY'],
+}
+
+/**
+ * Categories one rule can report.
+ * @param rule - a built-in rule name.
+ * @returns the rule's categories, in the order `categories` lists them.
+ */
+function categoriesOf(rule: RedactionRuleName): readonly string[] {
+  return isInternationalRule(rule) ? [INTERNATIONAL_RULE_CATEGORIES[rule]] : DEFAULT_RULE_CATEGORIES[rule]
 }
 
 /**
@@ -137,7 +170,7 @@ export function resolveRulesConfig(config: RulesRedactionConfig = {}): ResolvedR
   for (const key of Object.keys(config)) {
     if (!CONFIG_KEYS.has(key)) throw new Error(`RulesRedactionConfig: unknown key "${key}"`)
   }
-  const rules = config.rules ?? [...RULE_NAMES]
+  const rules = config.rules ?? [...DEFAULT_RULE_NAMES]
   if (!Array.isArray(rules)) throw new Error('RulesRedactionConfig: rules must be an array')
   for (const rule of rules) {
     if (!RULE_NAMES.includes(rule)) throw new Error(`RulesRedactionConfig: unknown rule ${JSON.stringify(rule)}`)
@@ -156,10 +189,11 @@ export function resolveRulesConfig(config: RulesRedactionConfig = {}): ResolvedR
  * and each detected value is masked wherever else it occurs in the same call.
  */
 export class RulesDetector implements RedactionDetector {
-  readonly detectorVersion = DETECTOR_VERSION
+  readonly detectorVersion: string
   readonly policyDigest: RedactionPolicyDigest
   readonly categories: readonly string[]
   private readonly rules: ReadonlySet<RedactionRuleName>
+  private readonly internationalRules: readonly InternationalRuleName[]
   private readonly terms: readonly ConfiguredTerm[]
   private readonly allowlist: ReadonlySet<string>
 
@@ -170,13 +204,17 @@ export class RulesDetector implements RedactionDetector {
   constructor(config: RulesRedactionConfig = {}) {
     const resolved = resolveRulesConfig(config)
     this.rules = new Set(resolved.rules)
+    this.internationalRules = INTERNATIONAL_RULE_NAMES.filter(rule => this.rules.has(rule))
+    this.detectorVersion = this.internationalRules.length === 0
+      ? DETECTOR_VERSION
+      : `${DETECTOR_VERSION}+${INTERNATIONAL_RULES_VERSION}`
     this.terms = [
       ...resolved.projectNames.map(value => ({ value, category: 'PROJECT' })),
       ...resolved.terms.map(value => ({ value, category: 'TERM' })),
     ]
     this.allowlist = new Set(resolved.allowlist.map(value => value.toLowerCase()))
     this.categories = [...new Set([
-      ...resolved.rules.flatMap(rule => RULE_CATEGORIES[rule]),
+      ...resolved.rules.flatMap(categoriesOf),
       ...resolved.projectNames.length === 0 ? [] : ['PROJECT'],
       ...resolved.terms.length === 0 ? [] : ['TERM'],
     ])]
@@ -184,7 +222,7 @@ export class RulesDetector implements RedactionDetector {
     // and the digest is persisted in the Session's span index.
     this.policyDigest = RedactionPolicyDigest(`sha256:${createHash('sha256')
       .update(JSON.stringify({
-        detectorVersion: DETECTOR_VERSION,
+        detectorVersion: this.detectorVersion,
         rules: resolved.rules,
         termCount: resolved.terms.length,
         projectNameCount: resolved.projectNames.length,
@@ -215,6 +253,8 @@ export class RulesDetector implements RedactionDetector {
     if (this.rules.has('user-path')) collectPathCandidates(text, push)
     if (this.rules.has('email')) collectEmailCandidates(text, push)
     collectNumberCandidates(text, this.rules, push, afterEscape)
+    // Before cards: an identity number that is also a Luhn-valid digit run keeps its own category.
+    for (const rule of this.internationalRules) INTERNATIONAL_COLLECTORS[rule](text, push)
     if (this.rules.has('card')) collectCardCandidates(text, push, afterEscape)
     collectNetworkCandidates(text, this.rules, push, originalAt, afterEscape)
     if (this.rules.has('api-key')) collectSecretCandidates(text, push, afterEscape)

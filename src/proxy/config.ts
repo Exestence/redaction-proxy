@@ -7,7 +7,7 @@
  */
 
 import { readFileSync } from 'node:fs'
-import { resolveRulesConfig } from '../core/index.ts'
+import { RULE_NAMES, resolveRulesConfig } from '../core/index.ts'
 import type { RulesRedactionConfig } from '../core/index.ts'
 
 /** How a request string the rules cannot reason about is handled. */
@@ -25,7 +25,7 @@ export interface ProxyConfig {
   openaiApiKey?: string
   /** Key sent upstream as `x-api-key` only when an Anthropic-style client sends none. */
   anthropicApiKey?: string
-  /** Rules detector configuration. */
+  /** Rules detector configuration; `rules` defaults to every built-in rule. */
   redaction: RulesRedactionConfig
   /**
    * `replace` (default) rewrites control characters, U+FFFD, lone surrogates,
@@ -36,6 +36,13 @@ export interface ProxyConfig {
   /** Log each masked request body. Masked text only; off by default. */
   debugMasked: boolean
 }
+
+/**
+ * The proxy enables every built-in rule unless the file names its own. The
+ * core's narrower default exists to keep the policy digest that hosts persist
+ * with their span index; the proxy keeps no index, so its digest is never compared.
+ */
+const PROXY_DEFAULT_RULES = RULE_NAMES
 
 const FILE_KEYS = new Set(['port', 'openaiUpstream', 'anthropicUpstream', 'redaction', 'screen', 'debugMasked'])
 
@@ -67,7 +74,7 @@ export function loadConfig(path: string | undefined, env: NodeJS.ProcessEnv): Pr
   if (!Number.isInteger(port) || port < 0 || port > 65535) throw new Error('port must be an integer in 0..65535')
   const screen = env.REDACTION_PROXY_SCREEN ?? file.screen ?? 'replace'
   if (screen !== 'replace' && screen !== 'refuse') throw new Error('screen must be "replace" or "refuse"')
-  const redaction = (file.redaction ?? {}) as RulesRedactionConfig
+  const redaction = { rules: [...PROXY_DEFAULT_RULES], ...(file.redaction ?? {}) } as RulesRedactionConfig
   resolveRulesConfig(redaction)
   const config: ProxyConfig = {
     port,

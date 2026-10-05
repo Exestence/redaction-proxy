@@ -9,6 +9,7 @@
 
 import { afterHighEscape, endsHighEscape, isAlnum, isAsciiPrintable, projectNfkc, shannon, unicodeEscapeForms } from './normalize.ts'
 import type { PushCandidate } from './candidate.ts'
+import { luhn } from './checksum.ts'
 import { PRIORITY_ENTROPY, PRIORITY_PII, PRIORITY_SECRET, PRIORITY_TERM } from './candidate.ts'
 
 /**
@@ -216,26 +217,6 @@ function termPattern(value: string): RegExp | undefined {
  */
 export function termIdentityKey(value: string, category: string): string {
   return `\u0000${category}\u0000${projectNfkc(value).lower.replaceAll(TERM_SEPARATORS, '')}`
-}
-
-/**
- * Whether a digit run passes the Luhn checksum.
- * @param digits - decimal digits only.
- * @returns whether the checksum is divisible by ten.
- */
-function luhn(digits: string): boolean {
-  let sum = 0
-  let double = false
-  for (let i = digits.length - 1; i >= 0; i -= 1) {
-    let n = digits.charCodeAt(i) - 48
-    if (double) {
-      n *= 2
-      if (n > 9) n -= 9
-    }
-    sum += n
-    double = !double
-  }
-  return sum % 10 === 0
 }
 
 /**
