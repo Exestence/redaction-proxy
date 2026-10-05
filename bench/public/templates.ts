@@ -23,11 +23,11 @@ export const TEMPLATES: Readonly<Record<Language, Readonly<Record<Format, readon
       'My SSN is {nationalId} and my card {card} was charged twice for order {order}. How do I dispute it?',
     ],
     code: [
-      'Why does this fail?\n```python\nclient = Client(api_key="{secret}", host="{internalHost}")\ndef {identifier}(user):\n    return user.email  # e.g. {email}\n```\nWe are on version {version}.',
+      'Why does this fail?\n```python\nclient = Client(api_key="{secret}", host="{internalHost}")\ndef {identifier}(user):\n    return user.email  # e.g. {email}\n```\nWe are on version {version} ({commit}).',
       'Refactor this test:\n```ts\nconst fixture = { owner: \'{person}\', contact: \'{email}\', id: \'{uuid}\' }\nconst root = \'{homePath}/src\'\n```',
     ],
     log: [
-      'What does this mean?\n2026-10-05T09:12:44Z INFO login ok user={email} ip={privateIp} session={uuid}\n2026-10-05T09:12:45Z WARN retry ts={epoch} order={order}',
+      'What does this mean?\n2026-10-05T09:12:44Z INFO login ok user={email} ip={privateIp} request_id={uuid}\n2026-10-05T09:12:45Z WARN retry ts={epoch} order={order} etag={sha256}',
       'Deploy log:\ncommit {commit} built in 42s\nupload to {internalHost} as {homePath}/deploy failed: digest {sha256}',
     ],
     config: [
@@ -49,11 +49,11 @@ export const TEMPLATES: Readonly<Record<Language, Readonly<Record<Format, readon
       '我的身分證字號是 {nationalId}，信用卡 {card} 被重複扣款，訂單編號 {order}，該怎麼申訴？',
     ],
     code: [
-      '這段程式為什麼出錯？\n```python\nclient = Client(api_key="{secret}", host="{internalHost}")\ndef {identifier}(user):\n    return user.email  # 例如 {email}\n```\n版本 {version}。',
+      '這段程式為什麼出錯？\n```python\nclient = Client(api_key="{secret}", host="{internalHost}")\ndef {identifier}(user):\n    return user.email  # 例如 {email}\n```\n版本 {version}（{commit}）。',
       '幫我重構這個測試：\n```ts\nconst fixture = { owner: \'{person}\', contact: \'{email}\', id: \'{uuid}\' }\nconst root = \'{homePath}/src\'\n```',
     ],
     log: [
-      '這段日誌是什麼意思？\n2026-10-05T09:12:44Z INFO 登入成功 user={email} ip={privateIp} session={uuid}\n2026-10-05T09:12:45Z WARN 重試 ts={epoch} order={order}',
+      '這段日誌是什麼意思？\n2026-10-05T09:12:44Z INFO 登入成功 user={email} ip={privateIp} request_id={uuid}\n2026-10-05T09:12:45Z WARN 重試 ts={epoch} order={order} etag={sha256}',
       '部署紀錄：\ncommit {commit} 建置 42 秒\n上傳到 {internalHost} 的 {homePath}/deploy 失敗：digest {sha256}',
     ],
     config: [
@@ -75,11 +75,11 @@ export const TEMPLATES: Readonly<Record<Language, Readonly<Record<Format, readon
       '我的身份证号是 {nationalId}，银行卡 {card} 被重复扣款，订单号 {order}，怎么申诉？',
     ],
     code: [
-      '这段代码为什么报错？\n```python\nclient = Client(api_key="{secret}", host="{internalHost}")\ndef {identifier}(user):\n    return user.email  # 例如 {email}\n```\n版本 {version}。',
+      '这段代码为什么报错？\n```python\nclient = Client(api_key="{secret}", host="{internalHost}")\ndef {identifier}(user):\n    return user.email  # 例如 {email}\n```\n版本 {version}（{commit}）。',
       '帮我重构这个测试：\n```ts\nconst fixture = { owner: \'{person}\', contact: \'{email}\', id: \'{uuid}\' }\nconst root = \'{homePath}/src\'\n```',
     ],
     log: [
-      '这段日志什么意思？\n2026-10-05T09:12:44Z INFO 登录成功 user={email} ip={privateIp} session={uuid}\n2026-10-05T09:12:45Z WARN 重试 ts={epoch} order={order}',
+      '这段日志什么意思？\n2026-10-05T09:12:44Z INFO 登录成功 user={email} ip={privateIp} request_id={uuid}\n2026-10-05T09:12:45Z WARN 重试 ts={epoch} order={order} etag={sha256}',
       '部署记录：\ncommit {commit} 构建 42 秒\n上传到 {internalHost} 的 {homePath}/deploy 失败：digest {sha256}',
     ],
     config: [
@@ -101,11 +101,11 @@ export const TEMPLATES: Readonly<Record<Language, Readonly<Record<Format, readon
       '私のマイナンバーは {nationalId} です。カード {card} が二重に請求されました（注文番号 {order}）。どう対応すればいいですか？',
     ],
     code: [
-      'このコードはなぜ失敗しますか？\n```python\nclient = Client(api_key="{secret}", host="{internalHost}")\ndef {identifier}(user):\n    return user.email  # 例: {email}\n```\nバージョン {version}。',
+      'このコードはなぜ失敗しますか？\n```python\nclient = Client(api_key="{secret}", host="{internalHost}")\ndef {identifier}(user):\n    return user.email  # 例: {email}\n```\nバージョン {version}（{commit}）。',
       'このテストをリファクタしてください：\n```ts\nconst fixture = { owner: \'{person}\', contact: \'{email}\', id: \'{uuid}\' }\nconst root = \'{homePath}/src\'\n```',
     ],
     log: [
-      'このログの意味は？\n2026-10-05T09:12:44Z INFO ログイン成功 user={email} ip={privateIp} session={uuid}\n2026-10-05T09:12:45Z WARN 再試行 ts={epoch} order={order}',
+      'このログの意味は？\n2026-10-05T09:12:44Z INFO ログイン成功 user={email} ip={privateIp} request_id={uuid}\n2026-10-05T09:12:45Z WARN 再試行 ts={epoch} order={order} etag={sha256}',
       'デプロイログ：\ncommit {commit} ビルド 42 秒\n{internalHost} の {homePath}/deploy へのアップロード失敗：digest {sha256}',
     ],
     config: [
