@@ -11,6 +11,8 @@ const DECIMAL_BASE = 10
 const MOD_97 = 97
 /** ISO 13616: a valid IBAN leaves this remainder modulo 97. */
 const IBAN_REMAINDER = 1
+/** Country code and check digits, which ISO 13616 moves behind the BBAN before the check. */
+const IBAN_HEADER_LENGTH = 4
 /** IBAN letters count from 10, so `A` is 10 and `Z` is 35. */
 const LETTER_VALUE_OFFSET = 10
 /** Digits per step when a long decimal string is reduced modulo 97, so every intermediate value fits a double. */
@@ -54,9 +56,15 @@ const POLAND_NIP_WEIGHTS = [6, 5, 7, 2, 3, 4, 5, 6, 7]
 const NETHERLANDS_ELEVEN_TEST_WEIGHTS = [9, 8, 7, 6, 5, 4, 3, 2, -1]
 /** Offset added to an Austrian UID's weighted digit sum before the check digit is taken. */
 const AUSTRIA_UID_OFFSET = 4
+/** Two check digits: the French VAT key before the SIREN, the Belgian check at the end. */
+const VAT_CHECK_PAIR_LENGTH = 2
 /** French VAT keys are computed as `(12 + 3 × (SIREN mod 97)) mod 97`. */
 const FRANCE_VAT_KEY_BASE = 12
 const FRANCE_VAT_KEY_FACTOR = 3
+/** Offsets of the NIR department code and of its two-digit key. */
+const NIR_DEPARTMENT_START = 5
+const NIR_DEPARTMENT_END = 7
+const NIR_KEY_START = 13
 /** Corsican department codes `2A` and `2B` count as these numbers in the NIR key. */
 const NIR_CORSICA_DEPARTMENTS: Readonly<Record<string, string>> = { '2A': '19', '2B': '18' }
 
@@ -112,7 +120,7 @@ function alphanumericValue(char: string): number {
  * @param digits - decimal digits.
  * @returns the remainder.
  */
-export function mod97(digits: string): number {
+function mod97(digits: string): number {
   let remainder = 0
   for (let at = 0; at < digits.length; at += MOD_97_CHUNK) {
     remainder = Number(`${remainder}${digits.slice(at, at + MOD_97_CHUNK)}`) % MOD_97
@@ -145,7 +153,7 @@ export function luhn(digits: string): boolean {
  * @param digits - decimal digits, the check digit last.
  * @returns whether the check digit holds.
  */
-export function iso7064Mod11Of10(digits: string): boolean {
+function iso7064Mod11Of10(digits: string): boolean {
   let product = DECIMAL_BASE
   for (const char of digits.slice(0, -1)) {
     const sum = (digitValue(char) + product) % DECIMAL_BASE || DECIMAL_BASE
@@ -160,7 +168,7 @@ export function iso7064Mod11Of10(digits: string): boolean {
  * @returns whether the rearranged number leaves remainder 1 modulo 97.
  */
 export function isIbanChecksumValid(iban: string): boolean {
-  return mod97(lettersToDigits(iban.slice(4) + iban.slice(0, 4))) === IBAN_REMAINDER
+  return mod97(lettersToDigits(iban.slice(IBAN_HEADER_LENGTH) + iban.slice(0, IBAN_HEADER_LENGTH))) === IBAN_REMAINDER
 }
 
 /**
@@ -243,9 +251,10 @@ export function isMyNumber(digits: string): boolean {
  * @returns whether the key equals 97 minus the number modulo 97.
  */
 export function isFrenchNir(value: string): boolean {
-  const department = value.slice(5, 7)
-  const number = value.slice(0, 5) + (NIR_CORSICA_DEPARTMENTS[department] ?? department) + value.slice(7, 13)
-  return MOD_97 - mod97(number) === Number(value.slice(13))
+  const department = value.slice(NIR_DEPARTMENT_START, NIR_DEPARTMENT_END)
+  const numericDepartment = NIR_CORSICA_DEPARTMENTS[department] ?? department
+  const number = value.slice(0, NIR_DEPARTMENT_START) + numericDepartment + value.slice(NIR_DEPARTMENT_END, NIR_KEY_START)
+  return MOD_97 - mod97(number) === Number(value.slice(NIR_KEY_START))
 }
 
 /**
@@ -284,7 +293,7 @@ export function isEuVatNumber(country: string, number: string): boolean {
 /** Format and check of each supported EU VAT prefix. */
 const EU_VAT_CHECKS: Readonly<Record<string, (number: string) => boolean>> = {
   AT: number => /^U\d{8}$/.test(number) && isAustrianUid(number.slice(1)),
-  BE: number => /^[01]\d{9}$/.test(number) && MOD_97 - mod97(number.slice(0, -2)) === Number(number.slice(-2)),
+  BE: number => /^[01]\d{9}$/.test(number) && MOD_97 - mod97(number.slice(0, -VAT_CHECK_PAIR_LENGTH)) === Number(number.slice(-VAT_CHECK_PAIR_LENGTH)),
   DE: number => /^[1-9]\d{8}$/.test(number) && iso7064Mod11Of10(number),
   ES: number => /^(?:\d{8}|[XYZ]\d{7})[A-Z]$/.test(number) && isSpanishIdentityNumber(number),
   FR: number => /^\d{11}$/.test(number) && isFrenchVatKey(number),
@@ -313,8 +322,8 @@ function isAustrianUid(digits: string): boolean {
  * @returns whether the key holds.
  */
 function isFrenchVatKey(number: string): boolean {
-  const siren = number.slice(2)
-  return (FRANCE_VAT_KEY_BASE + FRANCE_VAT_KEY_FACTOR * mod97(siren)) % MOD_97 === Number(number.slice(0, 2))
+  const siren = number.slice(VAT_CHECK_PAIR_LENGTH)
+  return (FRANCE_VAT_KEY_BASE + FRANCE_VAT_KEY_FACTOR * mod97(siren)) % MOD_97 === Number(number.slice(0, VAT_CHECK_PAIR_LENGTH))
 }
 
 /**

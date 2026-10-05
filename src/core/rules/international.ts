@@ -102,6 +102,9 @@ const KEYWORD_GAP = '[^\\n]{0,8}?'
 /** Separators removed from a matched value before its check runs. */
 const VALUE_SEPARATORS = /[\s().-]/g
 
+/** Length of the ISO 3166 country code that opens an IBAN, a VAT number, and each registry entry. */
+const COUNTRY_CODE_LENGTH = 2
+
 /** IBAN length of each country in the SWIFT IBAN registry. */
 const IBAN_LENGTHS: ReadonlyMap<string, number> = new Map(
   ('AD24 AE23 AL28 AT20 AZ28 BA20 BE16 BG22 BH22 BR29 BY28 CH21 CR22 CY28 CZ24 DE22 DK18 DO28 EE20 EG29 '
@@ -109,7 +112,7 @@ const IBAN_LENGTHS: ReadonlyMap<string, number> = new Map(
     + 'LB28 LC32 LI21 LT20 LU20 LV21 MC27 MD24 ME22 MK19 MR27 MT31 MU30 NL18 NO15 PK24 PL28 PS29 PT25 QA29 '
     + 'RO24 RS22 SA24 SC31 SE24 SI19 SK24 SM27 ST25 SV28 TL23 TN24 TR26 UA29 VA22 VG24 XK20')
     .split(' ')
-    .map(entry => [entry.slice(0, 2), Number(entry.slice(2))]),
+    .map(entry => [entry.slice(0, COUNTRY_CODE_LENGTH), Number(entry.slice(COUNTRY_CODE_LENGTH))]),
 )
 const IBAN = new RegExp(
   `${LEFT_EDGE}[A-Z]{2}\\d{2}(?:[A-Z0-9]{11,30}|(?: [A-Z0-9]{4}){2,7}(?: [A-Z0-9]{1,3})?)${RIGHT_EDGE}`,
@@ -145,6 +148,9 @@ const US_TAXPAYER_GROUPED = new RegExp(`${GROUPED_LEFT_EDGE}\\d{3}([- ])\\d{2}\\
 const US_TAXPAYER_KEYWORDS = ['ssn', 'social security(?: number)?', 'itin', 'taxpayer identification number']
 /** SSN areas the Social Security Administration never assigns. */
 const SSN_UNASSIGNED_AREAS = new Set(['000', '666'])
+/** Offsets of the area, group, and serial parts of an SSN or ITIN. */
+const SSN_AREA_END = 3
+const SSN_GROUP_END = 5
 const SSN_ZERO_GROUP = '00'
 const SSN_ZERO_SERIAL = '0000'
 /** ITIN area numbers start with 9, the area range the SSA never assigns. */
@@ -164,7 +170,6 @@ const UK_NINO = new RegExp(
 
 /** VAT prefix of each EU country whose check this module implements, then the number. */
 const EU_VAT = new RegExp(`${LEFT_EDGE}(?:AT|BE|DE|ES|FR|IT|NL|PL) ?[A-Z0-9]{8,12}${RIGHT_EDGE}`, 'g')
-const EU_VAT_PREFIX_LENGTH = 2
 
 const GERMAN_TAX_ID_KEYWORDS = [
   'steuer-?id', 'steuer-?identifikationsnummer', 'identifikationsnummer', 'idnr', 'tax id', 'tin',
@@ -198,6 +203,7 @@ const CHINA_PROVINCE_CODES = new Set([
   '41', '42', '43', '44', '45', '46', '50', '51', '52', '53', '54', '61', '62', '63', '64', '65',
   '71', '81', '82', '83',
 ])
+const CHINA_PROVINCE_CODE_LENGTH = 2
 const CHINA_BIRTH_DATE_START = 6
 const CHINA_BIRTH_DATE_END = 14
 const BIRTH_YEAR_MIN = 1900
@@ -217,6 +223,9 @@ const KOREA_RRN = new RegExp(`${GROUPED_LEFT_EDGE}\\d{6}-[1-8]\\d{6}(?![A-Za-z0-
 const KOREA_RRN_CENTURY_START: Readonly<Record<string, number>> = {
   1: 1900, 2: 1900, 5: 1900, 6: 1900, 3: 2000, 4: 2000, 7: 2000, 8: 2000,
 }
+/** Length of the two-digit birth year and of the whole `YYMMDD` birth date that open an RRN. */
+const KOREA_RRN_BIRTH_YEAR_LENGTH = 2
+const KOREA_RRN_BIRTH_DATE_LENGTH = 6
 /** Position, counted from one, of the digit that encodes gender and birth century. */
 const KOREA_RRN_GENDER_DIGIT = 7
 
@@ -312,7 +321,7 @@ function isBirthDate(yyyymmdd: string): boolean {
  * @returns whether both hold.
  */
 function isIban(iban: string): boolean {
-  return IBAN_LENGTHS.get(iban.slice(0, 2)) === iban.length && isIbanChecksumValid(iban)
+  return IBAN_LENGTHS.get(iban.slice(0, COUNTRY_CODE_LENGTH)) === iban.length && isIbanChecksumValid(iban)
 }
 
 /**
@@ -337,9 +346,9 @@ function isInternationalPhoneNumber(compact: string): boolean {
  * @returns whether every part is in an assigned range.
  */
 function isUsSocialSecurityNumber(digits: string): boolean {
-  const area = digits.slice(0, 3)
+  const area = digits.slice(0, SSN_AREA_END)
   if (SSN_UNASSIGNED_AREAS.has(area) || area.startsWith(ITIN_AREA_PREFIX)) return false
-  return digits.slice(3, 5) !== SSN_ZERO_GROUP && digits.slice(5) !== SSN_ZERO_SERIAL
+  return digits.slice(SSN_AREA_END, SSN_GROUP_END) !== SSN_ZERO_GROUP && digits.slice(SSN_GROUP_END) !== SSN_ZERO_SERIAL
 }
 
 /**
@@ -348,7 +357,7 @@ function isUsSocialSecurityNumber(digits: string): boolean {
  * @returns whether both hold.
  */
 function isUsItin(digits: string): boolean {
-  const group = Number(digits.slice(3, 5))
+  const group = Number(digits.slice(SSN_AREA_END, SSN_GROUP_END))
   return digits.startsWith(ITIN_AREA_PREFIX) && ITIN_GROUP_RANGES.some(([low, high]) => group >= low && group <= high)
 }
 
@@ -359,7 +368,7 @@ function isUsItin(digits: string): boolean {
  * @returns whether all three hold.
  */
 function isChinaResidentId(value: string): boolean {
-  if (!CHINA_PROVINCE_CODES.has(value.slice(0, 2))) return false
+  if (!CHINA_PROVINCE_CODES.has(value.slice(0, CHINA_PROVINCE_CODE_LENGTH))) return false
   return isBirthDate(value.slice(CHINA_BIRTH_DATE_START, CHINA_BIRTH_DATE_END)) && isChinaResidentIdChecksumValid(value)
 }
 
@@ -373,8 +382,9 @@ function isChinaResidentId(value: string): boolean {
 function isKoreaResidentNumber(digits: string): boolean {
   // oxlint-disable-next-line typescript/no-non-null-assertion -- the pattern admits gender digits 1-8 only.
   const century = KOREA_RRN_CENTURY_START[digits.charAt(KOREA_RRN_GENDER_DIGIT - 1)]!
-  const year = century + Number(digits.slice(0, 2))
-  return isBirthDate(`${year}${digits.slice(2, 6)}`) && isKoreaResidentNumberChecksumValid(digits)
+  const year = century + Number(digits.slice(0, KOREA_RRN_BIRTH_YEAR_LENGTH))
+  const monthAndDay = digits.slice(KOREA_RRN_BIRTH_YEAR_LENGTH, KOREA_RRN_BIRTH_DATE_LENGTH)
+  return isBirthDate(`${year}${monthAndDay}`) && isKoreaResidentNumberChecksumValid(digits)
 }
 
 /**
@@ -405,7 +415,7 @@ const INTERNATIONAL_RULES: Readonly<Record<InternationalRuleName, ValidatedRule>
   'e164-phone': { patterns: [E164], isValid: isInternationalPhoneNumber },
   'eu-vat': {
     patterns: [EU_VAT],
-    isValid: compact => isEuVatNumber(compact.slice(0, EU_VAT_PREFIX_LENGTH), compact.slice(EU_VAT_PREFIX_LENGTH)),
+    isValid: compact => isEuVatNumber(compact.slice(0, COUNTRY_CODE_LENGTH), compact.slice(COUNTRY_CODE_LENGTH)),
   },
   'us-ssn': { patterns: usTaxpayerPatterns, isValid: isUsSocialSecurityNumber },
   'us-itin': { patterns: usTaxpayerPatterns, isValid: isUsItin },
