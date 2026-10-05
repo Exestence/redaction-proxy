@@ -1,0 +1,2880 @@
+{
+  "set": "dev",
+  "source": "Generated from `bench/public/templates.ts`, seed 20261005, 50 prompts per language and format",
+  "reproduce": "pnpm run bench:public --seed 20261005 --per-cell 50",
+  "sampleCount": 1200,
+  "goldCount": 3122,
+  "negativeCount": 1966,
+  "detectorVersion": "rules-6",
+  "editsAfterResults": [
+    "`session={uuid}` in the log templates was relabelled `request_id={uuid}` after the first run, in which the rules masked every such UUID. A session id is a credential, so the alternative was to keep it and label it SECRET.",
+    "a bare commit hash after a version and an `etag={sha256}` context were added after the first run; they added rules false positives."
+  ],
+  "english": [
+    {
+      "name": "redaction-proxy rules",
+      "byCategory": {
+        "PERSON": {
+          "outcomes": {
+            "fullyMasked": {
+              "hits": 0,
+              "total": 95
+            },
+            "partlyMasked": {
+              "hits": 0,
+              "total": 95
+            },
+            "untouched": {
+              "hits": 95,
+              "total": 95
+            }
+          },
+          "coreFullyMasked": {
+            "hits": 0,
+            "total": 0
+          }
+        },
+        "EMAIL": {
+          "outcomes": {
+            "fullyMasked": {
+              "hits": 143,
+              "total": 143
+            },
+            "partlyMasked": {
+              "hits": 0,
+              "total": 143
+            },
+            "untouched": {
+              "hits": 0,
+              "total": 143
+            }
+          },
+          "coreFullyMasked": {
+            "hits": 0,
+            "total": 0
+          }
+        },
+        "PHONE": {
+          "outcomes": {
+            "fullyMasked": {
+              "hits": 0,
+              "total": 48
+            },
+            "partlyMasked": {
+              "hits": 0,
+              "total": 48
+            },
+            "untouched": {
+              "hits": 48,
+              "total": 48
+            }
+          },
+          "coreFullyMasked": {
+            "hits": 0,
+            "total": 48
+          }
+        },
+        "NATIONAL_ID": {
+          "outcomes": {
+            "fullyMasked": {
+              "hits": 0,
+              "total": 52
+            },
+            "partlyMasked": {
+              "hits": 0,
+              "total": 52
+            },
+            "untouched": {
+              "hits": 52,
+              "total": 52
+            }
+          },
+          "coreFullyMasked": {
+            "hits": 0,
+            "total": 0
+          }
+        },
+        "CARD": {
+          "outcomes": {
+            "fullyMasked": {
+              "hits": 56,
+              "total": 56
+            },
+            "partlyMasked": {
+              "hits": 0,
+              "total": 56
+            },
+            "untouched": {
+              "hits": 0,
+              "total": 56
+            }
+          },
+          "coreFullyMasked": {
+            "hits": 0,
+            "total": 0
+          }
+        },
+        "SECRET": {
+          "outcomes": {
+            "fullyMasked": {
+              "hits": 125,
+              "total": 125
+            },
+            "partlyMasked": {
+              "hits": 0,
+              "total": 125
+            },
+            "untouched": {
+              "hits": 0,
+              "total": 125
+            }
+          },
+          "coreFullyMasked": {
+            "hits": 0,
+            "total": 0
+          }
+        },
+        "HOME_PATH": {
+          "outcomes": {
+            "fullyMasked": {
+              "hits": 103,
+              "total": 103
+            },
+            "partlyMasked": {
+              "hits": 0,
+              "total": 103
+            },
+            "untouched": {
+              "hits": 0,
+              "total": 103
+            }
+          },
+          "coreFullyMasked": {
+            "hits": 103,
+            "total": 103
+          }
+        },
+        "PRIVATE_IP": {
+          "outcomes": {
+            "fullyMasked": {
+              "hits": 70,
+              "total": 70
+            },
+            "partlyMasked": {
+              "hits": 0,
+              "total": 70
+            },
+            "untouched": {
+              "hits": 0,
+              "total": 70
+            }
+          },
+          "coreFullyMasked": {
+            "hits": 0,
+            "total": 0
+          }
+        },
+        "INTERNAL_HOST": {
+          "outcomes": {
+            "fullyMasked": {
+              "hits": 79,
+              "total": 79
+            },
+            "partlyMasked": {
+              "hits": 0,
+              "total": 79
+            },
+            "untouched": {
+              "hits": 0,
+              "total": 79
+            }
+          },
+          "coreFullyMasked": {
+            "hits": 79,
+            "total": 79
+          }
+        }
+      },
+      "macroAverage": {
+        "categories": 9,
+        "outcomes": {
+          "fullyMasked": 0.6666666666666666,
+          "partlyMasked": 0,
+          "untouched": 0.3333333333333333
+        }
+      },
+      "overall": {
+        "outcomes": {
+          "fullyMasked": {
+            "hits": 576,
+            "total": 771
+          },
+          "partlyMasked": {
+            "hits": 0,
+            "total": 771
+          },
+          "untouched": {
+            "hits": 195,
+            "total": 771
+          }
+        },
+        "coreFullyMasked": {
+          "hits": 182,
+          "total": 230
+        },
+        "regionPrecision": {
+          "hits": 576,
+          "total": 602
+        },
+        "restoreExact": {
+          "hits": 300,
+          "total": 300
+        }
+      },
+      "byLanguage": {
+        "en": {
+          "outcomes": {
+            "fullyMasked": {
+              "hits": 576,
+              "total": 771
+            },
+            "partlyMasked": {
+              "hits": 0,
+              "total": 771
+            },
+            "untouched": {
+              "hits": 195,
+              "total": 771
+            }
+          },
+          "coreFullyMasked": {
+            "hits": 182,
+            "total": 230
+          },
+          "regionPrecision": {
+            "hits": 576,
+            "total": 602
+          },
+          "restoreExact": {
+            "hits": 300,
+            "total": 300
+          }
+        }
+      },
+      "byFormat": {
+        "chat": {
+          "outcomes": {
+            "fullyMasked": {
+              "hits": 50,
+              "total": 121
+            },
+            "partlyMasked": {
+              "hits": 0,
+              "total": 121
+            },
+            "untouched": {
+              "hits": 71,
+              "total": 121
+            }
+          },
+          "coreFullyMasked": {
+            "hits": 0,
+            "total": 21
+          },
+          "regionPrecision": {
+            "hits": 50,
+            "total": 50
+          },
+          "restoreExact": {
+            "hits": 50,
+            "total": 50
+          }
+        },
+        "code": {
+          "outcomes": {
+            "fullyMasked": {
+              "hits": 126,
+              "total": 150
+            },
+            "partlyMasked": {
+              "hits": 0,
+              "total": 150
+            },
+            "untouched": {
+              "hits": 24,
+              "total": 150
+            }
+          },
+          "coreFullyMasked": {
+            "hits": 50,
+            "total": 50
+          },
+          "regionPrecision": {
+            "hits": 126,
+            "total": 152
+          },
+          "restoreExact": {
+            "hits": 50,
+            "total": 50
+          }
+        },
+        "log": {
+          "outcomes": {
+            "fullyMasked": {
+              "hits": 100,
+              "total": 100
+            },
+            "partlyMasked": {
+              "hits": 0,
+              "total": 100
+            },
+            "untouched": {
+              "hits": 0,
+              "total": 100
+            }
+          },
+          "coreFullyMasked": {
+            "hits": 58,
+            "total": 58
+          },
+          "regionPrecision": {
+            "hits": 100,
+            "total": 100
+          },
+          "restoreExact": {
+            "hits": 50,
+            "total": 50
+          }
+        },
+        "config": {
+          "outcomes": {
+            "fullyMasked": {
+              "hits": 150,
+              "total": 150
+            },
+            "partlyMasked": {
+              "hits": 0,
+              "total": 150
+            },
+            "untouched": {
+              "hits": 0,
+              "total": 150
+            }
+          },
+          "coreFullyMasked": {
+            "hits": 24,
+            "total": 24
+          },
+          "regionPrecision": {
+            "hits": 150,
+            "total": 150
+          },
+          "restoreExact": {
+            "hits": 50,
+            "total": 50
+          }
+        },
+        "email": {
+          "outcomes": {
+            "fullyMasked": {
+              "hits": 54,
+              "total": 154
+            },
+            "partlyMasked": {
+              "hits": 0,
+              "total": 154
+            },
+            "untouched": {
+              "hits": 100,
+              "total": 154
+            }
+          },
+          "coreFullyMasked": {
+            "hits": 0,
+            "total": 27
+          },
+          "regionPrecision": {
+            "hits": 54,
+            "total": 54
+          },
+          "restoreExact": {
+            "hits": 50,
+            "total": 50
+          }
+        },
+        "stacktrace": {
+          "outcomes": {
+            "fullyMasked": {
+              "hits": 96,
+              "total": 96
+            },
+            "partlyMasked": {
+              "hits": 0,
+              "total": 96
+            },
+            "untouched": {
+              "hits": 0,
+              "total": 96
+            }
+          },
+          "coreFullyMasked": {
+            "hits": 50,
+            "total": 50
+          },
+          "regionPrecision": {
+            "hits": 96,
+            "total": 96
+          },
+          "restoreExact": {
+            "hits": 50,
+            "total": 50
+          }
+        }
+      },
+      "negativeHits": {
+        "order-number": {
+          "hits": 0,
+          "total": 94
+        },
+        "uuid": {
+          "hits": 0,
+          "total": 119
+        },
+        "code-identifier": {
+          "hits": 0,
+          "total": 49
+        },
+        "version": {
+          "hits": 0,
+          "total": 79
+        },
+        "commit-hash": {
+          "hits": 26,
+          "total": 55
+        },
+        "epoch-millis": {
+          "hits": 0,
+          "total": 21
+        },
+        "sha256": {
+          "hits": 0,
+          "total": 50
+        },
+        "tracking-number": {
+          "hits": 0,
+          "total": 27
+        }
+      },
+      "latency": {
+        "median": 0.06970900000000313,
+        "p95": 0.20591699999999946
+      }
+    },
+    {
+      "name": "Presidio 2.2.364 (en_core_web_sm, cutoff 0)",
+      "note": "Presidio: presidio-analyzer 2.2.364, spaCy 3.8.16, en_core_web_sm 3.8.0, not the default en_core_web_lg; default recognizers; language \"en\" for every prompt; the cutoff is Presidio's `score_threshold`, below which detections are dropped; latency is analysis only",
+      "englishAnalyzerOnly": true,
+      "byCategory": {
+        "PERSON": {
+          "outcomes": {
+            "fullyMasked": {
+              "hits": 82,
+              "total": 95
+            },
+            "partlyMasked": {
+              "hits": 0,
+              "total": 95
+            },
+            "untouched": {
+              "hits": 13,
+              "total": 95
+            }
+          },
+          "coreFullyMasked": {
+            "hits": 0,
+            "total": 0
+          }
+        },
+        "EMAIL": {
+          "outcomes": {
+            "fullyMasked": {
+              "hits": 143,
+              "total": 143
+            },
+            "partlyMasked": {
+              "hits": 0,
+              "total": 143
+            },
+            "untouched": {
+              "hits": 0,
+              "total": 143
+            }
+          },
+          "coreFullyMasked": {
+            "hits": 0,
+            "total": 0
+          }
+        },
+        "PHONE": {
+          "outcomes": {
+            "fullyMasked": {
+              "hits": 29,
+              "total": 48
+            },
+            "partlyMasked": {
+              "hits": 17,
+              "total": 48
+            },
+            "untouched": {
+              "hits": 2,
+              "total": 48
+            }
+          },
+          "coreFullyMasked": {
+            "hits": 45,
+            "total": 48
+          }
+        },
+        "NATIONAL_ID": {
+          "outcomes": {
+            "fullyMasked": {
+              "hits": 52,
+              "total": 52
+            },
+            "partlyMasked": {
+              "hits": 0,
+              "total": 52
+            },
+            "untouched": {
+              "hits": 0,
+              "total": 52
+            }
+          },
+          "coreFullyMasked": {
+            "hits": 0,
+            "total": 0
+          }
+        },
+        "CARD": {
+          "outcomes": {
+            "fullyMasked": {
+              "hits": 56,
+              "total": 56
+            },
+            "partlyMasked": {
+              "hits": 0,
+              "total": 56
+            },
+            "untouched": {
+              "hits": 0,
+              "total": 56
+            }
+          },
+          "coreFullyMasked": {
+            "hits": 0,
+            "total": 0
+          }
+        },
+        "SECRET": {
+          "outcomes": {
+            "fullyMasked": {
+              "hits": 11,
+              "total": 125
+            },
+            "partlyMasked": {
+              "hits": 18,
+              "total": 125
+            },
+            "untouched": {
+              "hits": 96,
+              "total": 125
+            }
+          },
+          "coreFullyMasked": {
+            "hits": 0,
+            "total": 0
+          }
+        },
+        "HOME_PATH": {
+          "outcomes": {
+            "fullyMasked": {
+              "hits": 0,
+              "total": 103
+            },
+            "partlyMasked": {
+              "hits": 33,
+              "total": 103
+            },
+            "untouched": {
+              "hits": 70,
+              "total": 103
+            }
+          },
+          "coreFullyMasked": {
+            "hits": 6,
+            "total": 103
+          }
+        },
+        "PRIVATE_IP": {
+          "outcomes": {
+            "fullyMasked": {
+              "hits": 70,
+              "total": 70
+            },
+            "partlyMasked": {
+              "hits": 0,
+              "total": 70
+            },
+            "untouched": {
+              "hits": 0,
+              "total": 70
+            }
+          },
+          "coreFullyMasked": {
+            "hits": 0,
+            "total": 0
+          }
+        },
+        "INTERNAL_HOST": {
+          "outcomes": {
+            "fullyMasked": {
+              "hits": 9,
+              "total": 79
+            },
+            "partlyMasked": {
+              "hits": 45,
+              "total": 79
+            },
+            "untouched": {
+              "hits": 25,
+              "total": 79
+            }
+          },
+          "coreFullyMasked": {
+            "hits": 54,
+            "total": 79
+          }
+        }
+      },
+      "macroAverage": {
+        "categories": 9,
+        "outcomes": {
+          "fullyMasked": 0.629916512448491,
+          "partlyMasked": 0.15424169659397632,
+          "untouched": 0.2158417909575326
+        }
+      },
+      "overall": {
+        "outcomes": {
+          "fullyMasked": {
+            "hits": 452,
+            "total": 771
+          },
+          "partlyMasked": {
+            "hits": 113,
+            "total": 771
+          },
+          "untouched": {
+            "hits": 206,
+            "total": 771
+          }
+        },
+        "coreFullyMasked": {
+          "hits": 105,
+          "total": 230
+        },
+        "regionPrecision": {
+          "hits": 574,
+          "total": 1033
+        }
+      },
+      "byLanguage": {
+        "en": {
+          "outcomes": {
+            "fullyMasked": {
+              "hits": 452,
+              "total": 771
+            },
+            "partlyMasked": {
+              "hits": 113,
+              "total": 771
+            },
+            "untouched": {
+              "hits": 206,
+              "total": 771
+            }
+          },
+          "coreFullyMasked": {
+            "hits": 105,
+            "total": 230
+          },
+          "regionPrecision": {
+            "hits": 574,
+            "total": 1033
+          }
+        }
+      },
+      "byFormat": {
+        "chat": {
+          "outcomes": {
+            "fullyMasked": {
+              "hits": 116,
+              "total": 121
+            },
+            "partlyMasked": {
+              "hits": 5,
+              "total": 121
+            },
+            "untouched": {
+              "hits": 0,
+              "total": 121
+            }
+          },
+          "coreFullyMasked": {
+            "hits": 21,
+            "total": 21
+          },
+          "regionPrecision": {
+            "hits": 121,
+            "total": 200
+          }
+        },
+        "code": {
+          "outcomes": {
+            "fullyMasked": {
+              "hits": 80,
+              "total": 150
+            },
+            "partlyMasked": {
+              "hits": 17,
+              "total": 150
+            },
+            "untouched": {
+              "hits": 53,
+              "total": 150
+            }
+          },
+          "coreFullyMasked": {
+            "hits": 15,
+            "total": 50
+          },
+          "regionPrecision": {
+            "hits": 97,
+            "total": 153
+          }
+        },
+        "log": {
+          "outcomes": {
+            "fullyMasked": {
+              "hits": 45,
+              "total": 100
+            },
+            "partlyMasked": {
+              "hits": 32,
+              "total": 100
+            },
+            "untouched": {
+              "hits": 23,
+              "total": 100
+            }
+          },
+          "coreFullyMasked": {
+            "hits": 24,
+            "total": 58
+          },
+          "regionPrecision": {
+            "hits": 77,
+            "total": 179
+          }
+        },
+        "config": {
+          "outcomes": {
+            "fullyMasked": {
+              "hits": 57,
+              "total": 150
+            },
+            "partlyMasked": {
+              "hits": 29,
+              "total": 150
+            },
+            "untouched": {
+              "hits": 64,
+              "total": 150
+            }
+          },
+          "coreFullyMasked": {
+            "hits": 19,
+            "total": 24
+          },
+          "regionPrecision": {
+            "hits": 91,
+            "total": 108
+          }
+        },
+        "email": {
+          "outcomes": {
+            "fullyMasked": {
+              "hits": 127,
+              "total": 154
+            },
+            "partlyMasked": {
+              "hits": 12,
+              "total": 154
+            },
+            "untouched": {
+              "hits": 15,
+              "total": 154
+            }
+          },
+          "coreFullyMasked": {
+            "hits": 24,
+            "total": 27
+          },
+          "regionPrecision": {
+            "hits": 139,
+            "total": 235
+          }
+        },
+        "stacktrace": {
+          "outcomes": {
+            "fullyMasked": {
+              "hits": 27,
+              "total": 96
+            },
+            "partlyMasked": {
+              "hits": 18,
+              "total": 96
+            },
+            "untouched": {
+              "hits": 51,
+              "total": 96
+            }
+          },
+          "coreFullyMasked": {
+            "hits": 2,
+            "total": 50
+          },
+          "regionPrecision": {
+            "hits": 49,
+            "total": 158
+          }
+        }
+      },
+      "negativeHits": {
+        "order-number": {
+          "hits": 94,
+          "total": 94
+        },
+        "uuid": {
+          "hits": 43,
+          "total": 119
+        },
+        "code-identifier": {
+          "hits": 7,
+          "total": 49
+        },
+        "version": {
+          "hits": 45,
+          "total": 79
+        },
+        "commit-hash": {
+          "hits": 2,
+          "total": 55
+        },
+        "epoch-millis": {
+          "hits": 21,
+          "total": 21
+        },
+        "sha256": {
+          "hits": 7,
+          "total": 50
+        },
+        "tracking-number": {
+          "hits": 27,
+          "total": 27
+        }
+      },
+      "latency": {
+        "median": 7.730375014944002,
+        "p95": 9.879999997792765
+      }
+    },
+    {
+      "name": "Presidio 2.2.364 (en_core_web_sm, cutoff 0.4)",
+      "note": "Presidio: presidio-analyzer 2.2.364, spaCy 3.8.16, en_core_web_sm 3.8.0, not the default en_core_web_lg; default recognizers; language \"en\" for every prompt; the cutoff is Presidio's `score_threshold`, below which detections are dropped; latency is analysis only",
+      "englishAnalyzerOnly": true,
+      "byCategory": {
+        "PERSON": {
+          "outcomes": {
+            "fullyMasked": {
+              "hits": 82,
+              "total": 95
+            },
+            "partlyMasked": {
+              "hits": 0,
+              "total": 95
+            },
+            "untouched": {
+              "hits": 13,
+              "total": 95
+            }
+          },
+          "coreFullyMasked": {
+            "hits": 0,
+            "total": 0
+          }
+        },
+        "EMAIL": {
+          "outcomes": {
+            "fullyMasked": {
+              "hits": 143,
+              "total": 143
+            },
+            "partlyMasked": {
+              "hits": 0,
+              "total": 143
+            },
+            "untouched": {
+              "hits": 0,
+              "total": 143
+            }
+          },
+          "coreFullyMasked": {
+            "hits": 0,
+            "total": 0
+          }
+        },
+        "PHONE": {
+          "outcomes": {
+            "fullyMasked": {
+              "hits": 29,
+              "total": 48
+            },
+            "partlyMasked": {
+              "hits": 17,
+              "total": 48
+            },
+            "untouched": {
+              "hits": 2,
+              "total": 48
+            }
+          },
+          "coreFullyMasked": {
+            "hits": 45,
+            "total": 48
+          }
+        },
+        "NATIONAL_ID": {
+          "outcomes": {
+            "fullyMasked": {
+              "hits": 52,
+              "total": 52
+            },
+            "partlyMasked": {
+              "hits": 0,
+              "total": 52
+            },
+            "untouched": {
+              "hits": 0,
+              "total": 52
+            }
+          },
+          "coreFullyMasked": {
+            "hits": 0,
+            "total": 0
+          }
+        },
+        "CARD": {
+          "outcomes": {
+            "fullyMasked": {
+              "hits": 56,
+              "total": 56
+            },
+            "partlyMasked": {
+              "hits": 0,
+              "total": 56
+            },
+            "untouched": {
+              "hits": 0,
+              "total": 56
+            }
+          },
+          "coreFullyMasked": {
+            "hits": 0,
+            "total": 0
+          }
+        },
+        "SECRET": {
+          "outcomes": {
+            "fullyMasked": {
+              "hits": 11,
+              "total": 125
+            },
+            "partlyMasked": {
+              "hits": 8,
+              "total": 125
+            },
+            "untouched": {
+              "hits": 106,
+              "total": 125
+            }
+          },
+          "coreFullyMasked": {
+            "hits": 0,
+            "total": 0
+          }
+        },
+        "HOME_PATH": {
+          "outcomes": {
+            "fullyMasked": {
+              "hits": 0,
+              "total": 103
+            },
+            "partlyMasked": {
+              "hits": 33,
+              "total": 103
+            },
+            "untouched": {
+              "hits": 70,
+              "total": 103
+            }
+          },
+          "coreFullyMasked": {
+            "hits": 6,
+            "total": 103
+          }
+        },
+        "PRIVATE_IP": {
+          "outcomes": {
+            "fullyMasked": {
+              "hits": 70,
+              "total": 70
+            },
+            "partlyMasked": {
+              "hits": 0,
+              "total": 70
+            },
+            "untouched": {
+              "hits": 0,
+              "total": 70
+            }
+          },
+          "coreFullyMasked": {
+            "hits": 0,
+            "total": 0
+          }
+        },
+        "INTERNAL_HOST": {
+          "outcomes": {
+            "fullyMasked": {
+              "hits": 9,
+              "total": 79
+            },
+            "partlyMasked": {
+              "hits": 45,
+              "total": 79
+            },
+            "untouched": {
+              "hits": 25,
+              "total": 79
+            }
+          },
+          "coreFullyMasked": {
+            "hits": 54,
+            "total": 79
+          }
+        }
+      },
+      "macroAverage": {
+        "categories": 9,
+        "outcomes": {
+          "fullyMasked": 0.629916512448491,
+          "partlyMasked": 0.14535280770508743,
+          "untouched": 0.22473067984642142
+        }
+      },
+      "overall": {
+        "outcomes": {
+          "fullyMasked": {
+            "hits": 452,
+            "total": 771
+          },
+          "partlyMasked": {
+            "hits": 103,
+            "total": 771
+          },
+          "untouched": {
+            "hits": 216,
+            "total": 771
+          }
+        },
+        "coreFullyMasked": {
+          "hits": 105,
+          "total": 230
+        },
+        "regionPrecision": {
+          "hits": 555,
+          "total": 885
+        }
+      },
+      "byLanguage": {
+        "en": {
+          "outcomes": {
+            "fullyMasked": {
+              "hits": 452,
+              "total": 771
+            },
+            "partlyMasked": {
+              "hits": 103,
+              "total": 771
+            },
+            "untouched": {
+              "hits": 216,
+              "total": 771
+            }
+          },
+          "coreFullyMasked": {
+            "hits": 105,
+            "total": 230
+          },
+          "regionPrecision": {
+            "hits": 555,
+            "total": 885
+          }
+        }
+      },
+      "byFormat": {
+        "chat": {
+          "outcomes": {
+            "fullyMasked": {
+              "hits": 116,
+              "total": 121
+            },
+            "partlyMasked": {
+              "hits": 5,
+              "total": 121
+            },
+            "untouched": {
+              "hits": 0,
+              "total": 121
+            }
+          },
+          "coreFullyMasked": {
+            "hits": 21,
+            "total": 21
+          },
+          "regionPrecision": {
+            "hits": 121,
+            "total": 187
+          }
+        },
+        "code": {
+          "outcomes": {
+            "fullyMasked": {
+              "hits": 80,
+              "total": 150
+            },
+            "partlyMasked": {
+              "hits": 16,
+              "total": 150
+            },
+            "untouched": {
+              "hits": 54,
+              "total": 150
+            }
+          },
+          "coreFullyMasked": {
+            "hits": 15,
+            "total": 50
+          },
+          "regionPrecision": {
+            "hits": 96,
+            "total": 135
+          }
+        },
+        "log": {
+          "outcomes": {
+            "fullyMasked": {
+              "hits": 45,
+              "total": 100
+            },
+            "partlyMasked": {
+              "hits": 32,
+              "total": 100
+            },
+            "untouched": {
+              "hits": 23,
+              "total": 100
+            }
+          },
+          "coreFullyMasked": {
+            "hits": 24,
+            "total": 58
+          },
+          "regionPrecision": {
+            "hits": 77,
+            "total": 139
+          }
+        },
+        "config": {
+          "outcomes": {
+            "fullyMasked": {
+              "hits": 57,
+              "total": 150
+            },
+            "partlyMasked": {
+              "hits": 23,
+              "total": 150
+            },
+            "untouched": {
+              "hits": 70,
+              "total": 150
+            }
+          },
+          "coreFullyMasked": {
+            "hits": 19,
+            "total": 24
+          },
+          "regionPrecision": {
+            "hits": 80,
+            "total": 86
+          }
+        },
+        "email": {
+          "outcomes": {
+            "fullyMasked": {
+              "hits": 127,
+              "total": 154
+            },
+            "partlyMasked": {
+              "hits": 12,
+              "total": 154
+            },
+            "untouched": {
+              "hits": 15,
+              "total": 154
+            }
+          },
+          "coreFullyMasked": {
+            "hits": 24,
+            "total": 27
+          },
+          "regionPrecision": {
+            "hits": 139,
+            "total": 209
+          }
+        },
+        "stacktrace": {
+          "outcomes": {
+            "fullyMasked": {
+              "hits": 27,
+              "total": 96
+            },
+            "partlyMasked": {
+              "hits": 15,
+              "total": 96
+            },
+            "untouched": {
+              "hits": 54,
+              "total": 96
+            }
+          },
+          "coreFullyMasked": {
+            "hits": 2,
+            "total": 50
+          },
+          "regionPrecision": {
+            "hits": 42,
+            "total": 129
+          }
+        }
+      },
+      "negativeHits": {
+        "order-number": {
+          "hits": 60,
+          "total": 94
+        },
+        "uuid": {
+          "hits": 20,
+          "total": 119
+        },
+        "code-identifier": {
+          "hits": 7,
+          "total": 49
+        },
+        "version": {
+          "hits": 16,
+          "total": 79
+        },
+        "commit-hash": {
+          "hits": 2,
+          "total": 55
+        },
+        "epoch-millis": {
+          "hits": 0,
+          "total": 21
+        },
+        "sha256": {
+          "hits": 7,
+          "total": 50
+        },
+        "tracking-number": {
+          "hits": 12,
+          "total": 27
+        }
+      },
+      "latency": {
+        "median": 7.585583021864295,
+        "p95": 9.773333003977314
+      }
+    }
+  ],
+  "allLanguages": [
+    {
+      "name": "redaction-proxy rules",
+      "byCategory": {
+        "PERSON": {
+          "outcomes": {
+            "fullyMasked": {
+              "hits": 0,
+              "total": 390
+            },
+            "partlyMasked": {
+              "hits": 0,
+              "total": 390
+            },
+            "untouched": {
+              "hits": 390,
+              "total": 390
+            }
+          },
+          "coreFullyMasked": {
+            "hits": 0,
+            "total": 0
+          }
+        },
+        "EMAIL": {
+          "outcomes": {
+            "fullyMasked": {
+              "hits": 573,
+              "total": 573
+            },
+            "partlyMasked": {
+              "hits": 0,
+              "total": 573
+            },
+            "untouched": {
+              "hits": 0,
+              "total": 573
+            }
+          },
+          "coreFullyMasked": {
+            "hits": 0,
+            "total": 0
+          }
+        },
+        "PHONE": {
+          "outcomes": {
+            "fullyMasked": {
+              "hits": 61,
+              "total": 193
+            },
+            "partlyMasked": {
+              "hits": 0,
+              "total": 193
+            },
+            "untouched": {
+              "hits": 132,
+              "total": 193
+            }
+          },
+          "coreFullyMasked": {
+            "hits": 61,
+            "total": 193
+          }
+        },
+        "NATIONAL_ID": {
+          "outcomes": {
+            "fullyMasked": {
+              "hits": 60,
+              "total": 207
+            },
+            "partlyMasked": {
+              "hits": 1,
+              "total": 207
+            },
+            "untouched": {
+              "hits": 146,
+              "total": 207
+            }
+          },
+          "coreFullyMasked": {
+            "hits": 0,
+            "total": 0
+          }
+        },
+        "CARD": {
+          "outcomes": {
+            "fullyMasked": {
+              "hits": 209,
+              "total": 209
+            },
+            "partlyMasked": {
+              "hits": 0,
+              "total": 209
+            },
+            "untouched": {
+              "hits": 0,
+              "total": 209
+            }
+          },
+          "coreFullyMasked": {
+            "hits": 0,
+            "total": 0
+          }
+        },
+        "SECRET": {
+          "outcomes": {
+            "fullyMasked": {
+              "hits": 517,
+              "total": 517
+            },
+            "partlyMasked": {
+              "hits": 0,
+              "total": 517
+            },
+            "untouched": {
+              "hits": 0,
+              "total": 517
+            }
+          },
+          "coreFullyMasked": {
+            "hits": 0,
+            "total": 0
+          }
+        },
+        "HOME_PATH": {
+          "outcomes": {
+            "fullyMasked": {
+              "hits": 417,
+              "total": 417
+            },
+            "partlyMasked": {
+              "hits": 0,
+              "total": 417
+            },
+            "untouched": {
+              "hits": 0,
+              "total": 417
+            }
+          },
+          "coreFullyMasked": {
+            "hits": 417,
+            "total": 417
+          }
+        },
+        "PRIVATE_IP": {
+          "outcomes": {
+            "fullyMasked": {
+              "hits": 296,
+              "total": 296
+            },
+            "partlyMasked": {
+              "hits": 0,
+              "total": 296
+            },
+            "untouched": {
+              "hits": 0,
+              "total": 296
+            }
+          },
+          "coreFullyMasked": {
+            "hits": 0,
+            "total": 0
+          }
+        },
+        "INTERNAL_HOST": {
+          "outcomes": {
+            "fullyMasked": {
+              "hits": 320,
+              "total": 320
+            },
+            "partlyMasked": {
+              "hits": 0,
+              "total": 320
+            },
+            "untouched": {
+              "hits": 0,
+              "total": 320
+            }
+          },
+          "coreFullyMasked": {
+            "hits": 320,
+            "total": 320
+          }
+        }
+      },
+      "macroAverage": {
+        "categories": 9,
+        "outcomes": {
+          "fullyMasked": 0.7339908054032857,
+          "partlyMasked": 0.0005367686527106817,
+          "untouched": 0.26547242594400366
+        }
+      },
+      "overall": {
+        "outcomes": {
+          "fullyMasked": {
+            "hits": 2453,
+            "total": 3122
+          },
+          "partlyMasked": {
+            "hits": 1,
+            "total": 3122
+          },
+          "untouched": {
+            "hits": 668,
+            "total": 3122
+          }
+        },
+        "coreFullyMasked": {
+          "hits": 798,
+          "total": 930
+        },
+        "regionPrecision": {
+          "hits": 2454,
+          "total": 2557
+        },
+        "restoreExact": {
+          "hits": 1200,
+          "total": 1200
+        }
+      },
+      "byLanguage": {
+        "en": {
+          "outcomes": {
+            "fullyMasked": {
+              "hits": 576,
+              "total": 771
+            },
+            "partlyMasked": {
+              "hits": 0,
+              "total": 771
+            },
+            "untouched": {
+              "hits": 195,
+              "total": 771
+            }
+          },
+          "coreFullyMasked": {
+            "hits": 182,
+            "total": 230
+          },
+          "regionPrecision": {
+            "hits": 576,
+            "total": 602
+          },
+          "restoreExact": {
+            "hits": 300,
+            "total": 300
+          }
+        },
+        "zh-TW": {
+          "outcomes": {
+            "fullyMasked": {
+              "hits": 669,
+              "total": 770
+            },
+            "partlyMasked": {
+              "hits": 0,
+              "total": 770
+            },
+            "untouched": {
+              "hits": 101,
+              "total": 770
+            }
+          },
+          "coreFullyMasked": {
+            "hits": 236,
+            "total": 236
+          },
+          "regionPrecision": {
+            "hits": 669,
+            "total": 690
+          },
+          "restoreExact": {
+            "hits": 300,
+            "total": 300
+          }
+        },
+        "zh-CN": {
+          "outcomes": {
+            "fullyMasked": {
+              "hits": 592,
+              "total": 786
+            },
+            "partlyMasked": {
+              "hits": 1,
+              "total": 786
+            },
+            "untouched": {
+              "hits": 193,
+              "total": 786
+            }
+          },
+          "coreFullyMasked": {
+            "hits": 181,
+            "total": 226
+          },
+          "regionPrecision": {
+            "hits": 593,
+            "total": 617
+          },
+          "restoreExact": {
+            "hits": 300,
+            "total": 300
+          }
+        },
+        "ja": {
+          "outcomes": {
+            "fullyMasked": {
+              "hits": 616,
+              "total": 795
+            },
+            "partlyMasked": {
+              "hits": 0,
+              "total": 795
+            },
+            "untouched": {
+              "hits": 179,
+              "total": 795
+            }
+          },
+          "coreFullyMasked": {
+            "hits": 199,
+            "total": 238
+          },
+          "regionPrecision": {
+            "hits": 616,
+            "total": 648
+          },
+          "restoreExact": {
+            "hits": 300,
+            "total": 300
+          }
+        }
+      },
+      "byFormat": {
+        "chat": {
+          "outcomes": {
+            "fullyMasked": {
+              "hits": 267,
+              "total": 492
+            },
+            "partlyMasked": {
+              "hits": 0,
+              "total": 492
+            },
+            "untouched": {
+              "hits": 225,
+              "total": 492
+            }
+          },
+          "coreFullyMasked": {
+            "hits": 37,
+            "total": 92
+          },
+          "regionPrecision": {
+            "hits": 267,
+            "total": 267
+          },
+          "restoreExact": {
+            "hits": 200,
+            "total": 200
+          }
+        },
+        "code": {
+          "outcomes": {
+            "fullyMasked": {
+              "hits": 502,
+              "total": 600
+            },
+            "partlyMasked": {
+              "hits": 0,
+              "total": 600
+            },
+            "untouched": {
+              "hits": 98,
+              "total": 600
+            }
+          },
+          "coreFullyMasked": {
+            "hits": 200,
+            "total": 200
+          },
+          "regionPrecision": {
+            "hits": 502,
+            "total": 604
+          },
+          "restoreExact": {
+            "hits": 200,
+            "total": 200
+          }
+        },
+        "log": {
+          "outcomes": {
+            "fullyMasked": {
+              "hits": 400,
+              "total": 400
+            },
+            "partlyMasked": {
+              "hits": 0,
+              "total": 400
+            },
+            "untouched": {
+              "hits": 0,
+              "total": 400
+            }
+          },
+          "coreFullyMasked": {
+            "hits": 238,
+            "total": 238
+          },
+          "regionPrecision": {
+            "hits": 400,
+            "total": 401
+          },
+          "restoreExact": {
+            "hits": 200,
+            "total": 200
+          }
+        },
+        "config": {
+          "outcomes": {
+            "fullyMasked": {
+              "hits": 600,
+              "total": 600
+            },
+            "partlyMasked": {
+              "hits": 0,
+              "total": 600
+            },
+            "untouched": {
+              "hits": 0,
+              "total": 600
+            }
+          },
+          "coreFullyMasked": {
+            "hits": 99,
+            "total": 99
+          },
+          "regionPrecision": {
+            "hits": 600,
+            "total": 600
+          },
+          "restoreExact": {
+            "hits": 200,
+            "total": 200
+          }
+        },
+        "email": {
+          "outcomes": {
+            "fullyMasked": {
+              "hits": 256,
+              "total": 602
+            },
+            "partlyMasked": {
+              "hits": 1,
+              "total": 602
+            },
+            "untouched": {
+              "hits": 345,
+              "total": 602
+            }
+          },
+          "coreFullyMasked": {
+            "hits": 24,
+            "total": 101
+          },
+          "regionPrecision": {
+            "hits": 257,
+            "total": 257
+          },
+          "restoreExact": {
+            "hits": 200,
+            "total": 200
+          }
+        },
+        "stacktrace": {
+          "outcomes": {
+            "fullyMasked": {
+              "hits": 428,
+              "total": 428
+            },
+            "partlyMasked": {
+              "hits": 0,
+              "total": 428
+            },
+            "untouched": {
+              "hits": 0,
+              "total": 428
+            }
+          },
+          "coreFullyMasked": {
+            "hits": 200,
+            "total": 200
+          },
+          "regionPrecision": {
+            "hits": 428,
+            "total": 428
+          },
+          "restoreExact": {
+            "hits": 200,
+            "total": 200
+          }
+        }
+      },
+      "negativeHits": {
+        "order-number": {
+          "hits": 0,
+          "total": 380
+        },
+        "uuid": {
+          "hits": 0,
+          "total": 478
+        },
+        "code-identifier": {
+          "hits": 0,
+          "total": 216
+        },
+        "version": {
+          "hits": 0,
+          "total": 289
+        },
+        "commit-hash": {
+          "hits": 102,
+          "total": 221
+        },
+        "epoch-millis": {
+          "hits": 0,
+          "total": 81
+        },
+        "sha256": {
+          "hits": 1,
+          "total": 200
+        },
+        "tracking-number": {
+          "hits": 0,
+          "total": 101
+        }
+      },
+      "latency": {
+        "median": 0.06683300000000258,
+        "p95": 0.14962499999998613
+      }
+    },
+    {
+      "name": "Presidio 2.2.364 (en_core_web_sm, cutoff 0)",
+      "note": "Presidio: presidio-analyzer 2.2.364, spaCy 3.8.16, en_core_web_sm 3.8.0, not the default en_core_web_lg; default recognizers; language \"en\" for every prompt; the cutoff is Presidio's `score_threshold`, below which detections are dropped; latency is analysis only",
+      "englishAnalyzerOnly": true,
+      "byCategory": {
+        "PERSON": {
+          "outcomes": {
+            "fullyMasked": {
+              "hits": 107,
+              "total": 390
+            },
+            "partlyMasked": {
+              "hits": 0,
+              "total": 390
+            },
+            "untouched": {
+              "hits": 283,
+              "total": 390
+            }
+          },
+          "coreFullyMasked": {
+            "hits": 0,
+            "total": 0
+          }
+        },
+        "EMAIL": {
+          "outcomes": {
+            "fullyMasked": {
+              "hits": 573,
+              "total": 573
+            },
+            "partlyMasked": {
+              "hits": 0,
+              "total": 573
+            },
+            "untouched": {
+              "hits": 0,
+              "total": 573
+            }
+          },
+          "coreFullyMasked": {
+            "hits": 0,
+            "total": 0
+          }
+        },
+        "PHONE": {
+          "outcomes": {
+            "fullyMasked": {
+              "hits": 174,
+              "total": 193
+            },
+            "partlyMasked": {
+              "hits": 17,
+              "total": 193
+            },
+            "untouched": {
+              "hits": 2,
+              "total": 193
+            }
+          },
+          "coreFullyMasked": {
+            "hits": 190,
+            "total": 193
+          }
+        },
+        "NATIONAL_ID": {
+          "outcomes": {
+            "fullyMasked": {
+              "hits": 195,
+              "total": 207
+            },
+            "partlyMasked": {
+              "hits": 0,
+              "total": 207
+            },
+            "untouched": {
+              "hits": 12,
+              "total": 207
+            }
+          },
+          "coreFullyMasked": {
+            "hits": 0,
+            "total": 0
+          }
+        },
+        "CARD": {
+          "outcomes": {
+            "fullyMasked": {
+              "hits": 209,
+              "total": 209
+            },
+            "partlyMasked": {
+              "hits": 0,
+              "total": 209
+            },
+            "untouched": {
+              "hits": 0,
+              "total": 209
+            }
+          },
+          "coreFullyMasked": {
+            "hits": 0,
+            "total": 0
+          }
+        },
+        "SECRET": {
+          "outcomes": {
+            "fullyMasked": {
+              "hits": 41,
+              "total": 517
+            },
+            "partlyMasked": {
+              "hits": 104,
+              "total": 517
+            },
+            "untouched": {
+              "hits": 372,
+              "total": 517
+            }
+          },
+          "coreFullyMasked": {
+            "hits": 0,
+            "total": 0
+          }
+        },
+        "HOME_PATH": {
+          "outcomes": {
+            "fullyMasked": {
+              "hits": 2,
+              "total": 417
+            },
+            "partlyMasked": {
+              "hits": 121,
+              "total": 417
+            },
+            "untouched": {
+              "hits": 294,
+              "total": 417
+            }
+          },
+          "coreFullyMasked": {
+            "hits": 39,
+            "total": 417
+          }
+        },
+        "PRIVATE_IP": {
+          "outcomes": {
+            "fullyMasked": {
+              "hits": 296,
+              "total": 296
+            },
+            "partlyMasked": {
+              "hits": 0,
+              "total": 296
+            },
+            "untouched": {
+              "hits": 0,
+              "total": 296
+            }
+          },
+          "coreFullyMasked": {
+            "hits": 0,
+            "total": 0
+          }
+        },
+        "INTERNAL_HOST": {
+          "outcomes": {
+            "fullyMasked": {
+              "hits": 33,
+              "total": 320
+            },
+            "partlyMasked": {
+              "hits": 186,
+              "total": 320
+            },
+            "untouched": {
+              "hits": 101,
+              "total": 320
+            }
+          },
+          "coreFullyMasked": {
+            "hits": 219,
+            "total": 320
+          }
+        }
+      },
+      "macroAverage": {
+        "categories": 9,
+        "outcomes": {
+          "fullyMasked": 0.5894630224588,
+          "partlyMasked": 0.12896236764976796,
+          "untouched": 0.2815746098914322
+        }
+      },
+      "overall": {
+        "outcomes": {
+          "fullyMasked": {
+            "hits": 1630,
+            "total": 3122
+          },
+          "partlyMasked": {
+            "hits": 428,
+            "total": 3122
+          },
+          "untouched": {
+            "hits": 1064,
+            "total": 3122
+          }
+        },
+        "coreFullyMasked": {
+          "hits": 448,
+          "total": 930
+        },
+        "regionPrecision": {
+          "hits": 2079,
+          "total": 3761
+        }
+      },
+      "byLanguage": {
+        "en": {
+          "outcomes": {
+            "fullyMasked": {
+              "hits": 452,
+              "total": 771
+            },
+            "partlyMasked": {
+              "hits": 113,
+              "total": 771
+            },
+            "untouched": {
+              "hits": 206,
+              "total": 771
+            }
+          },
+          "coreFullyMasked": {
+            "hits": 105,
+            "total": 230
+          },
+          "regionPrecision": {
+            "hits": 574,
+            "total": 1033
+          }
+        },
+        "zh-TW": {
+          "outcomes": {
+            "fullyMasked": {
+              "hits": 376,
+              "total": 770
+            },
+            "partlyMasked": {
+              "hits": 116,
+              "total": 770
+            },
+            "untouched": {
+              "hits": 278,
+              "total": 770
+            }
+          },
+          "coreFullyMasked": {
+            "hits": 113,
+            "total": 236
+          },
+          "regionPrecision": {
+            "hits": 508,
+            "total": 879
+          }
+        },
+        "zh-CN": {
+          "outcomes": {
+            "fullyMasked": {
+              "hits": 383,
+              "total": 786
+            },
+            "partlyMasked": {
+              "hits": 103,
+              "total": 786
+            },
+            "untouched": {
+              "hits": 300,
+              "total": 786
+            }
+          },
+          "coreFullyMasked": {
+            "hits": 109,
+            "total": 226
+          },
+          "regionPrecision": {
+            "hits": 479,
+            "total": 912
+          }
+        },
+        "ja": {
+          "outcomes": {
+            "fullyMasked": {
+              "hits": 419,
+              "total": 795
+            },
+            "partlyMasked": {
+              "hits": 96,
+              "total": 795
+            },
+            "untouched": {
+              "hits": 280,
+              "total": 795
+            }
+          },
+          "coreFullyMasked": {
+            "hits": 121,
+            "total": 238
+          },
+          "regionPrecision": {
+            "hits": 518,
+            "total": 937
+          }
+        }
+      },
+      "byFormat": {
+        "chat": {
+          "outcomes": {
+            "fullyMasked": {
+              "hits": 414,
+              "total": 492
+            },
+            "partlyMasked": {
+              "hits": 5,
+              "total": 492
+            },
+            "untouched": {
+              "hits": 73,
+              "total": 492
+            }
+          },
+          "coreFullyMasked": {
+            "hits": 92,
+            "total": 92
+          },
+          "regionPrecision": {
+            "hits": 394,
+            "total": 611
+          }
+        },
+        "code": {
+          "outcomes": {
+            "fullyMasked": {
+              "hits": 243,
+              "total": 600
+            },
+            "partlyMasked": {
+              "hits": 116,
+              "total": 600
+            },
+            "untouched": {
+              "hits": 241,
+              "total": 600
+            }
+          },
+          "coreFullyMasked": {
+            "hits": 81,
+            "total": 200
+          },
+          "regionPrecision": {
+            "hits": 375,
+            "total": 657
+          }
+        },
+        "log": {
+          "outcomes": {
+            "fullyMasked": {
+              "hits": 174,
+              "total": 400
+            },
+            "partlyMasked": {
+              "hits": 110,
+              "total": 400
+            },
+            "untouched": {
+              "hits": 116,
+              "total": 400
+            }
+          },
+          "coreFullyMasked": {
+            "hits": 97,
+            "total": 238
+          },
+          "regionPrecision": {
+            "hits": 282,
+            "total": 745
+          }
+        },
+        "config": {
+          "outcomes": {
+            "fullyMasked": {
+              "hits": 231,
+              "total": 600
+            },
+            "partlyMasked": {
+              "hits": 110,
+              "total": 600
+            },
+            "untouched": {
+              "hits": 259,
+              "total": 600
+            }
+          },
+          "coreFullyMasked": {
+            "hits": 67,
+            "total": 99
+          },
+          "regionPrecision": {
+            "hits": 356,
+            "total": 432
+          }
+        },
+        "email": {
+          "outcomes": {
+            "fullyMasked": {
+              "hits": 440,
+              "total": 602
+            },
+            "partlyMasked": {
+              "hits": 12,
+              "total": 602
+            },
+            "untouched": {
+              "hits": 150,
+              "total": 602
+            }
+          },
+          "coreFullyMasked": {
+            "hits": 98,
+            "total": 101
+          },
+          "regionPrecision": {
+            "hits": 449,
+            "total": 704
+          }
+        },
+        "stacktrace": {
+          "outcomes": {
+            "fullyMasked": {
+              "hits": 128,
+              "total": 428
+            },
+            "partlyMasked": {
+              "hits": 75,
+              "total": 428
+            },
+            "untouched": {
+              "hits": 225,
+              "total": 428
+            }
+          },
+          "coreFullyMasked": {
+            "hits": 13,
+            "total": 200
+          },
+          "regionPrecision": {
+            "hits": 223,
+            "total": 612
+          }
+        }
+      },
+      "negativeHits": {
+        "order-number": {
+          "hits": 380,
+          "total": 380
+        },
+        "uuid": {
+          "hits": 185,
+          "total": 478
+        },
+        "code-identifier": {
+          "hits": 29,
+          "total": 216
+        },
+        "version": {
+          "hits": 154,
+          "total": 289
+        },
+        "commit-hash": {
+          "hits": 20,
+          "total": 221
+        },
+        "epoch-millis": {
+          "hits": 81,
+          "total": 81
+        },
+        "sha256": {
+          "hits": 20,
+          "total": 200
+        },
+        "tracking-number": {
+          "hits": 101,
+          "total": 101
+        }
+      },
+      "latency": {
+        "median": 6.790083978557959,
+        "p95": 9.552333009196445
+      }
+    },
+    {
+      "name": "Presidio 2.2.364 (en_core_web_sm, cutoff 0.4)",
+      "note": "Presidio: presidio-analyzer 2.2.364, spaCy 3.8.16, en_core_web_sm 3.8.0, not the default en_core_web_lg; default recognizers; language \"en\" for every prompt; the cutoff is Presidio's `score_threshold`, below which detections are dropped; latency is analysis only",
+      "englishAnalyzerOnly": true,
+      "byCategory": {
+        "PERSON": {
+          "outcomes": {
+            "fullyMasked": {
+              "hits": 107,
+              "total": 390
+            },
+            "partlyMasked": {
+              "hits": 0,
+              "total": 390
+            },
+            "untouched": {
+              "hits": 283,
+              "total": 390
+            }
+          },
+          "coreFullyMasked": {
+            "hits": 0,
+            "total": 0
+          }
+        },
+        "EMAIL": {
+          "outcomes": {
+            "fullyMasked": {
+              "hits": 573,
+              "total": 573
+            },
+            "partlyMasked": {
+              "hits": 0,
+              "total": 573
+            },
+            "untouched": {
+              "hits": 0,
+              "total": 573
+            }
+          },
+          "coreFullyMasked": {
+            "hits": 0,
+            "total": 0
+          }
+        },
+        "PHONE": {
+          "outcomes": {
+            "fullyMasked": {
+              "hits": 174,
+              "total": 193
+            },
+            "partlyMasked": {
+              "hits": 17,
+              "total": 193
+            },
+            "untouched": {
+              "hits": 2,
+              "total": 193
+            }
+          },
+          "coreFullyMasked": {
+            "hits": 190,
+            "total": 193
+          }
+        },
+        "NATIONAL_ID": {
+          "outcomes": {
+            "fullyMasked": {
+              "hits": 111,
+              "total": 207
+            },
+            "partlyMasked": {
+              "hits": 0,
+              "total": 207
+            },
+            "untouched": {
+              "hits": 96,
+              "total": 207
+            }
+          },
+          "coreFullyMasked": {
+            "hits": 0,
+            "total": 0
+          }
+        },
+        "CARD": {
+          "outcomes": {
+            "fullyMasked": {
+              "hits": 209,
+              "total": 209
+            },
+            "partlyMasked": {
+              "hits": 0,
+              "total": 209
+            },
+            "untouched": {
+              "hits": 0,
+              "total": 209
+            }
+          },
+          "coreFullyMasked": {
+            "hits": 0,
+            "total": 0
+          }
+        },
+        "SECRET": {
+          "outcomes": {
+            "fullyMasked": {
+              "hits": 41,
+              "total": 517
+            },
+            "partlyMasked": {
+              "hits": 64,
+              "total": 517
+            },
+            "untouched": {
+              "hits": 412,
+              "total": 517
+            }
+          },
+          "coreFullyMasked": {
+            "hits": 0,
+            "total": 0
+          }
+        },
+        "HOME_PATH": {
+          "outcomes": {
+            "fullyMasked": {
+              "hits": 2,
+              "total": 417
+            },
+            "partlyMasked": {
+              "hits": 121,
+              "total": 417
+            },
+            "untouched": {
+              "hits": 294,
+              "total": 417
+            }
+          },
+          "coreFullyMasked": {
+            "hits": 39,
+            "total": 417
+          }
+        },
+        "PRIVATE_IP": {
+          "outcomes": {
+            "fullyMasked": {
+              "hits": 296,
+              "total": 296
+            },
+            "partlyMasked": {
+              "hits": 0,
+              "total": 296
+            },
+            "untouched": {
+              "hits": 0,
+              "total": 296
+            }
+          },
+          "coreFullyMasked": {
+            "hits": 0,
+            "total": 0
+          }
+        },
+        "INTERNAL_HOST": {
+          "outcomes": {
+            "fullyMasked": {
+              "hits": 33,
+              "total": 320
+            },
+            "partlyMasked": {
+              "hits": 186,
+              "total": 320
+            },
+            "untouched": {
+              "hits": 101,
+              "total": 320
+            }
+          },
+          "coreFullyMasked": {
+            "hits": 219,
+            "total": 320
+          }
+        }
+      },
+      "macroAverage": {
+        "categories": 9,
+        "outcomes": {
+          "fullyMasked": 0.5443744556311026,
+          "partlyMasked": 0.12036576330848277,
+          "untouched": 0.3352597810604146
+        }
+      },
+      "overall": {
+        "outcomes": {
+          "fullyMasked": {
+            "hits": 1546,
+            "total": 3122
+          },
+          "partlyMasked": {
+            "hits": 388,
+            "total": 3122
+          },
+          "untouched": {
+            "hits": 1188,
+            "total": 3122
+          }
+        },
+        "coreFullyMasked": {
+          "hits": 448,
+          "total": 930
+        },
+        "regionPrecision": {
+          "hits": 1905,
+          "total": 3086
+        }
+      },
+      "byLanguage": {
+        "en": {
+          "outcomes": {
+            "fullyMasked": {
+              "hits": 452,
+              "total": 771
+            },
+            "partlyMasked": {
+              "hits": 103,
+              "total": 771
+            },
+            "untouched": {
+              "hits": 216,
+              "total": 771
+            }
+          },
+          "coreFullyMasked": {
+            "hits": 105,
+            "total": 230
+          },
+          "regionPrecision": {
+            "hits": 555,
+            "total": 885
+          }
+        },
+        "zh-TW": {
+          "outcomes": {
+            "fullyMasked": {
+              "hits": 324,
+              "total": 770
+            },
+            "partlyMasked": {
+              "hits": 107,
+              "total": 770
+            },
+            "untouched": {
+              "hits": 339,
+              "total": 770
+            }
+          },
+          "coreFullyMasked": {
+            "hits": 113,
+            "total": 236
+          },
+          "regionPrecision": {
+            "hits": 430,
+            "total": 678
+          }
+        },
+        "zh-CN": {
+          "outcomes": {
+            "fullyMasked": {
+              "hits": 383,
+              "total": 786
+            },
+            "partlyMasked": {
+              "hits": 92,
+              "total": 786
+            },
+            "untouched": {
+              "hits": 311,
+              "total": 786
+            }
+          },
+          "coreFullyMasked": {
+            "hits": 109,
+            "total": 226
+          },
+          "regionPrecision": {
+            "hits": 453,
+            "total": 768
+          }
+        },
+        "ja": {
+          "outcomes": {
+            "fullyMasked": {
+              "hits": 387,
+              "total": 795
+            },
+            "partlyMasked": {
+              "hits": 86,
+              "total": 795
+            },
+            "untouched": {
+              "hits": 322,
+              "total": 795
+            }
+          },
+          "coreFullyMasked": {
+            "hits": 121,
+            "total": 238
+          },
+          "regionPrecision": {
+            "hits": 467,
+            "total": 755
+          }
+        }
+      },
+      "byFormat": {
+        "chat": {
+          "outcomes": {
+            "fullyMasked": {
+              "hits": 375,
+              "total": 492
+            },
+            "partlyMasked": {
+              "hits": 5,
+              "total": 492
+            },
+            "untouched": {
+              "hits": 112,
+              "total": 492
+            }
+          },
+          "coreFullyMasked": {
+            "hits": 92,
+            "total": 92
+          },
+          "regionPrecision": {
+            "hits": 355,
+            "total": 500
+          }
+        },
+        "code": {
+          "outcomes": {
+            "fullyMasked": {
+              "hits": 243,
+              "total": 600
+            },
+            "partlyMasked": {
+              "hits": 105,
+              "total": 600
+            },
+            "untouched": {
+              "hits": 252,
+              "total": 600
+            }
+          },
+          "coreFullyMasked": {
+            "hits": 81,
+            "total": 200
+          },
+          "regionPrecision": {
+            "hits": 348,
+            "total": 565
+          }
+        },
+        "log": {
+          "outcomes": {
+            "fullyMasked": {
+              "hits": 174,
+              "total": 400
+            },
+            "partlyMasked": {
+              "hits": 110,
+              "total": 400
+            },
+            "untouched": {
+              "hits": 116,
+              "total": 400
+            }
+          },
+          "coreFullyMasked": {
+            "hits": 97,
+            "total": 238
+          },
+          "regionPrecision": {
+            "hits": 282,
+            "total": 606
+          }
+        },
+        "config": {
+          "outcomes": {
+            "fullyMasked": {
+              "hits": 231,
+              "total": 600
+            },
+            "partlyMasked": {
+              "hits": 95,
+              "total": 600
+            },
+            "untouched": {
+              "hits": 274,
+              "total": 600
+            }
+          },
+          "coreFullyMasked": {
+            "hits": 67,
+            "total": 99
+          },
+          "regionPrecision": {
+            "hits": 327,
+            "total": 350
+          }
+        },
+        "email": {
+          "outcomes": {
+            "fullyMasked": {
+              "hits": 395,
+              "total": 602
+            },
+            "partlyMasked": {
+              "hits": 12,
+              "total": 602
+            },
+            "untouched": {
+              "hits": 195,
+              "total": 602
+            }
+          },
+          "coreFullyMasked": {
+            "hits": 98,
+            "total": 101
+          },
+          "regionPrecision": {
+            "hits": 404,
+            "total": 583
+          }
+        },
+        "stacktrace": {
+          "outcomes": {
+            "fullyMasked": {
+              "hits": 128,
+              "total": 428
+            },
+            "partlyMasked": {
+              "hits": 61,
+              "total": 428
+            },
+            "untouched": {
+              "hits": 239,
+              "total": 428
+            }
+          },
+          "coreFullyMasked": {
+            "hits": 13,
+            "total": 200
+          },
+          "regionPrecision": {
+            "hits": 189,
+            "total": 482
+          }
+        }
+      },
+      "negativeHits": {
+        "order-number": {
+          "hits": 224,
+          "total": 380
+        },
+        "uuid": {
+          "hits": 68,
+          "total": 478
+        },
+        "code-identifier": {
+          "hits": 29,
+          "total": 216
+        },
+        "version": {
+          "hits": 53,
+          "total": 289
+        },
+        "commit-hash": {
+          "hits": 20,
+          "total": 221
+        },
+        "epoch-millis": {
+          "hits": 2,
+          "total": 81
+        },
+        "sha256": {
+          "hits": 20,
+          "total": 200
+        },
+        "tracking-number": {
+          "hits": 78,
+          "total": 101
+        }
+      },
+      "latency": {
+        "median": 6.594624981516972,
+        "p95": 9.423833020264283
+      }
+    }
+  ],
+  "skipped": []
+}

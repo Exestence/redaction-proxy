@@ -149,9 +149,9 @@ See the [technical details](docs/DETAILS.md#12-完整設定) for the matching en
 | Credential false positives | **0.76** per 1,000 code lines | Measured on DeepSeek Harness source, which holds no real key (698k code lines): about one spot every 1,300 lines is mistaken for a key and masked. |
 | Restore failures | 0 | Every file that was masked restores byte for byte. |
 | Speed | about 850k lines in 5 s | Apple M5 Max. |
-| Synthetic multilingual prompts | recall 78.6%, precision 96.0%, restore 100% | 1,200 seeded prompts in English, zh-TW, zh-CN, and Japanese, compared with Presidio: [bench/results/public-bench.md](bench/results/public-bench.md). Misses are names, non-Taiwan phone numbers and IDs; bare commit hashes are masked. |
+| Synthetic multilingual prompts (dev set) | all languages, macro average over 9 categories: 73.4% fully masked, 26.5% untouched; restore 100% | 1,200 seeded prompts in English, zh-TW, zh-CN, and Japanese, written by the authors of the rules; per-category results and an English-only comparison with Presidio: [bench/results/public-bench-dev.md](bench/results/public-bench-dev.md). Fully masks secrets, home paths, internal hosts, private IPs, e-mails, and cards; misses names, non-Taiwan phone numbers and IDs; masks bare commit hashes. No held-out result yet. |
 
-A false positive costs the model one unnecessary placeholder, which is restored in the reply. The corpus is English code; Chinese prose has not been measured. Reproduce with `pnpm test`, `pnpm bench`, and `pnpm run bench:public`.
+A false positive costs the model one unnecessary placeholder, which is restored in the reply. The corpus is English code; Chinese prose has not been measured. Reproduce with `pnpm test`, `pnpm bench`, and `pnpm run bench:public`; add `--heldout <set.jsonl>` to also score a frozen held-out set (format and MANIFEST check in `bench/public/heldout.ts`).
 
 ## 🆚 Compared with dsh-privacy-router
 
