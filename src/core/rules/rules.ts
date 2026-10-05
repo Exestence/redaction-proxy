@@ -7,7 +7,7 @@
  * @module redaction-proxy/core/rules/rules
  */
 
-import { isAlnum, isAsciiPrintable, projectNfkc, shannon, unicodeEscapeForms } from './normalize.ts'
+import { afterHighEscape, endsHighEscape, isAlnum, isAsciiPrintable, projectNfkc, shannon, unicodeEscapeForms } from './normalize.ts'
 import type { PushCandidate } from './candidate.ts'
 import { PRIORITY_ENTROPY, PRIORITY_PII, PRIORITY_SECRET, PRIORITY_TERM } from './candidate.ts'
 
@@ -87,6 +87,17 @@ const PRIVATE_IP = new RegExp(
   + '|172\\.(?:1[6-9]|2\\d|3[01])\\.\\d{1,3}\\.\\d{1,3})(?![\\d.])',
   'g',
 )
+/**
+ * Variants of the rules with an ASCII left boundary that match right after a
+ * high escape: `%E6` or `%FF` before a value is a stray byte, not a letter or
+ * digit of a longer token.
+ */
+const TWID_AFTER_ESCAPE = afterHighEscape(TWID, '(?<![A-Za-z0-9])')
+const TWID_SPLIT_AFTER_ESCAPE = afterHighEscape(TWID_SPLIT, '(?<![A-Za-z0-9-])')
+const PHONE_MOBILE_AFTER_ESCAPE = afterHighEscape(PHONE_MOBILE, '(?<![0-9A-Za-z])')
+const TAX_ID_AFTER_ESCAPE = afterHighEscape(TAX_ID, '(?<!\\d)')
+const CARD_RUN_AFTER_ESCAPE = afterHighEscape(CARD_RUN, '(?<!\\d)')
+const PRIVATE_IP_AFTER_ESCAPE = afterHighEscape(PRIVATE_IP, '(?<![\\d.])')
 const HOST_SUFFIX = /\.(?:local|lan|internal)(?![a-z0-9-])/gi
 const HOST_CHAR = /[A-Za-z0-9.-]/
 const HOST_FIRST_WORD = /^[A-Za-z0-9_$]+/
@@ -315,34 +326,48 @@ export function collectEmailCandidates(text: string, push: PushCandidate): void 
  * @param text - text to scan.
  * @param rules - which of `tw-national-id`, `phone`, and `tax-id` are enabled.
  * @param push - candidate sink.
+ * @param afterEscape - whether `text` holds a high escape, which then also counts as a left boundary.
  */
-export function collectNumberCandidates(text: string, rules: ReadonlySet<string>, push: PushCandidate): void {
+export function collectNumberCandidates(
+  text: string,
+  rules: ReadonlySet<string>,
+  push: PushCandidate,
+  afterEscape = false,
+): void {
   if (rules.has('tw-national-id')) {
-    runAll(TWID, text, (match) => {
-      if (!isTaiwanNationalId(match[0])) return
-      push(match.index, match.index + match[0].length, 'TWID', PRIORITY_PII)
-    })
-    runAll(TWID_SPLIT, text, (match) => {
-      if (!isTaiwanNationalId(match[0].replace(/[- \u3000]/, ''))) return
-      push(match.index, match.index + match[0].length, 'TWID', PRIORITY_PII)
-    })
+    for (const pattern of afterEscape ? [TWID, TWID_AFTER_ESCAPE] : [TWID]) {
+      runAll(pattern, text, (match) => {
+        if (!isTaiwanNationalId(match[0])) return
+        push(match.index, match.index + match[0].length, 'TWID', PRIORITY_PII)
+      })
+    }
+    for (const pattern of afterEscape ? [TWID_SPLIT, TWID_SPLIT_AFTER_ESCAPE] : [TWID_SPLIT]) {
+      runAll(pattern, text, (match) => {
+        if (!isTaiwanNationalId(match[0].replace(/[- \u3000]/, ''))) return
+        push(match.index, match.index + match[0].length, 'TWID', PRIORITY_PII)
+      })
+    }
   }
   // Business numbers are proposed before telephone numbers: a number after both
   // `聯絡` and `統編` yields two candidates with equal offsets and priority, and
   // the merge keeps the first proposed of those.
   if (rules.has('tax-id')) {
-    runAll(TAX_ID, text, (match) => {
-      // oxlint-disable-next-line typescript/no-non-null-assertion -- the pattern has one group.
-      const value = match[1]!
-      if (value.length !== 8 && !isTaiwanBusinessNumber(value.replace(/[- \u3000]/, ''))) return
-      const at = match.index + match[0].lastIndexOf(value)
-      push(at, at + value.length, 'TAXID', PRIORITY_PII)
-    })
+    for (const pattern of afterEscape ? [TAX_ID, TAX_ID_AFTER_ESCAPE] : [TAX_ID]) {
+      runAll(pattern, text, (match) => {
+        // oxlint-disable-next-line typescript/no-non-null-assertion -- the pattern has one group.
+        const value = match[1]!
+        if (value.length !== 8 && !isTaiwanBusinessNumber(value.replace(/[- \u3000]/, ''))) return
+        const at = match.index + match[0].lastIndexOf(value)
+        push(at, at + value.length, 'TAXID', PRIORITY_PII)
+      })
+    }
   }
   if (rules.has('phone')) {
-    runAll(PHONE_MOBILE, text, (match) => {
-      push(match.index, match.index + match[0].length, 'PHONE', PRIORITY_PII)
-    })
+    for (const pattern of afterEscape ? [PHONE_MOBILE, PHONE_MOBILE_AFTER_ESCAPE] : [PHONE_MOBILE]) {
+      runAll(pattern, text, (match) => {
+        push(match.index, match.index + match[0].length, 'PHONE', PRIORITY_PII)
+      })
+    }
     runAll(PHONE_MOBILE_SPLIT, text, (match) => {
       // ponytail: a year-shaped middle group drops 2% of real 2-4-4 numbers (09-19xx, 09-20xx); a date-word context check is the upgrade.
       // oxlint-disable-next-line typescript/no-non-null-assertion -- the pattern has two groups.
@@ -366,42 +391,45 @@ export function collectNumberCandidates(text: string, rules: ReadonlySet<string>
  * digits pass Luhn one time in ten.
  * @param text - text to scan.
  * @param push - candidate sink.
+ * @param afterEscape - whether `text` holds a high escape, which then also counts as a left boundary.
  */
-export function collectCardCandidates(text: string, push: PushCandidate): void {
-  runAll(CARD_RUN, text, (match) => {
-    const run = match[0]
-    const digits: string[] = []
-    const offsets: number[] = []
-    const boundaries = new Set([0])
-    for (let i = 0; i < run.length; i += 1) {
-      const code = run.charCodeAt(i)
-      if (code >= 48 && code <= 57) {
-        digits.push(run.charAt(i))
-        offsets.push(match.index + i)
-      } else boundaries.add(digits.length)
-    }
-    boundaries.add(digits.length)
-    const joined = digits.join('')
-    const separated = digits.length < run.length
-    for (let start = 0; start + 13 <= joined.length;) {
-      let taken = 0
-      for (let length = Math.min(19, joined.length - start); length >= 13; length -= 1) {
-        const rest = joined.length - start - length
-        const aligned = boundaries.has(start) && boundaries.has(start + length)
-        if (!aligned && joined.length > CARD_SLIDE_MAX) continue
-        const startOk = start === 0 || boundaries.has(start) || (start === 1 && joined.charAt(0) === '0')
-        const endOk = rest === 0 || boundaries.has(start + length) || (rest <= 4 && separated)
-        if (!startOk || !endOk) continue
-        const candidate = joined.slice(start, start + length)
-        if (!validCardPrefix(candidate) || !luhn(candidate)) continue
-        // oxlint-disable-next-line typescript/no-non-null-assertion -- both indexes are inside the run.
-        push(offsets[start]!, offsets[start + length - 1]! + 1, 'CARD', PRIORITY_PII)
-        taken = length
-        break
+export function collectCardCandidates(text: string, push: PushCandidate, afterEscape = false): void {
+  for (const pattern of afterEscape ? [CARD_RUN, CARD_RUN_AFTER_ESCAPE] : [CARD_RUN]) {
+    runAll(pattern, text, (match) => {
+      const run = match[0]
+      const digits: string[] = []
+      const offsets: number[] = []
+      const boundaries = new Set([0])
+      for (let i = 0; i < run.length; i += 1) {
+        const code = run.charCodeAt(i)
+        if (code >= 48 && code <= 57) {
+          digits.push(run.charAt(i))
+          offsets.push(match.index + i)
+        } else boundaries.add(digits.length)
       }
-      start += taken > 0 ? taken : 1
-    }
-  })
+      boundaries.add(digits.length)
+      const joined = digits.join('')
+      const separated = digits.length < run.length
+      for (let start = 0; start + 13 <= joined.length;) {
+        let taken = 0
+        for (let length = Math.min(19, joined.length - start); length >= 13; length -= 1) {
+          const rest = joined.length - start - length
+          const aligned = boundaries.has(start) && boundaries.has(start + length)
+          if (!aligned && joined.length > CARD_SLIDE_MAX) continue
+          const startOk = start === 0 || boundaries.has(start) || (start === 1 && joined.charAt(0) === '0')
+          const endOk = rest === 0 || boundaries.has(start + length) || (rest <= 4 && separated)
+          if (!startOk || !endOk) continue
+          const candidate = joined.slice(start, start + length)
+          if (!validCardPrefix(candidate) || !luhn(candidate)) continue
+          // oxlint-disable-next-line typescript/no-non-null-assertion -- both indexes are inside the run.
+          push(offsets[start]!, offsets[start + length - 1]! + 1, 'CARD', PRIORITY_PII)
+          taken = length
+          break
+        }
+        start += taken > 0 ? taken : 1
+      }
+    })
+  }
 }
 
 /**
@@ -411,18 +439,22 @@ export function collectCardCandidates(text: string, push: PushCandidate): void {
  * @param push - candidate sink.
  * @param originalAt - the submitted character an offset of `text` came from;
  *   on a projection, the call guard reads `（` there rather than its fold `(`.
+ * @param afterEscape - whether `text` holds a high escape, which then also counts as a left boundary.
  */
 export function collectNetworkCandidates(
   text: string,
   rules: ReadonlySet<string>,
   push: PushCandidate,
   originalAt: (offset: number) => string = offset => text.charAt(offset),
+  afterEscape = false,
 ): void {
   if (rules.has('ip')) {
-    runAll(PRIVATE_IP, text, (match) => {
-      if (match[0].split('.').some(octet => Number(octet) > 255)) return
-      push(match.index, match.index + match[0].length, 'IP', PRIORITY_PII)
-    })
+    for (const pattern of afterEscape ? [PRIVATE_IP, PRIVATE_IP_AFTER_ESCAPE] : [PRIVATE_IP]) {
+      runAll(pattern, text, (match) => {
+        if (match[0].split('.').some(octet => Number(octet) > 255)) return
+        push(match.index, match.index + match[0].length, 'IP', PRIORITY_PII)
+      })
+    }
   }
   if (!rules.has('host')) return
   // Anchor on the suffix and walk back, so a long dotted run stays linear.
@@ -525,7 +557,8 @@ export function collectTermCandidates(text: string, terms: readonly ConfiguredTe
 
 /**
  * Whether a value's alphanumeric edges are free, so masking it at this position
- * would not cut a longer token in half.
+ * would not cut a longer token in half. A high escape (`%E6`, `%FF`) right
+ * before the value leaves its left edge free.
  * @param text - text holding the occurrence.
  * @param start - inclusive start offset of the occurrence.
  * @param end - exclusive end offset of the occurrence.
@@ -533,7 +566,7 @@ export function collectTermCandidates(text: string, terms: readonly ConfiguredTe
  * @returns whether the occurrence stands on its own.
  */
 export function hasFreeEdges(text: string, start: number, end: number, value: string): boolean {
-  if (isAlnum(value.charAt(0)) && isAlnum(text.charAt(start - 1))) return false
+  if (isAlnum(value.charAt(0)) && isAlnum(text.charAt(start - 1)) && !endsHighEscape(text, start)) return false
   if (isAlnum(value.charAt(value.length - 1)) && isAlnum(text.charAt(end))) return false
   return true
 }

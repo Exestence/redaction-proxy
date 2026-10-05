@@ -6,7 +6,7 @@
  * @module redaction-proxy/core/rules/secret
  */
 
-import { isAsciiPrintable, shannon } from './normalize.ts'
+import { afterHighEscape, isAsciiPrintable, shannon } from './normalize.ts'
 import type { PushCandidate } from './candidate.ts'
 import { PRIORITY_SECRET } from './candidate.ts'
 
@@ -21,11 +21,15 @@ const KEY_SCAN_MAX = 128
 const PEM_BEGIN = /-----BEGIN [A-Z ]*PRIVATE KEY-----/g
 const PEM_END = /-----END [A-Z ]*PRIVATE KEY-----/
 const AWS_KEY = /\b(?:AKIA|ASIA)[0-9A-Z]{16}\b/g
-const GITHUB_TOKEN = /\b(?:ghp|gho|ghs|ghu|ghr)_[A-Za-z0-9]{20,}\b|\bgithub_pat_[A-Za-z0-9_]{20,}\b/g
+const GITHUB_TOKEN = /\b(?:(?:ghp|gho|ghs|ghu|ghr)_[A-Za-z0-9]{20,}|github_pat_[A-Za-z0-9_]{20,})\b/g
 const SK_KEY = /\bsk-[A-Za-z0-9_-]{16,}/g
 const SLACK_TOKEN = /\bxox[abposr]-[A-Za-z0-9-]{10,}/g
 const GOOGLE_KEY = /\bAIza[0-9A-Za-z_-]{35}\b/g
 const JWT = /\beyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}/g
+/** The literal token formats, each opening on a word boundary. */
+const PREFIX_TOKENS = [AWS_KEY, GITHUB_TOKEN, SK_KEY, SLACK_TOKEN, GOOGLE_KEY, JWT]
+/** The same formats opening right after a high escape (`%E6sk-…`), where `\b` does not hold. */
+const PREFIX_TOKENS_AFTER_ESCAPE = PREFIX_TOKENS.map(pattern => afterHighEscape(pattern, '\\b'))
 // A Slack incoming-webhook URL is itself the credential.
 const SLACK_WEBHOOK = /hooks\.slack\.com\/services\/[A-Za-z0-9][A-Za-z0-9/_-]{9,120}/g
 const BEARER = /(?<![a-z0-9])bearer[ \t]+([a-z0-9._~+/=-]{8,256})/gi
@@ -430,9 +434,10 @@ export function isKeywordValue(value: string): boolean {
  * Collect every credential candidate of one text.
  * @param text - text to scan.
  * @param push - sink for candidates.
+ * @param afterEscape - whether `text` holds a high escape, which then also opens a token.
  * @returns nothing; candidates reach `push`.
  */
-export function collectSecretCandidates(text: string, push: PushCandidate): void {
+export function collectSecretCandidates(text: string, push: PushCandidate, afterEscape = false): void {
   const secret = (start: number, end: number): void => {
     push(start, end, 'KEY', PRIORITY_SECRET)
   }
@@ -451,7 +456,7 @@ export function collectSecretCandidates(text: string, push: PushCandidate): void
     PEM_BEGIN.lastIndex = end
   }
 
-  for (const pattern of [AWS_KEY, GITHUB_TOKEN, SK_KEY, SLACK_TOKEN, SLACK_WEBHOOK, GOOGLE_KEY, JWT]) {
+  for (const pattern of [...PREFIX_TOKENS, ...afterEscape ? PREFIX_TOKENS_AFTER_ESCAPE : [], SLACK_WEBHOOK]) {
     runAll(pattern, (match) => {
       secret(match.index, match.index + match[0].length)
     })
