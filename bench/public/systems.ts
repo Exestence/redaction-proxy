@@ -1,6 +1,6 @@
 /**
- * Systems under test. A system turns each sample into a masked text plus the
- * ranges it replaced; `metrics.ts` scores every system the same way.
+ * Systems under test. A system turns each sample into the ranges it masked;
+ * `metrics.ts` scores every system the same way.
  *
  * Plug-in point: any {@link RedactionDetector} runs through
  * {@link runCoreDetector}, so a name-detection model or international rules
@@ -18,11 +18,9 @@ import type { Sample, Span } from './dataset.ts'
 export interface SampleOutcome {
   /** Ranges of the original text the system replaced. */
   detected: Span[]
-  /** The text the upstream would receive. */
-  masked: string
-  /** Whether restoring `masked` gives the original back byte for byte; absent when the system cannot restore. */
+  /** Whether restoring the masked text gives the original back byte for byte; absent when the system cannot restore. */
   restoredExactly?: boolean
-  /** Time the system spent on the sample, in milliseconds. */
+  /** Time the system spent on the sample, in milliseconds; for a core detector this includes restoring. */
   milliseconds: number
 }
 
@@ -37,6 +35,8 @@ export interface SystemRun {
   name: string
   /** Caveat printed beside the system's results. */
   note?: string
+  /** The system analyzes every prompt as English; its results on other languages are reference only. */
+  englishAnalyzerOnly?: true
   outcomes: Map<string, SampleOutcome>
 }
 
@@ -55,7 +55,6 @@ export async function runCoreDetector(system: CoreSystem, samples: readonly Samp
     const restored = restore(masked, result.registry)
     outcomes.set(sample.id, {
       detected: result.applied.map(span => ({ start: span.start, end: span.end })),
-      masked,
       restoredExactly: restored.ok && restored.text === sample.text,
       milliseconds: performance.now() - started,
     })

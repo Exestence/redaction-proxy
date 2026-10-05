@@ -1,10 +1,11 @@
-"""Run Microsoft Presidio over the public benchmark dataset.
+"""Run Microsoft Presidio's analyzer over the public benchmark dataset.
 
-Reads the dataset JSONL that `pnpm run bench:public` writes, analyzes and
-anonymizes every sample with Presidio's default recognizers, and writes one
-JSONL line per sample with the detected ranges as UTF-16 offsets, so the
-TypeScript side scores them exactly like its own spans. The first output line
-describes the run.
+Usage: run_presidio.py <dataset.jsonl> <output.jsonl> <score cutoff>
+
+Analyzes every sample with Presidio's default recognizers, dropping
+detections scored below the cutoff, and writes one JSONL line per sample with
+the detected ranges as UTF-16 offsets, so the TypeScript side scores them
+exactly like its own spans. The first output line describes the run.
 
 Presidio's default configuration loads the spaCy model en_core_web_lg. When
 only en_core_web_sm is installed, the same recognizers run on the small model
@@ -19,7 +20,6 @@ from importlib.metadata import version
 import spacy
 from presidio_analyzer import AnalyzerEngine
 from presidio_analyzer.nlp_engine import NlpEngineProvider
-from presidio_anonymizer import AnonymizerEngine
 
 DEFAULT_MODEL = "en_core_web_lg"
 SMALL_MODEL = "en_core_web_sm"
@@ -46,27 +46,30 @@ def utf16_offset(text: str, index: int) -> int:
     return len(text[:index].encode("utf-16-le")) // 2
 
 
-def process_sample(analyzer: AnalyzerEngine, anonymizer: AnonymizerEngine, sample: dict) -> dict:
-    """Analyze and anonymize one sample, timing both steps together."""
+def analyze_sample(analyzer: AnalyzerEngine, sample: dict, cutoff: float) -> dict:
+    """Analyze one sample and time the analysis."""
     text = sample["text"]
     started = time.perf_counter()
-    results = analyzer.analyze(text=text, language=LANGUAGE)
-    masked = anonymizer.anonymize(text=text, analyzer_results=results).text
+    results = analyzer.analyze(text=text, language=LANGUAGE, score_threshold=cutoff)
     elapsed = (time.perf_counter() - started) * MILLISECONDS_PER_SECOND
     detected = [{"start": utf16_offset(text, r.start), "end": utf16_offset(text, r.end)} for r in results]
-    return {"id": sample["id"], "detected": detected, "masked": masked, "milliseconds": elapsed}
+    return {"id": sample["id"], "detected": detected, "milliseconds": elapsed}
 
 
-def main(dataset_path: str, output_path: str) -> None:
+def main(dataset_path: str, output_path: str, cutoff: float) -> None:
     analyzer, model = create_analyzer()
-    anonymizer = AnonymizerEngine()
     with open(dataset_path, encoding="utf-8") as dataset, open(output_path, "w", encoding="utf-8") as output:
-        header = {"version": version("presidio-analyzer"), "model": model, "defaultConfig": model == DEFAULT_MODEL}
+        header = {
+            "presidioVersion": version("presidio-analyzer"),
+            "spacyVersion": spacy.__version__,
+            "model": model,
+            "modelVersion": version(model),
+            "defaultConfig": model == DEFAULT_MODEL,
+        }
         output.write(json.dumps(header) + "\n")
         for line in dataset:
-            outcome = process_sample(analyzer, anonymizer, json.loads(line))
-            output.write(json.dumps(outcome, ensure_ascii=False) + "\n")
+            output.write(json.dumps(analyze_sample(analyzer, json.loads(line), cutoff)) + "\n")
 
 
 if __name__ == "__main__":
-    main(sys.argv[1], sys.argv[2])
+    main(sys.argv[1], sys.argv[2], float(sys.argv[3]))

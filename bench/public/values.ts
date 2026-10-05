@@ -202,12 +202,14 @@ export function cardNumber(random: Random): string {
   return digits.match(new RegExp(`.{${CARD_GROUP}}`, 'g'))?.join(separator) ?? digits
 }
 
+const TRACKING_NUMBER_LENGTH = 16
+
 /**
  * @param random - random source.
  * @returns a 16-digit number that fails the Luhn check, as a parcel tracking number would.
  */
 export function trackingNumber(random: Random): string {
-  const partial = `${random.int(1, 9)}${random.digits(CARD_LENGTH - 2)}`
+  const partial = `${random.int(1, 9)}${random.digits(TRACKING_NUMBER_LENGTH - 2)}`
   return `${partial}${(luhnCheckDigit(partial) + random.int(1, 9)) % 10}`
 }
 

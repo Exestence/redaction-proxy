@@ -1,8 +1,13 @@
-import { describe, expect, it } from 'vitest'
+import { createHash } from 'node:crypto'
+import { mkdtempSync, rmSync, writeFileSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
+import { afterAll, describe, expect, it } from 'vitest'
 import { isTaiwanNationalId } from '../src/core/index.ts'
 import { buildDataset, fillTemplate } from '../bench/public/dataset.ts'
 import type { Sample } from '../bench/public/dataset.ts'
-import { isCovered, mergeOverlapping, percentile, scoreSystem } from '../bench/public/metrics.ts'
+import { loadHeldOutSet, parseRecord } from '../bench/public/heldout.ts'
+import { classify, isCovered, mergeOverlapping, percentile, scoreSystem } from '../bench/public/metrics.ts'
 import { createRandom } from '../bench/public/random.ts'
 import type { SystemRun } from '../bench/public/systems.ts'
 import { luhnCheckDigit, myNumberCheckDigit, nationalId, prcCheckCharacter } from '../bench/public/values.ts'
@@ -70,30 +75,106 @@ describe('metrics', () => {
     expect(percentile([], 50)).toBe(0)
   })
 
-  it('scores recall, leak, precision, and hard-negative hits', () => {
+  it('classifies a value as fully masked, partly masked, or untouched', () => {
+    const value = { start: 10, end: 20 }
+    expect(classify(value, [{ start: 8, end: 15 }, { start: 15, end: 22 }])).toBe('fullyMasked')
+    expect(classify(value, [{ start: 18, end: 25 }])).toBe('partlyMasked')
+    expect(classify(value, [{ start: 0, end: 10 }, { start: 20, end: 30 }])).toBe('untouched')
+  })
+
+  it('scores mask outcomes, core coverage, macro average, precision, and hard-negative hits', () => {
     const sample: Sample = {
       id: 'one',
       language: 'en',
       format: 'chat',
-      text: 'mail a@b.example.com or 555 about v1.2.3',
-      gold: [{ start: 5, end: 20, category: 'EMAIL' }, { start: 24, end: 27, category: 'PHONE' }],
-      negatives: [{ start: 34, end: 40, kind: 'version' }],
+      text: 'mail a@b.example.com or +1 555 0101 about v1.2.3',
+      gold: [
+        { start: 5, end: 20, category: 'EMAIL' },
+        { start: 24, end: 35, category: 'PHONE', core: { start: 27, end: 35 } },
+      ],
+      negatives: [{ start: 42, end: 48, kind: 'version' }],
     }
     const run: SystemRun = {
       name: 'stub',
-      outcomes: new Map([['one', {
-        detected: [{ start: 5, end: 20 }, { start: 34, end: 40 }],
-        masked: 'mail ⟦EMAIL_1⟧ or 555 about ⟦KEY_1⟧',
-        milliseconds: 1,
-      }]]),
+      outcomes: new Map([['one', { detected: [{ start: 5, end: 20 }, { start: 27, end: 35 }, { start: 42, end: 48 }], milliseconds: 1 }]]),
     }
     const report = scoreSystem(run, [sample])
-    expect(report.overall.recall).toEqual({ hits: 1, total: 2 })
-    expect(report.overall.leak).toEqual({ hits: 1, total: 2 })
-    expect(report.overall.precision).toEqual({ hits: 1, total: 2 })
+    expect(report.byCategory.EMAIL.outcomes.fullyMasked).toEqual({ hits: 1, total: 1 })
+    expect(report.byCategory.PHONE.outcomes.partlyMasked).toEqual({ hits: 1, total: 1 })
+    expect(report.byCategory.PHONE.coreFullyMasked).toEqual({ hits: 1, total: 1 })
+    expect(report.byCategory.EMAIL.coreFullyMasked.total).toBe(0)
+    expect(report.macroAverage).toEqual({ categories: 2, outcomes: { fullyMasked: 0.5, partlyMasked: 0.5, untouched: 0 } })
+    expect(report.overall.regionPrecision).toEqual({ hits: 2, total: 3 })
     expect(report.overall.restoreExact).toBeUndefined()
-    expect(report.byCategory.EMAIL.recall).toEqual({ hits: 1, total: 1 })
-    expect(report.byCategory.PHONE.leak).toEqual({ hits: 1, total: 1 })
-    expect(report.negativeHits.version).toEqual({ hits: 1, total: 1 })
+    expect(report.negativeHits).toEqual({ version: { hits: 1, total: 1 } })
+  })
+})
+
+describe('dev set core spans', () => {
+  it('marks the identifying part of phones, home paths, and internal hosts', () => {
+    const filled = fillTemplate('{phone} {homePath} {internalHost} {email}', createRandom(2), 'en')
+    const cores = filled.gold.map(gold => gold.core === undefined ? undefined : filled.text.slice(gold.core.start, gold.core.end))
+    expect(cores[0]).toMatch(/^\(\d{3}\) 555-01\d{2}$/)
+    expect(cores[1]).not.toContain('/')
+    expect(cores[2]).not.toContain('.')
+    expect(cores[3]).toBeUndefined()
+  })
+})
+
+describe('held-out set', () => {
+  const text = 'call +1 415 555 0134 about 0f9e'
+  const record = {
+    id: 'h1',
+    lang: 'en',
+    format: 'chat',
+    text,
+    spans: [{ start: 5, end: 20, category: 'PHONE', value: '+1 415 555 0134', core: '415 555 0134' }],
+    negatives: [{ start: 27, end: 31, kind: 'commit-hash', value: '0f9e' }],
+  }
+
+  const directories: string[] = []
+  afterAll(() => {
+    for (const directory of directories) rmSync(directory, { recursive: true, force: true })
+  })
+
+  function writeSet(lines: readonly object[], manifestHash?: string): string {
+    const directory = mkdtempSync(join(tmpdir(), 'heldout-spec-'))
+    directories.push(directory)
+    const contents = lines.map(line => JSON.stringify(line)).join('\n') + '\n'
+    const hash = manifestHash ?? createHash('sha256').update(contents).digest('hex')
+    writeFileSync(join(directory, 'set.jsonl'), contents)
+    writeFileSync(join(directory, 'MANIFEST'), `${hash}  set.jsonl\n`)
+    return join(directory, 'set.jsonl')
+  }
+
+  it('loads records whose hash matches the MANIFEST', () => {
+    const loaded = loadHeldOutSet(writeSet([record]))
+    expect(loaded.fileName).toBe('set.jsonl')
+    expect(loaded.samples).toEqual([{
+      id: 'h1',
+      language: 'en',
+      format: 'chat',
+      text,
+      gold: [{ start: 5, end: 20, category: 'PHONE', core: { start: 8, end: 20 } }],
+      negatives: [{ start: 27, end: 31, kind: 'commit-hash' }],
+    }])
+  })
+
+  it('rejects a file whose hash differs from the MANIFEST', () => {
+    expect(() => loadHeldOutSet(writeSet([record], '0'.repeat(64)))).toThrow('MANIFEST records')
+  })
+
+  it('accepts a core given as absolute offsets inside the span', () => {
+    const sample = parseRecord(JSON.stringify({ ...record, spans: [{ ...record.spans[0], core: { start: 8, end: 20 } }] }), 'x')
+    expect(sample.gold[0]?.core).toEqual({ start: 8, end: 20 })
+  })
+
+  it('rejects offsets that do not hold the value, an unknown category, and a core outside the span', () => {
+    const span = record.spans[0]
+    const withSpan = (changes: object): string => JSON.stringify({ ...record, spans: [{ ...span, ...changes }] })
+    expect(() => parseRecord(withSpan({ start: 4 }), 'x')).toThrow('not the value')
+    expect(() => parseRecord(withSpan({ category: 'ADDRESS' }), 'x')).toThrow('ADDRESS is not one of')
+    expect(() => parseRecord(withSpan({ core: { start: 0, end: 4 } }), 'x')).toThrow('inside the span')
+    expect(() => parseRecord(withSpan({ core: '5' }), 'x')).toThrow('exactly once')
   })
 })

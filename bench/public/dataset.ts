@@ -9,7 +9,6 @@
 import { createRandom } from './random.ts'
 import type { Random } from './random.ts'
 import { FORMATS, TEMPLATES } from './templates.ts'
-import type { Format } from './templates.ts'
 import * as values from './values.ts'
 import { LANGUAGES } from './values.ts'
 import type { Language } from './values.ts'
@@ -27,11 +26,6 @@ export const GOLD_CATEGORIES: readonly GoldCategory[] = [
 export type NegativeKind =
   | 'commit-hash' | 'sha256' | 'uuid' | 'version' | 'order-number' | 'tracking-number' | 'epoch-millis' | 'code-identifier'
 
-/** Every hard-negative kind, in report order. */
-export const NEGATIVE_KINDS: readonly NegativeKind[] = [
-  'commit-hash', 'sha256', 'uuid', 'version', 'order-number', 'tracking-number', 'epoch-millis', 'code-identifier',
-]
-
 /** A range of a sample's text; `end` is exclusive, offsets are UTF-16 code units. */
 export interface Span {
   start: number
@@ -41,18 +35,20 @@ export interface Span {
 /** A sensitive value inside a sample. */
 export interface GoldSpan extends Span {
   category: GoldCategory
+  /** The part of the value that identifies someone, such as the user name of a home path; absent when the set gives none. */
+  core?: Span
 }
 
-/** A hard negative inside a sample. */
+/** A hard negative inside a sample; `kind` names what it is, such as `uuid`. */
 export interface NegativeSpan extends Span {
-  kind: NegativeKind
+  kind: string
 }
 
-/** One benchmark prompt with its ground truth. */
+/** One benchmark prompt with its ground truth. Language and format are free text so a held-out set may add its own. */
 export interface Sample {
   id: string
-  language: Language
-  format: Format
+  language: string
+  format: string
   text: string
   gold: GoldSpan[]
   negatives: NegativeSpan[]
@@ -85,6 +81,14 @@ const SLOTS: Readonly<Record<string, SlotDefinition>> = {
 }
 
 const SLOT_PATTERN = /\{(\w+)\}/g
+
+// Capture group 1 is the part that identifies a person or machine; the rest is a fixed prefix or suffix
+// that a detector may leave unmasked without exposing anyone.
+const CORE_PATTERNS: Readonly<Partial<Record<GoldCategory, RegExp>>> = {
+  PHONE: /^(?:\+\d+ )?(.+)$/d,
+  HOME_PATH: /^\/(?:Users|home)\/(.+)$/d,
+  INTERNAL_HOST: /^([^.]+)\./d,
+}
 
 /** Dataset size and seed. */
 export interface DatasetOptions {
@@ -127,10 +131,15 @@ export function fillTemplate(template: string, random: Random, language: Languag
     text += template.slice(cursor, match.index)
     const value = slot.generate(random, language)
     const span = { start: text.length, end: text.length + value.length }
-    if ('gold' in slot) gold.push({ ...span, category: slot.gold })
+    if ('gold' in slot) gold.push({ ...span, category: slot.gold, ...coreOf(slot.gold, value, span.start) })
     else negatives.push({ ...span, kind: slot.negative })
     text += value
     cursor = match.index + match[0].length
   }
   return { text: text + template.slice(cursor), gold, negatives }
+}
+
+function coreOf(category: GoldCategory, value: string, valueStart: number): Pick<GoldSpan, 'core'> {
+  const range = CORE_PATTERNS[category]?.exec(value)?.indices?.[1]
+  return range === undefined ? {} : { core: { start: valueStart + range[0], end: valueStart + range[1] } }
 }

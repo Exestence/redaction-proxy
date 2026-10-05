@@ -1,5 +1,5 @@
 /**
- * Microsoft Presidio as a comparison system. It runs in the project-local
+ * Microsoft Presidio's analyzer as a comparison system. It runs in the project-local
  * Python environment `bench/presidio/.venv`; without that environment or a
  * spaCy model the benchmark reports Presidio as skipped instead of failing.
  *
@@ -26,9 +26,10 @@ export interface Skipped {
 
 /** First line of the runner's output. */
 interface RunHeader {
-  /** Installed presidio-analyzer version. */
-  version: string
+  presidioVersion: string
+  spacyVersion: string
   model: string
+  modelVersion: string
   defaultConfig: boolean
 }
 
@@ -38,28 +39,29 @@ interface RunLine extends SampleOutcome {
 }
 
 /**
- * Run Presidio over the dataset. The samples cross to Python as JSONL in a
- * private temporary directory that is removed before this returns.
+ * Run Presidio's analyzer over the dataset. The samples cross to Python as
+ * JSONL in a private temporary directory that is removed before this returns.
  * @param samples - the dataset.
+ * @param cutoff - detections scored below this are dropped, as Presidio's `score_threshold` does.
  * @returns Presidio's outcomes, or why it was skipped.
  * @throws {Error} when the runner's output is malformed.
  */
-export function runPresidio(samples: readonly Sample[]): SystemRun | Skipped {
+export function runPresidio(samples: readonly Sample[], cutoff: number): SystemRun | Skipped {
   if (!existsSync(PYTHON)) return { skipped: true, reason: `no Python environment at bench/presidio/.venv; ${SETUP_HINT}` }
   const workDirectory = mkdtempSync(join(tmpdir(), 'public-bench-'))
   try {
     const input = join(workDirectory, 'presidio-input.jsonl')
     const output = join(workDirectory, 'presidio-output.jsonl')
     writeFileSync(input, samples.map(sample => JSON.stringify({ id: sample.id, text: sample.text })).join('\n'))
-    const run = spawnSync(PYTHON, [RUNNER, input, output], { encoding: 'utf8', stdio: ['ignore', 'inherit', 'pipe'] })
+    const run = spawnSync(PYTHON, [RUNNER, input, output, String(cutoff)], { encoding: 'utf8', stdio: ['ignore', 'inherit', 'pipe'] })
     if (run.status !== 0) return { skipped: true, reason: `${lastLine(run.stderr)}; ${SETUP_HINT}` }
-    return parseRun(readFileSync(output, 'utf8'))
+    return parseRun(readFileSync(output, 'utf8'), cutoff)
   } finally {
     rmSync(workDirectory, { recursive: true, force: true })
   }
 }
 
-function parseRun(jsonl: string): SystemRun {
+function parseRun(jsonl: string, cutoff: number): SystemRun {
   const [headerLine, ...lines] = jsonl.trim().split('\n')
   if (headerLine === undefined || headerLine === '') throw new Error('the Presidio runner wrote no output')
   const header = JSON.parse(headerLine) as RunHeader
@@ -69,12 +71,17 @@ function parseRun(jsonl: string): SystemRun {
     outcomes.set(id, outcome)
   }
   return {
-    name: `Presidio ${header.version} (${header.model})`,
-    note: header.defaultConfig
-      ? 'default analyzer and anonymizer, language "en" for every sample'
-      : 'default recognizers on the small spaCy model, not the default en_core_web_lg; language "en" for every sample',
+    name: `Presidio ${header.presidioVersion} (${header.model}, cutoff ${cutoff})`,
+    note: describeSetup(header),
+    englishAnalyzerOnly: true,
     outcomes,
   }
+}
+
+function describeSetup(header: RunHeader): string {
+  const model = header.defaultConfig ? `${header.model} ${header.modelVersion}, the default model` : `${header.model} ${header.modelVersion}, not the default en_core_web_lg`
+  return `Presidio: presidio-analyzer ${header.presidioVersion}, spaCy ${header.spacyVersion}, ${model}; default recognizers; `
+    + `language "en" for every prompt; the cutoff is Presidio's \`score_threshold\`, below which detections are dropped; latency is analysis only`
 }
 
 function lastLine(text: string): string {
