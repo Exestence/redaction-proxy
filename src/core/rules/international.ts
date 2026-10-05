@@ -24,6 +24,7 @@ import {
   isMyNumber,
   isSpanishIdentityNumber,
 } from './checksum.ts'
+import { KEYWORD_GAP } from './rules.ts'
 
 /** Names of the opt-in international rules. */
 export type InternationalRuleName =
@@ -99,8 +100,6 @@ const RIGHT_EDGE = '(?![A-Za-z0-9])'
  * a digit and a space, as in a list of identifiers, still counts.
  */
 const GROUPED_LEFT_EDGE = '(?<![A-Za-z0-9-])(?!(?<=\\d )\\d+ )'
-/** Characters between a keyword and its value: a colon, a space, a short word such as `is`. */
-const KEYWORD_GAP = '[^\\n]{0,8}?'
 /** Separators removed from a matched value before its check runs. */
 const VALUE_SEPARATORS = /[\s().-]/g
 
@@ -211,6 +210,9 @@ const CHINA_BIRTH_DATE_START = 6
 const CHINA_BIRTH_DATE_END = 14
 const BIRTH_YEAR_MIN = 1900
 const BIRTH_YEAR_MAX = 2099
+/** Ends of the year and month fields of a `YYYYMMDD` date. */
+const YEAR_END = 4
+const MONTH_END = 6
 
 /** Hong Kong identity card number with its bracketed check character: `A123456(3)`. */
 const HONG_KONG_ID_BRACKETED = new RegExp(`${LEFT_EDGE}[A-Z]{1,2}\\d{6}\\([\\dA]\\)`, 'g')
@@ -229,8 +231,8 @@ const KOREA_RRN_CENTURY_START: Readonly<Record<string, number>> = {
 /** Length of the two-digit birth year and of the whole `YYMMDD` birth date that open an RRN. */
 const KOREA_RRN_BIRTH_YEAR_LENGTH = 2
 const KOREA_RRN_BIRTH_DATE_LENGTH = 6
-/** Position, counted from one, of the digit that encodes gender and birth century. */
-const KOREA_RRN_GENDER_DIGIT = 7
+/** Index of the digit that encodes gender and birth century. */
+const KOREA_RRN_GENDER_DIGIT_INDEX = 6
 
 /** Words that introduce a telephone number in the languages the mobile rules serve. */
 const PHONE_KEYWORDS = [
@@ -310,9 +312,9 @@ function mobilePatterns(format: MobileNumberFormat): RegExp[] {
  * @returns whether the date exists.
  */
 function isBirthDate(yyyymmdd: string): boolean {
-  const year = Number(yyyymmdd.slice(0, 4))
-  const monthIndex = Number(yyyymmdd.slice(4, 6)) - 1
-  const day = Number(yyyymmdd.slice(6, 8))
+  const year = Number(yyyymmdd.slice(0, YEAR_END))
+  const monthIndex = Number(yyyymmdd.slice(YEAR_END, MONTH_END)) - 1
+  const day = Number(yyyymmdd.slice(MONTH_END))
   if (year < BIRTH_YEAR_MIN || year > BIRTH_YEAR_MAX) return false
   const date = new Date(Date.UTC(year, monthIndex, day))
   return date.getUTCFullYear() === year && date.getUTCMonth() === monthIndex && date.getUTCDate() === day
@@ -384,7 +386,7 @@ function isChinaResidentId(value: string): boolean {
  */
 function isKoreaResidentNumber(digits: string): boolean {
   // oxlint-disable-next-line typescript/no-non-null-assertion -- the pattern admits gender digits 1-8 only.
-  const century = KOREA_RRN_CENTURY_START[digits.charAt(KOREA_RRN_GENDER_DIGIT - 1)]!
+  const century = KOREA_RRN_CENTURY_START[digits.charAt(KOREA_RRN_GENDER_DIGIT_INDEX)]!
   const year = century + Number(digits.slice(0, KOREA_RRN_BIRTH_YEAR_LENGTH))
   const monthAndDay = digits.slice(KOREA_RRN_BIRTH_YEAR_LENGTH, KOREA_RRN_BIRTH_DATE_LENGTH)
   return isBirthDate(`${year}${monthAndDay}`) && isKoreaResidentNumberChecksumValid(digits)

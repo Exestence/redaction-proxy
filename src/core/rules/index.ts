@@ -41,7 +41,7 @@ import {
   isInternationalRule,
 } from './international.ts'
 
-export { isTaiwanBusinessNumber, isTaiwanNationalId } from './rules.ts'
+export { isTaiwanBusinessNumber, isTaiwanNationalId } from './checksum.ts'
 
 export type { InternationalRuleName } from './international.ts'
 

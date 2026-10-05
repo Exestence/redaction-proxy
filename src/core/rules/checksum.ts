@@ -6,7 +6,6 @@
  * @module redaction-proxy/core/rules/checksum
  */
 
-const CHAR_CODE_ZERO = 48
 const DECIMAL_BASE = 10
 const MOD_97 = 97
 /** ISO 13616: a valid IBAN leaves this remainder modulo 97. */
@@ -19,6 +18,17 @@ const LETTER_VALUE_OFFSET = 10
 const MOD_97_CHUNK = 9
 /** ISO 7064 MOD 11,10 and MOD 11-2 work modulo eleven. */
 const MOD_11 = 11
+
+/** Letters of a Taiwan identification number in checksum order; a letter's value is its index plus ten. */
+const TAIWAN_ID_LETTERS = 'ABCDEFGHJKLMNPQRSTUVXYWZIO'
+/** Weights of the two-digit letter value and the nine digits of a Taiwan identification number. */
+const TAIWAN_ID_WEIGHTS = [1, 9, 8, 7, 6, 5, 4, 3, 2, 1, 1]
+/** Weights of the Taiwan business-number (統一編號) checksum. */
+const TAIWAN_BUSINESS_NUMBER_WEIGHTS = [1, 2, 1, 2, 1, 2, 4, 1]
+/** A Taiwan business number's digit sum is a multiple of this. */
+const TAIWAN_BUSINESS_NUMBER_DIVISOR = 5
+/** Index of the business-number digit that, when it is 7, also allows a sum one short of a multiple of the divisor. */
+const TAIWAN_BUSINESS_NUMBER_SEVENTH_DIGIT = 6
 
 /** Check letters of a Spanish DNI or NIE, indexed by the number modulo 23. */
 const DNI_LETTERS = 'TRWAGMYFPDXBNJZSQVHLCKE'
@@ -54,6 +64,8 @@ const ALPHABET_SIZE = 26
 const POLAND_NIP_WEIGHTS = [6, 5, 7, 2, 3, 4, 5, 6, 7]
 /** Weights of the nine digits of a Dutch VAT number under the eleven test; the check digit counts negative. */
 const NETHERLANDS_ELEVEN_TEST_WEIGHTS = [9, 8, 7, 6, 5, 4, 3, 2, -1]
+/** Weights of the seven digits before an Austrian UID check digit. */
+const AUSTRIA_UID_WEIGHTS = [1, 2, 1, 2, 1, 2, 1]
 /** Offset added to an Austrian UID's weighted digit sum before the check digit is taken. */
 const AUSTRIA_UID_OFFSET = 4
 /** Two check digits: the French VAT key before the SIREN, the Belgian check at the end. */
@@ -74,7 +86,7 @@ const NIR_CORSICA_DEPARTMENTS: Readonly<Record<string, string>> = { '2A': '19', 
  * @returns the digit's value.
  */
 function digitValue(char: string): number {
-  return char.charCodeAt(0) - CHAR_CODE_ZERO
+  return char.charCodeAt(0) - '0'.charCodeAt(0)
 }
 
 /**
@@ -85,6 +97,20 @@ function digitValue(char: string): number {
  */
 function weightedSum(digits: string, weights: readonly number[]): number {
   return weights.reduce((sum, weight, i) => sum + digitValue(digits.charAt(i)) * weight, 0)
+}
+
+/**
+ * Sum of the decimal digits of each digit-times-weight product, as the Taiwan
+ * business number and the Austrian UID count them (`2 × 7 = 14` adds `1 + 4`).
+ * @param digits - decimal digits, at least as many as `weights`.
+ * @param weights - weight of each leading digit.
+ * @returns the sum of the products' digit sums.
+ */
+function productDigitSum(digits: string, weights: readonly number[]): number {
+  return weights.reduce((sum, weight, i) => {
+    const product = digitValue(digits.charAt(i)) * weight
+    return sum + Math.floor(product / DECIMAL_BASE) + (product % DECIMAL_BASE)
+  }, 0)
 }
 
 /**
@@ -149,6 +175,33 @@ export function luhn(digits: string): boolean {
 }
 
 /**
+ * Whether a ten-character candidate passes the Taiwan identification-number
+ * checksum. National numbers carry `1` or `2`; resident certificate numbers
+ * issued since 2021 carry `8` or `9`.
+ * @param candidate - one upper-case letter, `1`, `2`, `8`, or `9`, and eight digits.
+ * @returns whether the weighted checksum is divisible by ten.
+ */
+export function isTaiwanNationalId(candidate: string): boolean {
+  if (!/^[A-Z][1289]\d{8}$/.test(candidate)) return false
+  const letterValue = TAIWAN_ID_LETTERS.indexOf(candidate.charAt(0)) + LETTER_VALUE_OFFSET
+  return weightedSum(`${letterValue}${candidate.slice(1)}`, TAIWAN_ID_WEIGHTS) % DECIMAL_BASE === 0
+}
+
+/**
+ * Whether eight digits pass the Taiwan business-number (統一編號) checksum:
+ * the digit sums of the weighted products total a multiple of 5, or one less
+ * than a multiple of 5 when the seventh digit is 7.
+ * @param digits - eight decimal digits.
+ * @returns whether the checksum holds.
+ */
+export function isTaiwanBusinessNumber(digits: string): boolean {
+  if (!/^\d{8}$/.test(digits)) return false
+  const sum = productDigitSum(digits, TAIWAN_BUSINESS_NUMBER_WEIGHTS)
+  return sum % TAIWAN_BUSINESS_NUMBER_DIVISOR === 0
+    || (digits.charAt(TAIWAN_BUSINESS_NUMBER_SEVENTH_DIGIT) === '7' && (sum + 1) % TAIWAN_BUSINESS_NUMBER_DIVISOR === 0)
+}
+
+/**
  * Whether the last digit is the ISO 7064 MOD 11,10 check digit of the others.
  * @param digits - decimal digits, the check digit last.
  * @returns whether the check digit holds.
@@ -182,6 +235,16 @@ export function isSpanishIdentityNumber(value: string): boolean {
 }
 
 /**
+ * Value of an even (2nd, 4th, ...) fiscal-code character: digits 0-9, letters
+ * 0-25, so a letter drops the offset of ten {@link alphanumericValue} gives it.
+ * @param value - the character's alphanumeric value, 0-35.
+ * @returns the value the check sum adds.
+ */
+function fiscalCodeEvenValue(value: number): number {
+  return value < DECIMAL_BASE ? value : value - LETTER_VALUE_OFFSET
+}
+
+/**
  * Whether an Italian fiscal code carries its check character. Omocode letters
  * standing in for digits are valued as the letters they are.
  * @param code - sixteen upper-case characters.
@@ -192,9 +255,8 @@ export function isItalianFiscalCode(code: string): boolean {
   for (const [i, char] of [...code.slice(0, -1)].entries()) {
     const value = alphanumericValue(char)
     const isOddPosition = i % 2 === 0
-    // Even positions value digits 0-9 and letters 0-25, so a letter drops its offset of ten.
     // oxlint-disable-next-line typescript/no-non-null-assertion -- value is in 0..35.
-    sum += isOddPosition ? FISCAL_CODE_ODD_VALUES[value]! : value < DECIMAL_BASE ? value : value - LETTER_VALUE_OFFSET
+    sum += isOddPosition ? FISCAL_CODE_ODD_VALUES[value]! : fiscalCodeEvenValue(value)
   }
   return String.fromCharCode('A'.charCodeAt(0) + (sum % ALPHABET_SIZE)) === code.slice(-1)
 }
@@ -277,19 +339,6 @@ export function isGermanTaxId(digits: string): boolean {
   return iso7064Mod11Of10(digits)
 }
 
-/**
- * Whether the digits after an EU VAT number's country prefix pass that
- * country's check. Only the countries listed here have a check this module
- * implements; any other prefix fails.
- * @param country - two-letter VAT prefix.
- * @param number - the characters after the prefix.
- * @returns whether the number is valid for the country.
- */
-export function isEuVatNumber(country: string, number: string): boolean {
-  const check = EU_VAT_CHECKS[country]
-  return check !== undefined && check(number)
-}
-
 /** Format and check of each supported EU VAT prefix. */
 const EU_VAT_CHECKS: Readonly<Record<string, (number: string) => boolean>> = {
   AT: number => /^U\d{8}$/.test(number) && isAustrianUid(number.slice(1)),
@@ -303,16 +352,25 @@ const EU_VAT_CHECKS: Readonly<Record<string, (number: string) => boolean>> = {
 }
 
 /**
+ * Whether the digits after an EU VAT number's country prefix pass that
+ * country's check. Only the countries listed here have a check this module
+ * implements; any other prefix fails.
+ * @param country - two-letter VAT prefix.
+ * @param number - the characters after the prefix.
+ * @returns whether the number is valid for the country.
+ */
+export function isEuVatNumber(country: string, number: string): boolean {
+  const check = EU_VAT_CHECKS[country]
+  return check !== undefined && check(number)
+}
+
+/**
  * Whether an Austrian UID's eighth digit matches its first seven.
  * @param digits - the eight digits after `ATU`.
  * @returns whether the check digit holds.
  */
 function isAustrianUid(digits: string): boolean {
-  let sum = 0
-  for (const [i, char] of [...digits.slice(0, -1)].entries()) {
-    const product = digitValue(char) * (i % 2 === 0 ? 1 : 2)
-    sum += Math.floor(product / DECIMAL_BASE) + (product % DECIMAL_BASE)
-  }
+  const sum = productDigitSum(digits, AUSTRIA_UID_WEIGHTS)
   return (DECIMAL_BASE - ((sum + AUSTRIA_UID_OFFSET) % DECIMAL_BASE)) % DECIMAL_BASE === digitValue(digits.slice(-1))
 }
 
