@@ -6,8 +6,9 @@ import { afterAll, describe, expect, it } from 'vitest'
 import { isTaiwanNationalId } from '../src/core/index.ts'
 import { buildDataset, fillTemplate } from '../bench/public/dataset.ts'
 import type { Sample } from '../bench/public/dataset.ts'
-import { loadHeldOutSet, parseRecord } from '../bench/public/heldout.ts'
+import { categoriesInReportOrder, loadHeldOutSet, parseRecord } from '../bench/public/heldout.ts'
 import { classify, isCovered, mergeOverlapping, percentile, scoreSystem } from '../bench/public/metrics.ts'
+import { renderMarkdown } from '../bench/public/report.ts'
 import { createRandom } from '../bench/public/random.ts'
 import type { SystemRun } from '../bench/public/systems.ts'
 import { luhnCheckDigit, myNumberCheckDigit, nationalId, prcCheckCharacter } from '../bench/public/values.ts'
@@ -98,11 +99,11 @@ describe('metrics', () => {
       name: 'stub',
       outcomes: new Map([['one', { detected: [{ start: 5, end: 20 }, { start: 27, end: 35 }, { start: 42, end: 48 }], milliseconds: 1 }]]),
     }
-    const report = scoreSystem(run, [sample])
-    expect(report.byCategory.EMAIL.outcomes.fullyMasked).toEqual({ hits: 1, total: 1 })
-    expect(report.byCategory.PHONE.outcomes.partlyMasked).toEqual({ hits: 1, total: 1 })
-    expect(report.byCategory.PHONE.coreFullyMasked).toEqual({ hits: 1, total: 1 })
-    expect(report.byCategory.EMAIL.coreFullyMasked.total).toBe(0)
+    const report = scoreSystem(run, [sample], ['EMAIL', 'PHONE'])
+    expect(report.byCategory.EMAIL?.outcomes.fullyMasked).toEqual({ hits: 1, total: 1 })
+    expect(report.byCategory.PHONE?.outcomes.partlyMasked).toEqual({ hits: 1, total: 1 })
+    expect(report.byCategory.PHONE?.coreFullyMasked).toEqual({ hits: 1, total: 1 })
+    expect(report.byCategory.EMAIL?.coreFullyMasked.total).toBe(0)
     expect(report.macroAverage).toEqual({ categories: 2, outcomes: { fullyMasked: 0.5, partlyMasked: 0.5, untouched: 0 } })
     expect(report.overall.regionPrecision).toEqual({ hits: 2, total: 3 })
     expect(report.overall.restoreExact).toBeUndefined()
@@ -169,12 +170,64 @@ describe('held-out set', () => {
     expect(sample.gold[0]?.core).toEqual({ start: 8, end: 20 })
   })
 
-  it('rejects offsets that do not hold the value, an unknown category, and a core outside the span', () => {
+  it('rejects offsets that do not hold the value, an empty category, and a core outside the span', () => {
     const span = record.spans[0]
     const withSpan = (changes: object): string => JSON.stringify({ ...record, spans: [{ ...span, ...changes }] })
     expect(() => parseRecord(withSpan({ start: 4 }), 'x')).toThrow('not the value')
-    expect(() => parseRecord(withSpan({ category: 'ADDRESS' }), 'x')).toThrow('ADDRESS is not one of')
+    expect(() => parseRecord(withSpan({ category: '' }), 'x')).toThrow('must not be empty')
     expect(() => parseRecord(withSpan({ core: { start: 0, end: 4 } }), 'x')).toThrow('inside the span')
     expect(() => parseRecord(withSpan({ core: '5' }), 'x')).toThrow('exactly once')
+  })
+
+  // After the emoji, UTF-16 offsets run one ahead of code-point offsets.
+  const astralText = '😀 Ana Lin, ana@corp.test, build 0f9e'
+  const astralRecord = {
+    id: 'h2',
+    lang: 'en',
+    format: 'chat',
+    text: astralText,
+    spans: [
+      { start: 3, end: 10, start_cp: 2, end_cp: 9, category: 'PERSON', value: 'Ana Lin' },
+      { start: 12, end: 25, start_cp: 11, end_cp: 24, category: 'EMAIL', value: 'ana@corp.test', core: { start: 12, end: 15, start_cp: 11, end_cp: 14 } },
+    ],
+    negatives: [{ start: 33, end: 37, start_cp: 32, end_cp: 36, category: 'commit_hash', value: '0f9e' }],
+  }
+
+  it('loads categories the dev set does not have and free-form negative labels', () => {
+    const sample = parseRecord(JSON.stringify(astralRecord), 'x')
+    expect(sample.gold).toEqual([
+      { start: 3, end: 10, category: 'PERSON' },
+      { start: 12, end: 25, category: 'EMAIL', core: { start: 12, end: 15 } },
+    ])
+    expect(sample.negatives).toEqual([{ start: 33, end: 37, kind: 'commit_hash' }])
+  })
+
+  it('rejects code-point offsets that disagree with the UTF-16 offsets', () => {
+    const [person, email] = astralRecord.spans
+    const withSpans = (spans: readonly object[]): string => JSON.stringify({ ...astralRecord, spans })
+    expect(() => parseRecord(withSpans([{ ...person, start_cp: 3, end_cp: 10 }]), 'x')).toThrow('expected 2..9')
+    expect(() => parseRecord(withSpans([{ ...email, core: { ...email?.core, end_cp: 15 } }]), 'x')).toThrow('core code-point offsets')
+  })
+
+  it('orders the categories it finds by report order, then unlisted ones by first appearance', () => {
+    const withCategories = (...categories: string[]): Sample => ({
+      id: '', language: 'en', format: 'chat', text: '', negatives: [],
+      gold: categories.map(category => ({ start: 0, end: 1, category })),
+    })
+    expect(categoriesInReportOrder([withCategories('HOST', 'ZODIAC', 'PERSON'), withCategories('IBAN', 'AGE')]))
+      .toEqual(['PERSON', 'IBAN', 'HOST', 'ZODIAC', 'AGE'])
+  })
+
+  it('reports by the categories it was scored on', () => {
+    const sample = parseRecord(JSON.stringify(astralRecord), 'x')
+    const run: SystemRun = { name: 'stub', outcomes: new Map([['h2', { detected: [{ start: 12, end: 25 }], milliseconds: 1 }]]) }
+    const report = scoreSystem(run, [sample], ['PERSON', 'EMAIL', 'IBAN'])
+    const markdown = renderMarkdown({
+      set: 'held-out', source: 'fixture', reproduce: 'n/a', sampleCount: 1, goldCount: 2, negativeCount: 1,
+      detectorVersion: 'test', editsAfterResults: [], english: [report], allLanguages: [report], skipped: [],
+    })
+    expect(markdown).toContain('| PERSON | 0.0% / 0.0% / 100.0% |\n| EMAIL | 100.0% / 0.0% / 0.0% |\n| IBAN | — / — / — |')
+    expect(markdown).toContain('| commit_hash | 0.0% |')
+    expect(markdown).not.toContain('HOME_PATH')
   })
 })

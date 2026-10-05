@@ -13,11 +13,11 @@ import * as values from './values.ts'
 import { LANGUAGES } from './values.ts'
 import type { Language } from './values.ts'
 
-/** What a sensitive value is, independent of how any detector names it. */
+/** What a sensitive value in the dev set is, independent of how any detector names it. */
 export type GoldCategory =
   | 'PERSON' | 'EMAIL' | 'PHONE' | 'NATIONAL_ID' | 'CARD' | 'SECRET' | 'HOME_PATH' | 'PRIVATE_IP' | 'INTERNAL_HOST'
 
-/** Every gold category, in report order. */
+/** Every dev-set gold category, in report order. */
 export const GOLD_CATEGORIES: readonly GoldCategory[] = [
   'PERSON', 'EMAIL', 'PHONE', 'NATIONAL_ID', 'CARD', 'SECRET', 'HOME_PATH', 'PRIVATE_IP', 'INTERNAL_HOST',
 ]
@@ -34,7 +34,8 @@ export interface Span {
 
 /** A sensitive value inside a sample. */
 export interface GoldSpan extends Span {
-  category: GoldCategory
+  /** A {@link GoldCategory} in the dev set; a held-out set brings its own category names. */
+  category: string
   /** The part of the value that identifies someone, such as the user name of a home path; absent when the set gives none. */
   core?: Span
 }

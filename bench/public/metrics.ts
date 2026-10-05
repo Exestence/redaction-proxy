@@ -15,8 +15,7 @@
  * @module bench/public/metrics
  */
 
-import { GOLD_CATEGORIES } from './dataset.ts'
-import type { GoldCategory, GoldSpan, Sample, Span } from './dataset.ts'
+import type { GoldSpan, Sample, Span } from './dataset.ts'
 import type { SampleOutcome, SystemRun } from './systems.ts'
 
 /** A count of hits among a total. */
@@ -57,7 +56,8 @@ export interface SystemReport {
   note?: string
   /** The system analyzes every prompt as English; its results on other languages are reference only. */
   englishAnalyzerOnly?: true
-  byCategory: Record<GoldCategory, ValueScore>
+  /** One entry per category of the scored set, in its report order. */
+  byCategory: Record<string, ValueScore>
   /** Mean of the per-category rates over the categories present, each weighted equally. */
   macroAverage: { categories: number; outcomes: Record<MaskOutcome, number> }
   overall: Scorecard
@@ -90,13 +90,14 @@ const TAIL_PERCENT = 95
  * Score one system on a group of samples.
  * @param run - the system's outcomes; may cover more samples than `samples`.
  * @param samples - the samples to score.
+ * @param categories - the set's gold categories, in report order.
  * @returns per-category, macro-average, overall, per-language, and per-format scores, hard-negative hits, and latency.
  * @throws {Error} when the run has no outcome for a sample.
  */
-export function scoreSystem(run: SystemRun, samples: readonly Sample[]): SystemReport {
+export function scoreSystem(run: SystemRun, samples: readonly Sample[], categories: readonly string[]): SystemReport {
   const judgements = samples.map(sample => judge(sample, outcomeOf(run, sample)))
   const allValues = judgements.flatMap(j => j.values)
-  const byCategory = tabulate(GOLD_CATEGORIES, category => scoreValues(allValues.filter(value => value.gold.category === category)))
+  const byCategory = tabulate(categories, category => scoreValues(allValues.filter(value => value.gold.category === category)))
   const milliseconds = judgements.map(j => j.outcome.milliseconds)
   return {
     name: run.name,

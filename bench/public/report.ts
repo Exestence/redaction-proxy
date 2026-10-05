@@ -4,8 +4,6 @@
  * @module bench/public/report
  */
 
-import { GOLD_CATEGORIES } from './dataset.ts'
-import type { GoldCategory } from './dataset.ts'
 import { MASK_OUTCOMES, fraction } from './metrics.ts'
 import type { Rate, Scorecard, SystemReport, ValueScore } from './metrics.ts'
 
@@ -40,6 +38,8 @@ interface TableSpec {
   cell: (system: SystemReport, key: string) => string
 }
 
+const NO_VALUES: Rate = { hits: 0, total: 0 }
+const NOT_MEASURED = '—'
 const PERCENT_DIGITS = 1
 const MILLISECOND_DIGITS = 2
 const ENGLISH = 'en'
@@ -83,19 +83,19 @@ function renderSummary(result: SetResult): string {
 }
 
 function renderCategoryTable(systems: readonly SystemReport[]): string {
-  const categoryRows = GOLD_CATEGORIES.map(category => [category, ...systems.map(system => outcomeCell(system.byCategory[category]))])
+  const categoryRows = categoryKeys(systems).map(category => [category, ...systems.map(system => outcomeCell(system.byCategory[category]))])
   const macroLabel = `**Macro average** (${systems[0]?.macroAverage.categories ?? 0} categories, equal weight)`
   const macroRow = [macroLabel, ...systems.map(system => MASK_OUTCOMES.map(outcome => formatFraction(system.macroAverage.outcomes[outcome])).join(' / '))]
   return markdownTable(['Category', ...systems.map(system => system.name)], [...categoryRows, macroRow])
 }
 
 function renderCoreTable(systems: readonly SystemReport[]): string {
-  const categories = GOLD_CATEGORIES.filter(category => systems.some(system => system.byCategory[category].coreFullyMasked.total > 0))
+  const categories = categoryKeys(systems).filter(category => systems.some(system => (system.byCategory[category]?.coreFullyMasked.total ?? 0) > 0))
   if (categories.length === 0) return ''
   return renderTable(systems, {
     label: 'Identifying core fully masked',
     keys: categories,
-    cell: (system, category) => percent(system.byCategory[category as GoldCategory].coreFullyMasked),
+    cell: (system, category) => percent(system.byCategory[category]?.coreFullyMasked ?? NO_VALUES),
   })
 }
 
@@ -114,7 +114,7 @@ function renderNegativeTable(systems: readonly SystemReport[]): string {
   return renderTable(systems, {
     label: 'Hard negatives masked (lower is better)',
     keys: groupKeys(systems, system => system.negativeHits),
-    cell: (system, kind) => percent(system.negativeHits[kind] ?? { hits: 0, total: 0 }),
+    cell: (system, kind) => percent(system.negativeHits[kind] ?? NO_VALUES),
   })
 }
 
@@ -141,12 +141,13 @@ function renderNotes(result: SetResult): string {
   ].join('\n')
 }
 
-function outcomeCell(score: ValueScore): string {
+function outcomeCell(score: ValueScore | undefined): string {
+  if (score === undefined) return NOT_MEASURED
   return MASK_OUTCOMES.map(outcome => percent(score.outcomes[outcome])).join(' / ')
 }
 
 function scorecardCell(score: Scorecard | undefined): string {
-  return score === undefined ? '—' : `${percent(score.outcomes.fullyMasked)} fully masked, ${percent(score.regionPrecision)} precision`
+  return score === undefined ? NOT_MEASURED : `${percent(score.outcomes.fullyMasked)} fully masked, ${percent(score.regionPrecision)} precision`
 }
 
 function languageCell(system: SystemReport, language: string): string {
@@ -154,12 +155,16 @@ function languageCell(system: SystemReport, language: string): string {
   return system.englishAnalyzerOnly === true && language !== ENGLISH ? `${cell} (${REFERENCE_ONLY})` : cell
 }
 
+function categoryKeys(systems: readonly SystemReport[]): string[] {
+  return groupKeys(systems, system => system.byCategory)
+}
+
 function groupKeys(systems: readonly SystemReport[], groups: (system: SystemReport) => Record<string, unknown>): string[] {
   return [...new Set(systems.flatMap(system => Object.keys(groups(system))))]
 }
 
 function percent(rate: Rate): string {
-  return rate.total === 0 ? '—' : formatFraction(fraction(rate))
+  return rate.total === 0 ? NOT_MEASURED : formatFraction(fraction(rate))
 }
 
 function formatFraction(value: number): string {

@@ -13,7 +13,7 @@ import { mkdirSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { parseArgs } from 'node:util'
 import { DETECTOR_VERSION, RulesDetector } from '../../src/core/index.ts'
-import { buildDataset } from './dataset.ts'
+import { GOLD_CATEGORIES, buildDataset } from './dataset.ts'
 import type { Sample } from './dataset.ts'
 import { loadHeldOutSet } from './heldout.ts'
 import { scoreSystem } from './metrics.ts'
@@ -29,6 +29,8 @@ interface EvaluationSet {
   source: string
   reproduce: string
   samples: Sample[]
+  /** Gold categories in report order. */
+  categories: readonly string[]
   editsAfterResults: string[]
 }
 
@@ -72,17 +74,19 @@ function devSet(seed: number, samplesPerCell: number): EvaluationSet {
     source: `Generated from \`bench/public/templates.ts\`, seed ${seed}, ${samplesPerCell} prompts per language and format`,
     reproduce: `pnpm run bench:public --seed ${seed} --per-cell ${samplesPerCell}`,
     samples: buildDataset({ seed, samplesPerCell }),
+    categories: GOLD_CATEGORIES,
     editsAfterResults: DEV_EDITS_AFTER_RESULTS,
   }
 }
 
 function heldOutSet(path: string): EvaluationSet {
-  const { fileName, sha256, samples } = loadHeldOutSet(path)
+  const { fileName, sha256, samples, categories } = loadHeldOutSet(path)
   return {
     label: 'held-out',
     source: `Frozen file \`${fileName}\`, SHA-256 \`${sha256}\``,
     reproduce: `pnpm run bench:public --heldout <path to ${fileName}>`,
     samples,
+    categories,
     editsAfterResults: [],
   }
 }
@@ -108,8 +112,8 @@ async function evaluate(set: EvaluationSet): Promise<SetResult> {
     negativeCount: countSpans(set.samples, sample => sample.negatives.length),
     detectorVersion: DETECTOR_VERSION,
     editsAfterResults: set.editsAfterResults,
-    english: runs.map(run => scoreSystem(run, englishSamples)),
-    allLanguages: runs.map(run => scoreSystem(run, set.samples)),
+    english: runs.map(run => scoreSystem(run, englishSamples, set.categories)),
+    allLanguages: runs.map(run => scoreSystem(run, set.samples, set.categories)),
     skipped,
   }
 }
