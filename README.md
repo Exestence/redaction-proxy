@@ -152,6 +152,7 @@ What it reads, and what it does not:
 - A person name it finds is masked everywhere else in the request too, including system prompts and tool output, with the same placeholder (`許雅雯` and `許 雅 雯` share one). A single ASCII word (`Jordan`) is masked only where the model found it, because the same word elsewhere is too often a product or a setting. Companies, places, and addresses are masked only where found.
 - Rules win: a span that overlaps an email, key, or other rule detection is dropped.
 - Words such as `Kafka`, `Docker`, `Podman`, `Default`, `High`, and `Low` are on a default allowlist (`nameModel.allowlist`).
+- A span can be too short or too long. A partly found Chinese name sends the rest as written (`林小明` → `⟦NAME_1⟧明`). A Japanese span can take the particle after the name (`佐藤美咲さんに`), so a reply that writes `⟦NAME_1⟧さん` is restored as `佐藤美咲さんにさん`.
 
 Measured (one held-out run, numbers are recall unless noted):
 
