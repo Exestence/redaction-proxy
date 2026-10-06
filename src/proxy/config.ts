@@ -49,7 +49,7 @@ export interface ProxyConfig {
  * digit and a diff's `+` marker makes every added numeric or timestamp line
  * read as an international number.
  */
-const PROXY_DEFAULT_RULES = RULE_NAMES.filter(rule => rule !== 'e164-phone')
+export const PROXY_DEFAULT_RULES = RULE_NAMES.filter(rule => rule !== 'e164-phone')
 
 const FILE_KEYS = new Set(['port', 'openaiUpstream', 'anthropicUpstream', 'redaction', 'nameModel', 'screen', 'debugMasked'])
 

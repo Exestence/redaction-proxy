@@ -28,6 +28,8 @@ export interface SampleOutcome {
 export interface CoreSystem {
   name: string
   detector: RedactionDetector
+  /** Caveat printed beside the system's results. */
+  note?: string
 }
 
 /** One system's outcomes, keyed by sample id. */
@@ -59,5 +61,5 @@ export async function runCoreDetector(system: CoreSystem, samples: readonly Samp
       milliseconds: performance.now() - started,
     })
   }
-  return { name: system.name, outcomes }
+  return { name: system.name, ...(system.note === undefined ? {} : { note: system.note }), outcomes }
 }
