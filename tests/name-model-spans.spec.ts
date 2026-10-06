@@ -21,6 +21,13 @@ describe('proseLayout', () => {
       .toEqual(['Subject: Q3', 'John Doe asked.\nok'])
   })
 
+  it('keeps chat that starts with a lower-case keyword as prose, and keyword-led code as code', () => {
+    const prose = ['let me know if Jordan Lee agrees', 'return the laptop to Evelyn Hartwell', 'then ask Evelyn', 'export the report for Evelyn']
+    const code = ['import os', 'import { join } from \'node:path\'', 'export const owner = 1', 'return owner', 'let owner: string', 'done']
+    expect(prose.map(line => proseLayout(line).paragraphs.length)).toEqual([1, 1, 1, 1])
+    expect(code.map(line => proseLayout(line).paragraphs.length)).toEqual([0, 0, 0, 0, 0, 0])
+  })
+
   it('keeps a lone YAML-like line as prose', () => {
     expect(proseLayout('note: call Jane tomorrow').paragraphs).toHaveLength(1)
   })

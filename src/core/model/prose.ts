@@ -34,8 +34,11 @@ const CODE_LINE: readonly RegExp[] = [
   /[;{}[(]\s*$/, /=>\s*$/, /^\s*[}\])]/,
   /^\s*(\/\/|\/\*|\*\/|\* |\*$|<!--|#!|\$ |>>> )/,
   /^\s*@\w+\(/, /^\s*<\/?[A-Za-z][\w.-]*[\s/>]/,
-  /^\s*(import|export|const|let|var|function|def|class|return|package|public|private|protected|static|fn|func|SELECT|INSERT|UPDATE|DELETE|CREATE)\s/,
-  /^\s*(if|for|while|switch|catch|elif)\s*\(/, /^\s*(declare|readonly|interface|enum|echo|exit|fi|then|done|esac)\b/, /^\s*type\s+\w+\s*=/,
+  // A keyword starts code only when one token follows it and then code punctuation or the line end, so chat that
+  // starts lower-case (`let me know`, `return the laptop`, `done, ...`) stays prose.
+  /^\s*((import|export|default|const|let|var|function|def|class|return|package|public|private|protected|static|fn|func|declare|readonly|interface|enum|type|echo|exit)\s+)+([{*"'([]|[\w$.-]+(\s*[=:;,(<{]|\s*$|\s+(as|from|extends|implements)\b))/,
+  /^\s*(SELECT|INSERT|UPDATE|DELETE|CREATE)\s/, /^\s*(fi|then|done|esac|else|do)\s*;?\s*$/,
+  /^\s*(if|for|while|switch|catch|elif)\s*\(/,
   // Two or more spaces of indent that do not start a nested list item.
   /^ {2,}(?![-*+] |\d+\. )\S/,
   /^\s*from\s+\S+\s+import\s/, /^\s*[\w.$[\]"']+\s*[-+*/]?=\s*\S/, /(=>|===|!==|&&|\|\||::)/,
