@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest'
 import { tokenWindows } from '../src/core/model/name-model.ts'
 import { proseLayout } from '../src/core/model/prose.ts'
 import type { ModelSpan } from '../src/core/model/spans.ts'
-import { assembleSpans, chooseCategory, classCategories, dropAllowlisted, dropCodeShaped } from '../src/core/model/spans.ts'
+import { assembleSpans, chooseCategory, classCategories, dropAllowlisted, dropCodeShaped, trimJapaneseNameTails } from '../src/core/model/spans.ts'
 import { FAKE_LABELS } from './name-model-fake.ts'
 
 const slices = (text: string, ranges: { start: number; end: number }[]): string[] => ranges.map(({ start, end }) => text.slice(start, end))
@@ -76,6 +76,17 @@ describe('span filters', () => {
   it('drops allowlisted spans case-insensitively', () => {
     const text = 'Run KAFKA with Jane'
     expect(slices(text, dropAllowlisted([at(text, 'KAFKA', 'ORG'), at(text, 'Jane')], text, new Set(['kafka'])))).toEqual(['Jane'])
+  })
+
+  it('cuts honorifics and particles off Japanese NAME spans only', () => {
+    const text = '佐藤美咲さんに、田中先生と、マリアちゃんは、ゆきのに、東京都に'
+    const spans = [at(text, '佐藤美咲さんに'), at(text, '田中先生と'), at(text, 'マリアちゃんは'), at(text, 'ゆきのに'), at(text, '東京都に', 'LOC')]
+    expect(slices(text, trimJapaneseNameTails(spans, text))).toEqual(['佐藤美咲', '田中', 'マリア', 'ゆきのに', '東京都に'])
+  })
+
+  it('leaves Chinese names that end in a Japanese honorific glyph alone', () => {
+    const text = '請聯絡王君與林先生'
+    expect(slices(text, trimJapaneseNameTails([at(text, '王君'), at(text, '林先生')], text))).toEqual(['王君', '林先生'])
   })
 })
 

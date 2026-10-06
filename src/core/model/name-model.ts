@@ -12,7 +12,7 @@ import { proseLayout } from './prose.ts'
 import type { NameModelRuntime, TokenEncoding } from './runtime.ts'
 import { loadNymRuntime } from './runtime.ts'
 import type { ModelSpan, ScoredToken } from './spans.ts'
-import { assembleSpans, chooseCategory, classCategories, dropAllowlisted, dropCodeShaped, dropOverlapping } from './spans.ts'
+import { assembleSpans, chooseCategory, classCategories, dropAllowlisted, dropCodeShaped, dropOverlapping, trimJapaneseNameTails } from './spans.ts'
 
 // ponytail: fixed-size LRU of paragraph results; clients resend the whole history every turn, so without it every
 // earlier user message is inferred again. Raise it if long conversations show misses. Keys are sha256 digests, so
@@ -140,7 +140,8 @@ export class NameModel {
       return cached
     }
     const tokens = await this.scoreTokens(await this.runtime.encode(paragraph))
-    const spans = dropAllowlisted(dropCodeShaped(assembleSpans(tokens, paragraph), paragraph), paragraph, this.allowlist)
+    const assembled = trimJapaneseNameTails(assembleSpans(tokens, paragraph), paragraph)
+    const spans = dropAllowlisted(dropCodeShaped(assembled, paragraph), paragraph, this.allowlist)
     this.cache.set(key, spans)
     if (this.cache.size > PARAGRAPH_CACHE_ENTRIES) this.cache.delete(this.cache.keys().next().value as string)
     return spans

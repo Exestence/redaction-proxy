@@ -1,7 +1,7 @@
 // The rules detector combined with the name model, through the engine's mask(): scope, rules precedence,
 // propagation, allowlist, failure policy, windowing, and release. Every name is fictional.
 import { describe, expect, it } from 'vitest'
-import { RulesDetector, emptyRedactionIndex, mask } from '../src/core/index.ts'
+import { RulesDetector, emptyRedactionIndex, mask, restore } from '../src/core/index.ts'
 import { NameModelDetector, NameModelError } from '../src/core/model/detector.ts'
 import { fakeNameModel } from './name-model-fake.ts'
 
@@ -16,6 +16,11 @@ const LABELS = {
   Kafka: 'B-COMPANY_NAME',
   Default: 'B-GIVEN_NAME',
   'jane.doe@example.test': 'B-GIVEN_NAME',
+  佐: 'B-SURNAME',
+  藤: 'I-GIVEN_NAME',
+  美: 'I-GIVEN_NAME',
+  咲: 'I-GIVEN_NAME',
+  さんに: 'I-GIVEN_NAME',
 } as const
 
 /**
@@ -61,6 +66,15 @@ describe('NameModelDetector', () => {
   it('propagates a Han value as a substring, with no word edges', async () => {
     const { masked } = await maskWith(['請問許雅雯', '許雅雯的報告在Jordan那裡'], ['請問許雅雯'])
     expect(masked).toEqual(['請問⟦NAME_1⟧', '⟦NAME_1⟧的報告在Jordan那裡'])
+  })
+
+  it('keeps the Japanese honorific and particle outside the placeholder, so a reply restores correctly', async () => {
+    const { model } = fakeNameModel(LABELS)
+    const text = '明日、佐藤美咲さんに資料を送ってください。'
+    const detector = new NameModelDetector(new RulesDetector(), model).forRequest(new Set([text]), () => {})
+    const result = await mask(detector, [{ seq: 0, path: '', text }], emptyRedactionIndex())
+    expect(result.masked).toEqual(['明日、⟦NAME_1⟧さんに資料を送ってください。'])
+    expect(restore('⟦NAME_1⟧さんに送りました', result.registry)).toMatchObject({ ok: true, text: '佐藤美咲さんに送りました' })
   })
 
   it('masks a one-character value only where found', async () => {

@@ -1,6 +1,7 @@
 /**
- * From model scores to spans: per-token category choice, span assembly, and
- * the filters that drop identifier-shaped, allowlisted, and inline-code spans.
+ * From model scores to spans: per-token category choice, span assembly, the
+ * Japanese name-tail cut, and the filters that drop identifier-shaped,
+ * allowlisted, and inline-code spans.
  * Pure functions; offsets are UTF-16 code units, end exclusive.
  *
  * @module redaction-proxy/core/model/spans
@@ -134,6 +135,30 @@ export function assembleSpans(tokens: readonly ScoredToken[], text: string): Mod
   }
   const trimmed = runs.map(span => trimWhitespace(text, span)).filter(span => span.end > span.start)
   return joinAdjacent(trimmed, text)
+}
+
+/** Honorifics and particles Japanese writes right after a name, which a name span can run over (`佐藤美咲さんに`). */
+const JAPANESE_NAME_TAIL = /(?:さん|さま|様|くん|君|ちゃん|氏|先生)?[にはがをのへともで]*$/u
+
+/**
+ * Cut honorifics and particles off the end of NAME spans in Japanese text, so
+ * `佐藤美咲さんに` becomes `佐藤美咲` and a reply writing `⟦NAME_1⟧さん`
+ * restores correctly. Only text holding hiragana is Japanese here: in Chinese,
+ * `君`, `氏`, and `先生` can end a name. A cut is kept only when the rest ends
+ * in Han or katakana, so a name written in hiragana keeps its last character.
+ * @param spans - spans of one text.
+ * @param text - the text.
+ * @returns the spans with NAME tails cut.
+ */
+export function trimJapaneseNameTails(spans: readonly ModelSpan[], text: string): ModelSpan[] {
+  if (!/\p{Script=Hiragana}/u.test(text)) return [...spans]
+  return spans.map(span => {
+    if (span.category !== 'NAME') return span
+    const value = text.slice(span.start, span.end)
+    // oxlint-disable-next-line typescript/no-non-null-assertion -- the pattern also matches the empty tail.
+    const end = span.end - JAPANESE_NAME_TAIL.exec(value)![0].length
+    return /[\p{Script=Han}\p{Script=Katakana}]$/u.test(text.slice(span.start, end)) ? { ...span, end } : span
+  })
 }
 
 const IDENTIFIER_CHAR = /[A-Za-z0-9_$]/
