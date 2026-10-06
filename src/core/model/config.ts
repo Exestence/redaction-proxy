@@ -15,15 +15,19 @@ export type NameModelCategory = typeof NAME_MODEL_CATEGORIES[number]
 
 /**
  * Tool, product, and setting words the model reports as names or companies in
- * technical chat (measured: `Default`, `High`, `Low` as NAME; `Kafka`,
- * `Podman`, `Ansible` as ORG). Matched case-insensitively against a whole span.
+ * technical chat (measured: `Default`, `High`, `Low`, `フィールド` as NAME;
+ * `Kafka`, `Podman`, `React` as ORG; `Admin` as LOC). Matched
+ * case-insensitively against a whole span. Every value the model reports is
+ * masked everywhere in the request, so a word missing here is masked
+ * request-wide.
  */
 export const DEFAULT_NAME_MODEL_ALLOWLIST: readonly string[] = [
   'Ansible', 'Apache', 'Bun', 'Chrome', 'Claude', 'Consul', 'Datadog', 'Debian', 'Deno', 'Django', 'Docker',
   'Elasticsearch', 'Envoy', 'Fedora', 'Figma', 'Firefox', 'Flask', 'GitHub', 'GitLab', 'Grafana', 'Helm', 'Jenkins',
   'Jira', 'Kafka', 'Kibana', 'Kubernetes', 'MongoDB', 'MySQL', 'Nginx', 'Notion', 'Ollama', 'Podman', 'Postgres',
-  'PostgreSQL', 'Prometheus', 'RabbitMQ', 'Redis', 'Sentry', 'Slack', 'Terraform', 'Ubuntu', 'Vagrant', 'Vercel',
-  'Default', 'High', 'Low', 'Medium', 'Off', 'On', 'None', 'Auto', 'Enabled', 'Disabled',
+  'PostgreSQL', 'Prometheus', 'RabbitMQ', 'React', 'Redis', 'Sentry', 'Slack', 'Terraform', 'Ubuntu', 'Vagrant',
+  'Vercel', 'Vite', 'VS Code',
+  'Default', 'High', 'Low', 'Medium', 'Off', 'On', 'None', 'Auto', 'Enabled', 'Disabled', 'Admin', 'フィールド',
 ]
 
 /** Name-model configuration as written in the proxy config file. */
