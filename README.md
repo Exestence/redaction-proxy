@@ -36,7 +36,7 @@ flowchart LR
 
 - The same value gets the same placeholder throughout a request.
 - The proxy keeps no conversation state. It renumbers from the full history on every request, so a conversation keeps the same numbering on every turn and upstream prompt caching keeps working.
-- If a detected value can still be found in the request after masking, the proxy refuses to send it (422) instead of risking a leak. Values in spaced scripts count as whole words only, so `Lee` inside `Leeds` is not a leak; Chinese, Japanese, and Korean values count anywhere.
+- If a detected value can still be found in the request after masking, the proxy refuses to send it (422) instead of risking a leak. A rules value counts anywhere, even inside a longer word (`tel0912345678`). A [name-model](#-optional-name-model-experimental) value in a spaced script counts only as a whole word, so `Lee` inside `Leeds` is not a leak; Chinese, Japanese, and Korean values count anywhere.
 - Your client sends its own key as usual; the proxy forwards it unchanged and never stores it.
 
 When a placeholder is split across two streamed chunks, the proxy holds back only the part that could be a placeholder and sends everything else at once:

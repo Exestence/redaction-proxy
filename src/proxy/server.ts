@@ -20,6 +20,7 @@ import { RedactionError, RulesDetector, createStreamRestorer, emptyRedactionInde
 import type { RedactionDetector, RedactionRegistry, StreamRestorer } from '../core/index.ts'
 import { NameModelDetector, NameModelError, containsStandingAlone, isSearchedValue } from '../core/model/detector.ts'
 import type { NameModel } from '../core/model/name-model.ts'
+import { NAME_MODEL_CATEGORIES } from '../core/model/config.ts'
 import type { ProxyConfig } from './config.ts'
 
 /** Which wire API a route speaks. */
@@ -60,6 +61,9 @@ const USER_TEXT_PARTS = new Set(['text', 'input_text'])
  * Matches the JSON pointers {@link collectSlots} builds; change both together.
  */
 const MESSAGE_TEXT_PATH = /^\/(messages|input)\/(\d+)\/content(?:\/(\d+)\/text)?$/
+
+/** Categories the name model binds; the leak scan matches their values as whole words. */
+const MODEL_CATEGORIES: ReadonlySet<string> = new Set(NAME_MODEL_CATEGORIES)
 
 /** Headers that describe one hop or the body encoding, never forwarded. */
 const HOP = new Set([
@@ -158,19 +162,24 @@ function isUserText(body: Json, path: string): boolean {
 /**
  * Refuse a masked body that still holds a detected value: in a field the
  * proxy does not rewrite (metadata, an image URL), or an occurrence masking
- * could not cover. Values are matched as propagation matches them, as whole
- * words for spaced scripts, so `Lee` inside `Leeds` is no leak. Keys are
- * checked too.
+ * could not cover. A name-model value is matched as its propagation matches
+ * it, as a whole word for spaced scripts (`Lee` inside `Leeds` is no leak),
+ * and only from two code points. Every other value counts anywhere, at any
+ * length, so a rules value glued to other characters (`tel0912345678`)
+ * still fails closed. Keys are checked too.
  * @param body - the masked request body.
  * @param registry - bindings of the mask call.
+ * @param modelValues - the originals the name model bound.
  * @throws {Refusal} 422 naming the JSON pointers, never the value.
  */
-function refuseLeaks(body: Json, registry: RedactionRegistry): void {
+function refuseLeaks(body: Json, registry: RedactionRegistry, modelValues: ReadonlySet<string>): void {
   // A value inside a JSON-text string (`arguments`) is written JSON-escaped.
-  const forms = registry.originals().filter(isSearchedValue).flatMap(original => [original, JSON.stringify(original).slice(1, -1)])
+  const forms = (original: string): string[] => [original, JSON.stringify(original).slice(1, -1)]
+  const words = [...modelValues].filter(isSearchedValue).flatMap(forms)
+  const substrings = registry.originals().filter(original => !modelValues.has(original)).flatMap(forms)
   const where: string[] = []
   const check = (text: string, path: string): void => {
-    if (forms.some(form => containsStandingAlone(text, form))) where.push(path)
+    if (substrings.some(form => text.includes(form)) || words.some(form => containsStandingAlone(text, form))) where.push(path)
   }
   const walk = (value: unknown, path: string): void => {
     if (typeof value === 'string') check(value, path)
@@ -460,12 +469,13 @@ export function createProxyServer(
       const slot = slots[i]!
       ;(slot.parent as Record<string | number, string>)[slot.key] = masked
     })
+    const modelValues = new Set<string>()
     for (const span of result.applied) {
-      if (span.seq < priorTexts.length) continue
       const category = span.id.slice(0, span.id.lastIndexOf('_'))
-      stats.masked[category] = (stats.masked[category] ?? 0) + 1
+      if (MODEL_CATEGORIES.has(category)) modelValues.add((all[span.seq] as string).slice(span.start, span.end))
+      if (span.seq >= priorTexts.length) stats.masked[category] = (stats.masked[category] ?? 0) + 1
     }
-    refuseLeaks(parsed, result.registry)
+    refuseLeaks(parsed, result.registry, modelValues)
     return { outgoing: JSON.stringify(parsed), registry: result.registry, texts: all, userTexts }
   }
 

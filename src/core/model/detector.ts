@@ -61,8 +61,8 @@ function standsAlone(text: string, start: number, end: number): boolean {
 
 /**
  * Whether a value is long enough to search for: a shorter model value is not
- * propagated, and the proxy's leak scan checks no shorter value of any
- * category. One character (`王`, or `燕` from a partly found `王晓燕`) would
+ * propagated, and the proxy's leak scan checks no shorter model value.
+ * One character (`王`, or `燕` from a partly found `王晓燕`) would
  * mask that character in every word holding it.
  * @param value - a bound original.
  * @returns whether it has at least two code points.
