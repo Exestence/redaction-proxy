@@ -1,0 +1,15 @@
+{
+  "demo": [
+    "client sends:      請寄信給 lin.fictional@example.test，身分證 A123456789，檔案在 /Users/fictional-user/notes.md",
+    "[proxy log] POST /v1/chat/completions -> 200 masked 3 (EMAIL 1, TWID 1, PATH 1) restored 3 unknown 0 8ms",
+    "upstream received: 請寄信給 ⟦EMAIL_1⟧，身分證 ⟦TWID_1⟧，檔案在 ⟦PATH_1⟧/notes.md",
+    "client receives:   I will email lin.fictional@example.test about /Users/fictional-user/notes.md (ID A123456789)."
+  ],
+  "example": {
+    "sent": "The deploy on build01.internal (10.0.4.17) failed again.\nLog: /Users/dana/deploy.log\nRevoke the key sk-proj-Fak3Ex4mpleKeyN0tReal00000000000000 and\nemail a summary to dana.reyes@example.test.",
+    "upstream": "The deploy on ⟦HOST_1⟧ (⟦IP_1⟧) failed again.\nLog: ⟦PATH_1⟧/deploy.log\nRevoke the key ⟦KEY_1⟧ and\nemail a summary to ⟦EMAIL_1⟧.",
+    "upstreamReply": "Done. I emailed the summary to ⟦EMAIL_1⟧, revoked ⟦KEY_1⟧, and ⟦HOST_1⟧ (⟦IP_1⟧) is back up. The log is still in ⟦PATH_1⟧/deploy.log.",
+    "reply": "Done. I emailed the summary to dana.reyes@example.test, revoked sk-proj-Fak3Ex4mpleKeyN0tReal00000000000000, and build01.internal (10.0.4.17) is back up. The log is still in /Users/dana/deploy.log.",
+    "log": "POST /v1/chat/completions -> 200 masked 5 (HOST 1, IP 1, PATH 1, KEY 1, EMAIL 1) restored 5 unknown 0 8ms"
+  }
+}
