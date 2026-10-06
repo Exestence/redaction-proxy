@@ -27,7 +27,10 @@
     "test": "vitest run",
     "bench": "tsc -p tsconfig.build.json && node bench/false-positives.mjs",
     "start": "node lib/cli.js",
-    "demo": "tsc -p tsconfig.build.json && node bench/demo.mjs"
+    "demo": "tsc -p tsconfig.build.json && node bench/demo.mjs",
+    "bench:public": "node --experimental-transform-types --disable-warning=ExperimentalWarning bench/public/main.ts",
+    "e2e:real": "node --experimental-transform-types --disable-warning=ExperimentalWarning e2e/real/main.ts",
+    "bench:presidio:setup": "uv venv bench/presidio/.venv --python 3.12 --allow-existing && uv pip install --python bench/presidio/.venv/bin/python -r bench/presidio/requirements.txt"
   },
   "engines": {
     "node": "^22.19.0 || >=24.0.0"

@@ -22,7 +22,7 @@
 | 會改動一些字元 | 預設把控制字元換成可見字元（`␛`），把原文中的 `⟦` `⟧` 換成 `⟪` `⟫`。 |
 | 重啟會忘記接續對話 | Responses API 的 `previous_response_id` 依賴記憶體中最近 256 個回應；重啟後舊輪次的佔位符無法還原。 |
 | 本機沒有驗證 | 只綁定 `127.0.0.1`，但你電腦上的任何程式都能使用它。 |
-| 尚未對真實服務測試 | 測試與示範都用本機假上游，尚未對 OpenAI、Anthropic、DeepSeek 或真實用戶端驗證。 |
+| 尚未對真實服務測試 | 測試與示範都用本機假上游，尚未對 OpenAI、Anthropic、DeepSeek 或真實用戶端驗證。驗證工具已備妥（[e2e/real](e2e/real/README.md)），尚未執行。 |
 
 ## 🔄 運作方式
 
@@ -206,8 +206,9 @@ node scripts/fetch-name-model.mjs ~/models/nym       # 從 Hugging Face 下載�
 | 憑證誤遮 | 每千行程式碼 **0.76** 處 | 在不含真實金鑰的 DeepSeek Harness 原始碼上量測（69.8 萬行程式碼），平均約 1,300 行有一處被誤當成金鑰而遮掉。 |
 | 還原失敗 | 0 | 遮罩成功的檔案全部都能逐位元組還原。 |
 | 速度 | 約 85 萬行 / 5 秒 | Apple M5 Max。 |
+| 合成多語提示（dev 集） | 全部語言、9 個類別的宏平均：完全遮蔽 73.4%、未遮 26.5%；還原 100% | 英文、繁中、簡中、日文共 1,200 筆固定種子的提示，由規則作者撰寫；各類別結果與僅限英文的 Presidio 比較：[bench/results/public-bench-dev.md](bench/results/public-bench-dev.md)。金鑰、家目錄、內部主機、私有 IP、電子郵件與卡號完全遮蔽；漏遮人名、台灣以外的電話與身分證號；沒有上下文的 commit 雜湊會被誤遮。尚無保留集（held-out）結果。 |
 
-誤遮的代價是模型看到一個不必要的佔位符，回覆時會被換回原值。語料是英文程式碼，中文散文的誤遮率尚未量測。以 `pnpm test` 與 `pnpm bench` 重現。
+誤遮的代價是模型看到一個不必要的佔位符，回覆時會被換回原值。語料是英文程式碼，中文散文的誤遮率尚未量測。以 `pnpm test`、`pnpm bench` 與 `pnpm run bench:public` 重現；加上 `--heldout <set.jsonl>` 可另外評分凍結的保留集（格式與 MANIFEST 檢查見 `bench/public/heldout.ts`）。
 
 ## 🆚 和 dsh-privacy-router 的差別
 
