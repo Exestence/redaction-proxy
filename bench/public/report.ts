@@ -5,7 +5,7 @@
  */
 
 import { MASK_OUTCOMES, fraction } from './metrics.ts'
-import type { Rate, Scorecard, SystemReport, ValueScore } from './metrics.ts'
+import type { MaskOutcome, Rate, Scorecard, SystemReport, ValueScore } from './metrics.ts'
 
 /** Which evaluation set a result belongs to. */
 export type SetLabel = 'dev' | 'held-out'
@@ -73,13 +73,44 @@ export function renderMarkdown(result: SetResult): string {
   ].filter(section => section !== '').join('\n\n') + '\n'
 }
 
+/** Headline numbers of one system for charts: shares in 0..1, latency in milliseconds. */
+export interface SystemSummary {
+  name: string
+  byCategory: Record<string, Record<MaskOutcome, number>>
+  macroAverage: Record<MaskOutcome, number>
+  regionPrecision: number
+  hardNegativesMasked: Record<string, number>
+  latencyMs: { p50: number; p95: number }
+}
+
+/**
+ * @param result - one evaluation set's results, as written to `public-bench-<set>.json`.
+ * @returns the set's headline numbers per system, English prompts and all languages.
+ */
+export function summarize(result: SetResult): { set: SetLabel; source: string; english: SystemSummary[]; allLanguages: SystemSummary[] } {
+  return { set: result.set, source: result.source, english: result.english.map(summarizeSystem), allLanguages: result.allLanguages.map(summarizeSystem) }
+}
+
+function summarizeSystem(system: SystemReport): SystemSummary {
+  const shares = <K extends string>(rates: Record<K, Rate>): Record<K, number> =>
+    Object.fromEntries(Object.entries<Rate>(rates).map(([key, rate]) => [key, fraction(rate)])) as Record<K, number>
+  return {
+    name: system.name,
+    byCategory: Object.fromEntries(Object.entries(system.byCategory).map(([category, score]) => [category, shares(score.outcomes)])),
+    macroAverage: system.macroAverage.outcomes,
+    regionPrecision: fraction(system.overall.regionPrecision),
+    hardNegativesMasked: shares(system.negativeHits),
+    latencyMs: { p50: system.latency.median, p95: system.latency.p95 },
+  }
+}
+
 function markReferenceOnly(system: SystemReport): SystemReport {
   return system.englishAnalyzerOnly === true ? { ...system, name: `${system.name} (${REFERENCE_ONLY})` } : system
 }
 
 function renderSummary(result: SetResult): string {
   return `**${result.set} set.** ${result.source}: ${result.sampleCount} synthetic prompts, ${result.goldCount} sensitive values, `
-    + `${result.negativeCount} hard negatives. Built-in rules \`${result.detectorVersion}\`, default configuration. Reproduce with \`${result.reproduce}\`.`
+    + `${result.negativeCount} hard negatives. Built-in rules \`${result.detectorVersion}\`; each system names its rule set. Reproduce with \`${result.reproduce}\`.`
 }
 
 function renderCategoryTable(systems: readonly SystemReport[]): string {
