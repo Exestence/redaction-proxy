@@ -29,11 +29,11 @@ Each cell: fully masked / partly masked / untouched, as a share of the sensitive
 
 | System | Region precision | Restore exact | Median ms | p95 ms |
 | --- | --- | --- | --- | --- |
-| rules, core default | 95.7% | 100.0% | 0.05 | 0.13 |
+| rules, core default | 95.7% | 100.0% | 0.05 | 0.12 |
 | rules, proxy default | 96.0% | 100.0% | 0.04 | 0.08 |
-| rules + name model (experimental) | 96.4% | 100.0% | 5.74 | 12.63 |
-| Presidio 2.2.364 (en_core_web_lg, cutoff 0) | 62.4% | n/a | 5.84 | 7.58 |
-| Presidio 2.2.364 (en_core_web_lg, cutoff 0.4) | 72.1% | n/a | 5.77 | 7.49 |
+| rules + name model (experimental) | 96.4% | 100.0% | 5.84 | 12.92 |
+| Presidio 2.2.364 (en_core_web_lg, cutoff 0) | 62.4% | n/a | 5.94 | 7.66 |
+| Presidio 2.2.364 (en_core_web_lg, cutoff 0.4) | 72.1% | n/a | 5.86 | 7.50 |
 
 | Hard negatives masked (lower is better) | rules, core default | rules, proxy default | rules + name model (experimental) | Presidio 2.2.364 (en_core_web_lg, cutoff 0) | Presidio 2.2.364 (en_core_web_lg, cutoff 0.4) |
 | --- | --- | --- | --- | --- | --- |
