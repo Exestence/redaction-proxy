@@ -79,9 +79,10 @@ describe('span filters', () => {
   })
 
   it('cuts honorifics and particles off Japanese NAME spans only', () => {
-    const text = '佐藤美咲さんに、田中先生と、マリアちゃんは、ゆきのに、東京都に'
-    const spans = [at(text, '佐藤美咲さんに'), at(text, '田中先生と'), at(text, 'マリアちゃんは'), at(text, 'ゆきのに'), at(text, '東京都に', 'LOC')]
-    expect(slices(text, trimJapaneseNameTails(spans, text))).toEqual(['佐藤美咲', '田中', 'マリア', 'ゆきのに', '東京都に'])
+    const text = '佐藤美咲さんに、田中先生と、マリアちゃんは、Sato さんに、ゆきのに、東京都に'
+    const spans = ['佐藤美咲さんに', '田中先生と', 'マリアちゃんは', 'Sato さんに', 'ゆきのに'].map(value => at(text, value))
+    expect(slices(text, trimJapaneseNameTails([...spans, at(text, '東京都に', 'LOC')], text)))
+      .toEqual(['佐藤美咲', '田中', 'マリア', 'Sato', 'ゆきのに', '東京都に'])
   })
 
   it('leaves Chinese names that end in a Japanese honorific glyph alone', () => {
