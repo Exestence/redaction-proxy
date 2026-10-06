@@ -33,9 +33,17 @@
     "node": "^22.19.0 || >=24.0.0"
   },
   "license": "UNLICENSED",
-  "optionalDependencies": {
+  "peerDependencies": {
     "onnxruntime-node": "1.30.0",
     "tokenizers": "0.23.2"
+  },
+  "peerDependenciesMeta": {
+    "onnxruntime-node": {
+      "optional": true
+    },
+    "tokenizers": {
+      "optional": true
+    }
   },
   "devDependencies": {
     "@types/node": "^22.20.4",

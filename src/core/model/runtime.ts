@@ -2,7 +2,8 @@
  * The nym ONNX runtime: loads `Wismut/nym-pii-multilingual-small` (edge-int8)
  * with `onnxruntime-node` and its tokenizer with the native `tokenizers`
  * package, both imported only here and only when the name model is
- * configured.
+ * configured. Both are optional peer dependencies, which `pnpm install` leaves
+ * out (about 350 MB).
  *
  * The tokenizer is built from compact files (`vocab.json`, `merges.txt`,
  * `added_tokens.json`) written by `scripts/fetch-name-model.mjs`, not from
@@ -16,6 +17,9 @@ import { createHash } from 'node:crypto'
 import { createReadStream, existsSync } from 'node:fs'
 import { readFile } from 'node:fs/promises'
 import { join } from 'node:path'
+
+/** The optional peer dependencies at the versions the name model was measured with. */
+const OPTIONAL_PEERS = 'onnxruntime-node@1.30.0 tokenizers@0.23.2'
 
 /** Files the runtime reads from the model directory. */
 const NAME_MODEL_FILES = ['model_int8.onnx', 'config.json', 'vocab.json', 'merges.txt', 'added_tokens.json'] as const
@@ -58,6 +62,37 @@ interface AddedTokenEntry {
   rstrip: boolean
 }
 
+/** The part of the native `tokenizers` package this file calls, declared here so typecheck does not need the package. */
+interface TokenizersModule {
+  BPE: { fromFile(vocab: string, merges: string, options: { byteFallback: boolean; fuseUnk: boolean; unkToken: string }): Promise<object> }
+  Tokenizer: new (model: object) => NativeTokenizer
+  AddedToken: new (content: string, special: boolean, options: { normalized: boolean; singleWord: boolean; leftStrip: boolean; rightStrip: boolean }) => object
+  replace(pattern: string, content: string): object
+  metaspacePreTokenizer(replacement: string, prependScheme: string, split: boolean): object
+  templateProcessing(single: string, pair: string | null, specialTokens: [string, number][]): object
+}
+
+/** A native tokenizer, as {@link TokenizersModule} builds it. */
+interface NativeTokenizer {
+  setNormalizer(normalizer: object): void
+  setPreTokenizer(preTokenizer: object): void
+  setPostProcessor(processor: object): void
+  addAddedTokens(tokens: object[]): number
+  tokenToId(token: string): number | null
+  encode(text: string): Promise<{ getIds(): number[]; getOffsets(): number[][] }>
+}
+
+/** The part of `onnxruntime-node` this file calls; see {@link TokenizersModule}. */
+interface OrtModule {
+  InferenceSession: {
+    create(path: string, options: { graphOptimizationLevel: 'all' }): Promise<{
+      run(feeds: Record<string, object>): Promise<Record<string, { data: unknown } | undefined>>
+      release(): Promise<void>
+    }>
+  }
+  Tensor: new (type: 'int64', data: BigInt64Array, dims: number[]) => object
+}
+
 /**
  * Import an optional dependency.
  * @param name - package name.
@@ -68,7 +103,7 @@ async function importOptional<T>(name: string): Promise<T> {
   try {
     return await import(name) as T
   } catch (error) {
-    throw new Error(`nameModel: optional dependency "${name}" could not be loaded (${(error as Error).message}); install it with pnpm install`)
+    throw new Error(`nameModel: optional dependency "${name}" could not be loaded (${(error as Error).message}); install it with pnpm add -D ${OPTIONAL_PEERS}`)
   }
 }
 
@@ -120,7 +155,7 @@ function utf16Offsets(text: string): number[] {
  * @returns the encode function.
  */
 async function loadTokenizer(dir: string): Promise<(text: string) => Promise<TokenEncoding>> {
-  const tokenizers = await importOptional<typeof import('tokenizers')>('tokenizers')
+  const tokenizers = await importOptional<TokenizersModule>('tokenizers')
   const model = await tokenizers.BPE.fromFile(join(dir, 'vocab.json'), join(dir, 'merges.txt'), {
     byteFallback: true,
     fuseUnk: true,
@@ -172,10 +207,10 @@ async function loadClassLabels(dir: string): Promise<string[]> {
  */
 export async function loadNymRuntime(dir: string): Promise<NameModelRuntime> {
   requireFiles(dir)
-  const ort = await importOptional<typeof import('onnxruntime-node')>('onnxruntime-node')
+  const ort = await importOptional<OrtModule>('onnxruntime-node')
   const [encode, classLabels, fingerprint] = await Promise.all([loadTokenizer(dir), loadClassLabels(dir), fingerprintFiles(dir)])
   const session = await ort.InferenceSession.create(join(dir, 'model_int8.onnx'), { graphOptimizationLevel: 'all' })
-  const int64 = (values: readonly number[] | BigInt64Array): InstanceType<typeof ort.Tensor> =>
+  const int64 = (values: readonly number[] | BigInt64Array): object =>
     new ort.Tensor('int64', values instanceof BigInt64Array ? values : BigInt64Array.from(values, BigInt), [1, values.length])
   return {
     classLabels,
