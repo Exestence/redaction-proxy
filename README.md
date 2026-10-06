@@ -36,7 +36,7 @@ flowchart LR
 
 - The same value gets the same placeholder throughout a request.
 - The proxy keeps no conversation state. It renumbers from the full history on every request, so a conversation keeps the same numbering on every turn and upstream prompt caching keeps working.
-- If any original can still be found in the request after masking, the proxy refuses to send it (422) instead of risking a leak.
+- If a detected value can still be found in the request after masking, the proxy refuses to send it (422) instead of risking a leak. Values in spaced scripts count as whole words only, so `Lee` inside `Leeds` is not a leak; Chinese, Japanese, and Korean values count anywhere.
 - Your client sends its own key as usual; the proxy forwards it unchanged and never stores it.
 
 When a placeholder is split across two streamed chunks, the proxy holds back only the part that could be a placeholder and sends everything else at once:
@@ -149,10 +149,11 @@ Off by default. When configured, a small local model ([`Wismut/nym-pii-multiling
 What it reads, and what it does not:
 
 - Only user messages: prose paragraphs of your own text. System prompts, assistant turns, tool results, code blocks, and code-, JSON-, YAML-, or log-shaped lines are not read, so a name inside pasted code or logs is not found there.
-- A person name it finds is masked everywhere else in the request too, including system prompts and tool output, with the same placeholder (`許雅雯` and `許 雅 雯` share one). A single ASCII word (`Jordan`) is masked only where the model found it, because the same word elsewhere is too often a product or a setting. Companies, places, and addresses are masked only where found.
+- Every name, company, place, and address it finds is masked everywhere in the request with the same placeholder: system prompts, assistant turns, tool results, and tool-call arguments (`許雅雯` and `許 雅 雯` share one, and so do `Jordan` and `JORDAN`). Values in spaced scripts match whole words only (`Lee` is not masked inside `Leeds`); Chinese, Japanese, and Korean values match anywhere. A value of one character is masked only where found.
+- A word the model wrongly takes for a name is masked everywhere too. The allowlist is what stops that.
 - Rules win: a span that overlaps an email, key, or other rule detection is dropped.
 - Words such as `Kafka`, `Docker`, `Podman`, `Default`, `High`, and `Low` are on a default allowlist (`nameModel.allowlist`).
-- A span can be too short or too long. A partly found Chinese name sends the rest as written (`林小明` → `⟦NAME_1⟧明`). A Japanese span can take the particle after the name (`佐藤美咲さんに`), so a reply that writes `⟦NAME_1⟧さん` is restored as `佐藤美咲さんにさん`.
+- A span can be too short or too long. A partly found Chinese name sends the rest as written (`林小明` → `⟦NAME_1⟧明`), and a Chinese span can take the next character (`刘建国会`). Honorifics and particles after a Japanese name (`さん`, `様`, `に`, `は`, ...) are cut off the span, so `佐藤美咲さんに` is sent as `⟦NAME_1⟧さんに`.
 
 Measured (one held-out run, numbers are recall unless noted):
 
@@ -164,7 +165,7 @@ Measured (one held-out run, numbers are recall unless noted):
 | Names in pasted code, logs, or JSON | 0.10–0.30 | Out of scope by design; list such names in `terms`. |
 | Companies / places / addresses in prose | 0.71 / 0.88 / 0.82 | Addresses: Simplified Chinese 0.42, French 0.67. |
 | Precision | 0.94 | Share of masked spans that were real names, companies, or places. |
-| False positives in technical chat | 46 per 1,000 sentences (113 on the dev set) | Before the allowlist and the no-propagation rule for single words; mostly `Default` or tool names. |
+| False positives in technical chat | 46 per 1,000 sentences (113 on the dev set) | Before the allowlist; mostly `Default` or tool names. With the default allowlist, 4 per 1,000 dev sentences, but the list was built from that set. Each one is masked everywhere in the request. |
 | False positives in code | 0 | Code is not read. |
 | Added memory | about +420 MB | With the 512-token window; +440 MB after a 16 KB message. |
 | Added latency | p95 about 130 ms for 2 KB of Chinese prose, 80 ms for mixed prose | 16 KB of Chinese prose: about 1 s. Paragraphs already seen are cached. |
@@ -172,7 +173,7 @@ Measured (one held-out run, numbers are recall unless noted):
 Setup:
 
 ```sh
-pnpm install                                         # installs onnxruntime-node and tokenizers (optional, about 350 MB; rules-only: pnpm install --no-optional)
+pnpm add -D onnxruntime-node@1.30.0 tokenizers@0.23.2  # the model's runtime, about 350 MB; pnpm install alone leaves it out
 node scripts/fetch-name-model.mjs ~/models/nym       # about 125 MB from Hugging Face, sha256-checked
 ```
 
@@ -225,7 +226,7 @@ A false positive costs the model one unnecessary placeholder, which is restored 
 
 **Will my name be masked?** If you list it in `terms`, always. With the experimental name model, usually when you write it in a message, but not always: it finds about 7 of 8 Traditional Chinese names and does not read code or logs.
 
-**Why was my request refused with 422?** A detected value also appears in a field the proxy does not rewrite (an image URL or metadata, for instance), or you set `screen: "refuse"`. The message names the field, never the value.
+**Why was my request refused with 422?** A detected value is still in the masked request, usually in a field the proxy does not rewrite (an image URL or metadata, for instance), or you set `screen: "refuse"`. The message names the field, never the value.
 
 **Does the proxy store my key or my conversation?** Keys are forwarded and never stored. Conversations are not stored, except the inputs of the last 256 Responses API responses, kept in memory for continuations.
 
