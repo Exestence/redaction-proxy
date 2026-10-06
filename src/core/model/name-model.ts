@@ -5,6 +5,7 @@
  * @module redaction-proxy/core/model/name-model
  */
 
+import { createHash } from 'node:crypto'
 import type { NameModelCategory, NameModelConfig, ResolvedNameModelConfig } from './config.ts'
 import { SPECIAL_TOKENS_PER_WINDOW, resolveNameModelConfig } from './config.ts'
 import { proseLayout } from './prose.ts'
@@ -14,7 +15,8 @@ import type { ModelSpan, ScoredToken } from './spans.ts'
 import { assembleSpans, chooseCategory, classCategories, dropAllowlisted, dropCodeShaped, dropOverlapping } from './spans.ts'
 
 // ponytail: fixed-size LRU of paragraph results; clients resend the whole history every turn, so without it every
-// earlier user message is inferred again. Raise it if long conversations show misses.
+// earlier user message is inferred again. Raise it if long conversations show misses. Keys are sha256 digests, so
+// the cache holds no user text and its size does not grow with paragraph length.
 const PARAGRAPH_CACHE_ENTRIES = 1024
 
 /** One window of text tokens and the part of it whose scores are kept. */
@@ -130,15 +132,16 @@ export class NameModel {
    * @returns filtered spans in paragraph offsets.
    */
   private async findInParagraph(paragraph: string): Promise<ModelSpan[]> {
-    const cached = this.cache.get(paragraph)
+    const key = createHash('sha256').update(paragraph).digest('base64')
+    const cached = this.cache.get(key)
     if (cached !== undefined) {
-      this.cache.delete(paragraph)
-      this.cache.set(paragraph, cached)
+      this.cache.delete(key)
+      this.cache.set(key, cached)
       return cached
     }
     const tokens = await this.scoreTokens(await this.runtime.encode(paragraph))
     const spans = dropAllowlisted(dropCodeShaped(assembleSpans(tokens, paragraph), paragraph), paragraph, this.allowlist)
-    this.cache.set(paragraph, spans)
+    this.cache.set(key, spans)
     if (this.cache.size > PARAGRAPH_CACHE_ENTRIES) this.cache.delete(this.cache.keys().next().value as string)
     return spans
   }
