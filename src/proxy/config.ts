@@ -9,6 +9,8 @@
 import { readFileSync } from 'node:fs'
 import { resolveRulesConfig } from '../core/index.ts'
 import type { RulesRedactionConfig } from '../core/index.ts'
+import { resolveNameModelConfig } from '../core/model/config.ts'
+import type { NameModelConfig } from '../core/model/config.ts'
 
 /** How a request string the rules cannot reason about is handled. */
 export type ScreenMode = 'replace' | 'refuse'
@@ -27,6 +29,8 @@ export interface ProxyConfig {
   anthropicApiKey?: string
   /** Rules detector configuration. */
   redaction: RulesRedactionConfig
+  /** Optional name model; absent means rules only. */
+  nameModel?: NameModelConfig
   /**
    * `replace` (default) rewrites control characters, U+FFFD, lone surrogates,
    * and pre-existing `⟦`/`⟧` in request text to visible stand-ins before
@@ -37,7 +41,7 @@ export interface ProxyConfig {
   debugMasked: boolean
 }
 
-const FILE_KEYS = new Set(['port', 'openaiUpstream', 'anthropicUpstream', 'redaction', 'screen', 'debugMasked'])
+const FILE_KEYS = new Set(['port', 'openaiUpstream', 'anthropicUpstream', 'redaction', 'nameModel', 'screen', 'debugMasked'])
 
 /**
  * Check one upstream base URL.
@@ -49,6 +53,21 @@ const FILE_KEYS = new Set(['port', 'openaiUpstream', 'anthropicUpstream', 'redac
 function upstream(value: unknown, label: string): string {
   if (typeof value !== 'string' || !/^https?:\/\/[^/]/.test(value)) throw new Error(`${label} must be an http(s) URL`)
   return value.replace(/\/+$/, '')
+}
+
+/**
+ * Read the optional name-model block; `REDACTION_PROXY_NAME_MODEL_DIR` sets
+ * its directory and so turns it on.
+ * @param value - the file's `nameModel` value.
+ * @param dir - the environment's model directory.
+ * @returns the validated block, or `undefined` when the model is off.
+ * @throws {Error} on an invalid block.
+ */
+function nameModel(value: unknown, dir: string | undefined): NameModelConfig | undefined {
+  if (value === undefined && dir === undefined) return undefined
+  const config = dir === undefined ? value : { ...value as object | undefined, dir }
+  resolveNameModelConfig(config)
+  return config as NameModelConfig
 }
 
 /**
@@ -77,6 +96,8 @@ export function loadConfig(path: string | undefined, env: NodeJS.ProcessEnv): Pr
     screen,
     debugMasked: env.REDACTION_PROXY_DEBUG_MASKED === '1' || file.debugMasked === true,
   }
+  const model = nameModel(file.nameModel, env.REDACTION_PROXY_NAME_MODEL_DIR)
+  if (model !== undefined) config.nameModel = model
   if (env.REDACTION_PROXY_OPENAI_API_KEY) config.openaiApiKey = env.REDACTION_PROXY_OPENAI_API_KEY
   if (env.REDACTION_PROXY_ANTHROPIC_API_KEY) config.anthropicApiKey = env.REDACTION_PROXY_ANTHROPIC_API_KEY
   return config

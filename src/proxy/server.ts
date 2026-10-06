@@ -17,7 +17,9 @@
 import { createServer } from 'node:http'
 import type { IncomingMessage, Server, ServerResponse } from 'node:http'
 import { RedactionError, RulesDetector, createStreamRestorer, emptyRedactionIndex, mask, screenText } from '../core/index.ts'
-import type { RedactionRegistry, StreamRestorer } from '../core/index.ts'
+import type { RedactionDetector, RedactionRegistry, StreamRestorer } from '../core/index.ts'
+import { NameModelDetector, NameModelError } from '../core/model/detector.ts'
+import type { NameModel } from '../core/model/name-model.ts'
 import type { ProxyConfig } from './config.ts'
 
 /** Which wire API a route speaks. */
@@ -50,6 +52,12 @@ const JSON_TEXT = new Set(['arguments', 'partial_json'])
 /** Top-level request keys masked first, so the stable request head keeps its identities. */
 const HEAD_FIRST = ['tools', 'functions', 'system', 'instructions']
 
+/** Content-part types that carry user-written text: Chat and Messages `text`, Responses `input_text`. */
+const USER_TEXT_PARTS = new Set(['text', 'input_text'])
+
+/** A message's own text: `/messages/N/content` or one of its parts, `/messages/N/content/K/text` (or `/input/...`). */
+const MESSAGE_TEXT_PATH = /^\/(messages|input)\/(\d+)\/content(?:\/(\d+)\/text)?$/
+
 /** Headers that describe one hop or the body encoding, never forwarded. */
 const HOP = new Set([
   'host', 'connection', 'keep-alive', 'proxy-authorization', 'proxy-connection', 'te', 'trailer', 'transfer-encoding',
@@ -74,6 +82,14 @@ interface Stats {
   masked: Record<string, number>
   restored: number
   unknown: number
+  nameModelFailed: boolean
+}
+
+/** Original texts of one request, kept for a Responses continuation. */
+interface RequestTexts {
+  texts: string[]
+  /** The texts the user wrote, which the name model reads. */
+  userTexts: Set<string>
 }
 
 /** A request the proxy refuses before anything is forwarded. */
@@ -108,6 +124,24 @@ function collectSlots(value: unknown, path: string, out: Slot[]): void {
     if (typeof item === 'string') out.push({ parent: record, key, path: at })
     else collectSlots(item, at, out)
   }
+}
+
+/**
+ * Whether a request string is text the user wrote: a user message's string
+ * content or one of its text parts, or a Responses string `input`. Tool
+ * results, system prompts, and assistant turns are not.
+ * @param body - the parsed request body.
+ * @param path - JSON pointer of the string.
+ * @returns whether the name model reads it.
+ */
+function isUserText(body: Json, path: string): boolean {
+  if (path === '/input') return true
+  const match = MESSAGE_TEXT_PATH.exec(path)
+  if (match === null) return false
+  const [, list, message, part] = match
+  const item = (body[list as string] as Json[] | undefined)?.[Number(message)]
+  if (item?.role !== 'user') return false
+  return part === undefined || USER_TEXT_PARTS.has((item.content as Json[])[Number(part)]?.type)
 }
 
 /**
@@ -329,21 +363,30 @@ function sseTransformer(api: Api, registry: RedactionRegistry, stats: Stats, onR
  * Create the proxy server. The caller listens on it; see {@link listen}.
  * @param config - validated configuration.
  * @param log - receives one line per request; never an original value or a header.
+ * @param nameModel - the loaded name model when `config.nameModel` is set; the caller releases it.
  * @returns the HTTP server.
  */
-export function createProxyServer(config: ProxyConfig, log: (line: string) => void = line => console.error(line)): Server {
-  const detector = new RulesDetector(config.redaction)
-  const continuations = new Map<string, string[]>()
+export function createProxyServer(
+  config: ProxyConfig,
+  log: (line: string) => void = line => console.error(line),
+  nameModel?: NameModel,
+): Server {
+  const rules = new RulesDetector(config.redaction)
+  const withModel = nameModel === undefined ? undefined : new NameModelDetector(rules, nameModel)
+  const detectorFor = (userTexts: ReadonlySet<string>, stats: Stats): RedactionDetector =>
+    withModel?.forRequest(userTexts, () => { stats.nameModelFailed = true }) ?? rules
+  const continuations = new Map<string, RequestTexts>()
 
   const forward = async (req: IncomingMessage, res: ServerResponse, path: string, api: Api | undefined, body: Buffer | undefined): Promise<void> => {
     const started = Date.now()
-    const stats: Stats = { masked: {}, restored: 0, unknown: 0 }
+    const stats: Stats = { masked: {}, restored: 0, unknown: 0, nameModelFailed: false }
     const anthropic = api === 'messages' || (api === undefined && (req.headers['x-api-key'] !== undefined || req.headers['anthropic-version'] !== undefined))
     const target = (anthropic ? config.anthropicUpstream : config.openaiUpstream) + (req.url ?? '/')
 
     let outgoing: string | undefined
     let registry: RedactionRegistry | undefined
     let texts: string[] = []
+    let userTexts = new Set<string>()
     if (api !== undefined) {
       let parsed: Json
       try {
@@ -360,23 +403,26 @@ export function createProxyServer(config: ProxyConfig, log: (line: string) => vo
         if (refusal !== undefined) throw new Refusal(422, `request text at ${slot.path} holds a ${refusal.reason} and cannot be masked (screen: "refuse")`)
         return text
       })
-      const prior = typeof parsed.previous_response_id === 'string' ? continuations.get(parsed.previous_response_id) ?? [] : []
-      const all = [...prior, ...texts]
+      const prior = typeof parsed.previous_response_id === 'string' ? continuations.get(parsed.previous_response_id) : undefined
+      const priorTexts = prior?.texts ?? []
+      const all = [...priorTexts, ...texts]
+      userTexts = new Set([...prior?.userTexts ?? [], ...texts.filter((_, i) => isUserText(parsed, (slots[i] as Slot).path))])
       let result
       try {
-        result = await mask(detector, all.map((text, seq) => ({ seq, path: '', text })), emptyRedactionIndex())
+        result = await mask(detectorFor(userTexts, stats), all.map((text, seq) => ({ seq, path: '', text })), emptyRedactionIndex())
       } catch (error) {
         // Screening above leaves only a conflict a continuation's stored texts can raise.
         if (error instanceof RedactionError) throw new Refusal(422, `request text cannot be masked: ${error.code}`)
+        if (error instanceof NameModelError) throw new Refusal(503, 'the name model failed and nameModel.required is set')
         throw error
       }
-      result.masked.slice(prior.length).forEach((masked, i) => {
+      result.masked.slice(priorTexts.length).forEach((masked, i) => {
         // oxlint-disable-next-line typescript/no-non-null-assertion -- one masked string per slot.
         const slot = slots[i]!
         ;(slot.parent as Record<string | number, string>)[slot.key] = masked
       })
       for (const span of result.applied) {
-        if (span.seq < prior.length) continue
+        if (span.seq < priorTexts.length) continue
         const category = span.id.slice(0, span.id.lastIndexOf('_'))
         stats.masked[category] = (stats.masked[category] ?? 0) + 1
       }
@@ -421,12 +467,12 @@ export function createProxyServer(config: ProxyConfig, log: (line: string) => vo
       if (!HOP.has(name)) out[name] = value
     })
     const remember = (id: string): void => {
-      continuations.set(id, texts)
+      continuations.set(id, { texts, userTexts })
       if (continuations.size > CONTINUATIONS_MAX) continuations.delete(continuations.keys().next().value as string)
     }
     const done = (): void => {
       const masked = Object.entries(stats.masked).map(([category, n]) => `${category} ${n}`).join(', ')
-      log(`${req.method} ${path} -> ${upstream.status} masked ${Object.values(stats.masked).reduce((a, b) => a + b, 0)}${masked === '' ? '' : ` (${masked})`} restored ${stats.restored} unknown ${stats.unknown} ${Date.now() - started}ms`)
+      log(`${req.method} ${path} -> ${upstream.status} masked ${Object.values(stats.masked).reduce((a, b) => a + b, 0)}${masked === '' ? '' : ` (${masked})`} restored ${stats.restored} unknown ${stats.unknown}${stats.nameModelFailed ? ' nameModel failed' : ''} ${Date.now() - started}ms`)
     }
 
     if (registry === undefined || upstream.body === null) {
@@ -535,4 +581,18 @@ export function listen(server: Server, port: number): Promise<number> {
       resolve(typeof address === 'object' && address !== null ? address.port : port)
     })
   })
+}
+
+/**
+ * Stop the proxy: stop accepting connections, end open ones, and release the
+ * name model once its running inferences finish. Exiting with the session
+ * still open aborted with `recursive_mutex lock failed` in 2 of 29 measured
+ * edge-int8 runs; releasing it first aborted in none of 24.
+ * @param server - the proxy server.
+ * @param nameModel - the name model passed to {@link createProxyServer}, if any.
+ */
+export async function closeProxy(server: Server, nameModel?: NameModel): Promise<void> {
+  const closed = new Promise<void>(resolve => server.close(() => resolve()))
+  server.closeAllConnections()
+  await Promise.all([closed, nameModel?.release()])
 }
