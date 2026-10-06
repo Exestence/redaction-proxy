@@ -85,6 +85,12 @@ describe('span filters', () => {
       .toEqual(['佐藤美咲', '田中', 'マリア', 'Sato', 'ゆきのに', '東京都に'])
   })
 
+  it('keeps a hiragana given name made of particle characters', () => {
+    const text = '山田ももが来て、佐藤ともと話し、森ののさんに送った'
+    const spans = ['山田ももが', '佐藤とも', '森ののさんに'].map(value => at(text, value))
+    expect(slices(text, trimJapaneseNameTails(spans, text))).toEqual(['山田ももが', '佐藤とも', '森ののさんに'])
+  })
+
   it('leaves Chinese names that end in a Japanese honorific glyph alone', () => {
     const text = '請聯絡王君與林先生'
     expect(slices(text, trimJapaneseNameTails([at(text, '王君'), at(text, '林先生')], text))).toEqual(['王君', '林先生'])

@@ -137,8 +137,13 @@ export function assembleSpans(tokens: readonly ScoredToken[], text: string): Mod
   return joinAdjacent(trimmed, text)
 }
 
-/** Honorifics and particles Japanese writes right after a name, which a name span can run over (`佐藤美咲さんに`). */
-const JAPANESE_NAME_TAIL = /(?:さん|さま|様|くん|君|ちゃん|氏|先生)?[にはがをのへともで]*$/u
+/**
+ * Honorifics and particles Japanese writes right after a name, which a name
+ * span can run over (`佐藤美咲さんに`): an honorific with up to two particles,
+ * or one bare particle. A longer bare run is left alone because hiragana given
+ * names are made of the same characters (`山田もも`, `佐藤とも`).
+ */
+const JAPANESE_NAME_TAIL = /(?:(?:さん|さま|様|くん|君|ちゃん|氏|先生)[にはがをのへともで]{0,2}|[にはがをのへともで])?$/u
 
 /**
  * Cut honorifics and particles off the end of NAME spans in Japanese text, so
