@@ -120,6 +120,7 @@ It misses some names and masks some words that are not names. Measured on synthe
 | | Result |
 | --- | --- |
 | Names in prose: English, Japanese | 1.00, 1.00 recall |
+| Names in pasted code, logs, config | not read by the model; on the held-out set it fully masks 65–70% of all names |
 | Names in prose: Traditional Chinese | **0.87** recall (about 1 name in 8 missed) |
 | Names in pasted code, logs, JSON | 0.10–0.30 recall: code is not read; list such names in `terms` |
 | Precision | 0.94 |
