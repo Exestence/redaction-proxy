@@ -14,10 +14,9 @@ import { fakeNameModel } from './name-model-fake.ts'
 const RULES_ONLY_DIGEST = 'sha256:49cba7ce69b8961ec8f8e056240beb401c8b8eba1d2f98a4a4e16460712239ff'
 
 describe('nameModel configuration', () => {
-  it('is absent by default, and the rules detector keeps rules-6 and its digest', () => {
-    const config = loadConfig(undefined, {})
-    expect(config.nameModel).toBeUndefined()
-    const rules = new RulesDetector(config.redaction)
+  it('is absent by default, and the core rules detector keeps rules-6 and its digest', () => {
+    expect(loadConfig(undefined, {}).nameModel).toBeUndefined()
+    const rules = new RulesDetector({})
     expect(rules.detectorVersion).toBe('rules-6')
     expect(rules.policyDigest).toBe(RULES_ONLY_DIGEST)
   })
