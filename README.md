@@ -142,7 +142,11 @@ What it reads, every number, and the options: [technical details §16](docs/DETA
 | Median time per prompt | 0.06 ms | 0.07 ms | 7.4 ms | 8.6 ms | 8.6 ms |
 | Fully masked, all 7 languages | 38.8% | 56.0% | 64.3% | 46.6%* | 43.0%* |
 
-\* Presidio analyzes every prompt as English, so its all-language results are for reference only. Restoring the masked text gave the original byte for byte in every prompt.
+\* Presidio analyzes every prompt as English, so its all-language results are for reference only.
+
+**About the 100% cells.** Email, card and IBAN reach 100% because every value of those kinds in this set is written the standard way: no obfuscated emails (`name at example.com`, `name [at] example.com`), no lower-case IBANs, IBANs from only 7 countries, and cards only in common groupings. Those other spellings are known misses (see [Limitations](#what-it-does-not-protect)). The samples are also small (107 cards, 127 IBANs), so 100% here means roughly 97% or better. The next held-out version will include these spellings.
+
+Self-check, not a score: in every prompt, restoring the masked text gave the original byte for byte. This tests the proxy against itself; no language model was involved.
 
 Where it is weak:
 
@@ -162,7 +166,7 @@ Full tables: [held-out results](bench/results/public-bench-held-out.md), [dev re
 - **Meaning.** The cloud still reads everything around the placeholders: `⟦PATH_1⟧/clients/acme-layoffs.md` still says a lot.
 - **Names, addresses, health details, salaries**, unless you list them in `terms` or the name model finds them.
 - **Images, PDFs, audio, `metadata`, tool names, signed thinking.** These are forwarded unchanged; if a detected value appears in one, the whole request is refused with 422.
-- **Unusual spellings.** Some split or encoded forms slip through, such as `name @ domain` with spaces or a double percent-encoded value.
+- **Unusual spellings.** Some split or encoded forms slip through, such as `name @ domain` with spaces, `name at domain`, a lower-case IBAN, or a double percent-encoded value.
 - **Cursor**, or any tool that sends requests from its own servers.
 - **Other programs on your machine.** The proxy binds `127.0.0.1` only, with no authentication.
 
