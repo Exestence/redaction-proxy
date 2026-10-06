@@ -30,19 +30,27 @@ const FENCE = /^ {0,3}(`{3,}|~{3,})/
 const INDENTED = /^( {4}|\t)/
 const INLINE_CODE = /`[^`\n]+`/g
 
+/** Lines that read as code, logs, or data; the model reports identifiers in them as names and misses real ones. */
 const CODE_LINE: readonly RegExp[] = [
+  // Statement and block punctuation: a line that ends in `;`, `{`, `[`, `(`, or `=>`, or starts with a closer.
   /[;{}[(]\s*$/, /=>\s*$/, /^\s*[}\])]/,
+  // Comment, shell-prompt, and REPL leaders.
   /^\s*(\/\/|\/\*|\*\/|\* |\*$|<!--|#!|\$ |>>> )/,
+  // Decorator calls and markup tags.
   /^\s*@\w+\(/, /^\s*<\/?[A-Za-z][\w.-]*[\s/>]/,
   // A keyword starts code only when one token follows it and then code punctuation or the line end, so chat that
   // starts lower-case (`let me know`, `return the laptop`, `done, ...`) stays prose.
   /^\s*((import|export|default|const|let|var|function|def|class|return|package|public|private|protected|static|fn|func|declare|readonly|interface|enum|type|echo|exit)\s+)+([{*"'([]|[\w$.-]+(\s*[=:;,(<{]|\s*$|\s+(as|from|extends|implements)\b))/,
+  // SQL statements; shell closers only alone on their line; control flow followed by a parenthesis.
   /^\s*(SELECT|INSERT|UPDATE|DELETE|CREATE)\s/, /^\s*(fi|then|done|esac|else|do)\s*;?\s*$/,
   /^\s*(if|for|while|switch|catch|elif)\s*\(/,
   // Two or more spaces of indent that do not start a nested list item.
   /^ {2,}(?![-*+] |\d+\. )\S/,
+  // Python imports, assignments, and operators prose does not use.
   /^\s*from\s+\S+\s+import\s/, /^\s*[\w.$[\]"']+\s*[-+*/]?=\s*\S/, /(=>|===|!==|&&|\|\||::)/,
+  // JSON: an opening bracket or a quoted key.
   /^\s*[{[]/, /^\s*"[^"]+"\s*:/,
+  // Log lines: a leading timestamp, a level word, or a logfmt level.
   /^\s*\[?\d{4}-\d{2}-\d{2}[T ]\d/, /^\s*\[?(INFO|WARN|WARNING|ERROR|DEBUG|TRACE|FATAL)\]?\s/, /^\s*level=\w+\s/,
 ]
 
