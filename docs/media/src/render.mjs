@@ -55,7 +55,7 @@ const gif = join(media, 'intro.gif')
 execFileSync(FFMPEG, ['-y', '-loglevel', 'error', '-ss', '0.4', '-i', webm,
   '-c:v', 'libx264', '-pix_fmt', 'yuv420p', '-crf', '24', '-preset', 'slow', '-movflags', '+faststart', '-an', mp4])
 execFileSync(FFMPEG, ['-y', '-loglevel', 'error', '-i', mp4, '-vf',
-  'fps=8,scale=800:-1:flags=lanczos,split[a][b];[a]palettegen=max_colors=64:stats_mode=diff[p];[b][p]paletteuse=dither=bayer:bayer_scale=5:diff_mode=rectangle',
+  'fps=8,scale=960:-1:flags=lanczos,split[a][b];[a]palettegen=max_colors=96:stats_mode=diff[p];[b][p]paletteuse=dither=bayer:bayer_scale=5:diff_mode=rectangle',
   gif])
 rmSync(videoDir, { recursive: true, force: true })
 
