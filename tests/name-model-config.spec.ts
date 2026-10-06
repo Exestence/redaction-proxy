@@ -70,7 +70,7 @@ describe('policy digest with the name model', () => {
     const { model } = fakeNameModel({})
     const detector = new NameModelDetector(rules, model)
     expect(detector.policyDigest).not.toBe(RULES_ONLY_DIGEST)
-    expect(detector.detectorVersion).toBe('rules-6+nym-edge-int8-1')
+    expect(detector.detectorVersion).toBe('rules-6+nym-edge-int8-2')
     expect(detector.categories).toEqual([...rules.categories, 'NAME', 'ORG', 'LOC', 'ADDR'])
   })
 

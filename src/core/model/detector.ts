@@ -3,11 +3,13 @@
  * the model runs only on the texts a request marks as user-written, and its
  * spans give way to every rules detection they overlap.
  *
- * Propagation is narrower than for rules: a model NAME reaches the rest of the
- * request through the configured-terms matcher, so `許雅雯` and `許 雅 雯`
- * share one placeholder, but a single ASCII word (`Jordan`, or a false
- * positive such as `Default`) is masked only where the model found it.
- * ORG, LOC, and ADDR are masked only where found.
+ * Every value the model finds (NAME, ORG, LOC, ADDR) is masked everywhere in
+ * the request with one placeholder: system prompts, assistant turns, tool
+ * results, and tool-call arguments. Further occurrences are found by the
+ * configured-terms matcher, so `許雅雯` and `許 雅 雯`, or `Jordan` and
+ * `JORDAN`, share one placeholder. A Latin-script value matches whole words
+ * only (`Lee` never inside `Leeds`); a CJK value matches anywhere. False
+ * positives spread the same way, which the allowlist contains.
  *
  * @module redaction-proxy/core/model/detector
  */
@@ -18,14 +20,13 @@ import type { RulesDetector } from '../rules/index.ts'
 import type { Candidate } from '../rules/candidate.ts'
 import { mergeCandidates } from '../rules/candidate.ts'
 import { collectTermCandidates, termIdentityKey } from '../rules/rules.ts'
-import { isPropagatableValue } from '../rules/secret.ts'
 import type { RedactionDetection, RedactionDetector, RedactionPropagation } from '../types.ts'
 import type { NameModel } from './name-model.ts'
 import { NAME_MODEL_CATEGORIES } from './config.ts'
 import { dropOverlapping } from './spans.ts'
 
 /** Suffix that marks a detector version as rules plus the name model. */
-const NAME_MODEL_VERSION = 'nym-edge-int8-1'
+const NAME_MODEL_VERSION = 'nym-edge-int8-2'
 
 const MODEL_CATEGORIES: ReadonlySet<string> = new Set(NAME_MODEL_CATEGORIES)
 
@@ -40,29 +41,64 @@ export class NameModelError extends Error {
  */
 export type NameModelFailureHandler = (error: unknown) => void
 
+/** A letter or digit of a script that separates words with spaces. CJK scripts do not. */
+const SPACED_WORD_CHAR = /^(?![\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}\p{Script=Hangul}])[\p{L}\p{N}\p{M}]$/u
+
 /**
- * Whether a model-found name may be propagated: never a single ASCII word,
- * whose other occurrences are too often a product, a setting, or a code word.
- * @param value - the name as found.
- * @returns whether to search for it elsewhere.
+ * Whether an occurrence is a whole word at both ends. An end is cut only when
+ * the occurrence's character there and its neighbour outside are both letters
+ * or digits of a spaced script, so `Lee` stands alone in `Lee's` but not in
+ * `Leeds`, and `鴻遠科技` stands alone anywhere.
+ * @param text - the text holding the occurrence.
+ * @param start - inclusive UTF-16 start.
+ * @param end - exclusive UTF-16 end.
+ * @returns whether neither end cuts a word.
  */
-function isPropagatableName(value: string): boolean {
-  const singleAsciiWord = /^[\x21-\x7e]+$/.test(value)
-  return !singleAsciiWord && isPropagatableValue(value)
+export function standsAlone(text: string, start: number, end: number): boolean {
+  const cuts = (inside: string, outside: string): boolean => SPACED_WORD_CHAR.test(inside) && SPACED_WORD_CHAR.test(outside)
+  return !cuts(text.charAt(start), text.charAt(start - 1)) && !cuts(text.charAt(end - 1), text.charAt(end))
 }
 
 /**
- * Find further occurrences of model-found names through the terms matcher.
+ * Whether a value is searched for in the rest of the request, and so by the
+ * proxy's leak scan. One character (`王`, or `燕` from a partly found `王晓燕`)
+ * would mask that character in every word holding it.
+ * @param value - a bound original.
+ * @returns whether it has at least two code points.
+ */
+export function isSearchedValue(value: string): boolean {
+  // oxlint-disable-next-line typescript/no-misused-spread -- the floor counts code points, not graphemes.
+  return [...value].length >= 2
+}
+
+/**
+ * Whether a text holds a value as a whole word, by {@link standsAlone}.
+ * @param text - the text to search.
+ * @param value - the value.
+ * @returns whether one occurrence stands alone.
+ */
+export function containsStandingAlone(text: string, value: string): boolean {
+  for (let at = text.indexOf(value); at >= 0; at = text.indexOf(value, at + 1)) {
+    if (standsAlone(text, at, at + value.length)) return true
+  }
+  return false
+}
+
+/**
+ * Find further occurrences of model-found values through the terms matcher,
+ * keeping only those that stand alone.
  * @param texts - every submitted text.
- * @param names - the propagatable names.
+ * @param values - the model-found values mapped to their categories.
  * @returns disjoint ranges per text.
  */
-function propagateNames(texts: readonly string[], names: readonly string[]): RedactionPropagation[] {
-  if (names.length === 0) return []
-  const terms = names.map(value => ({ value, category: 'NAME' }))
+function propagateModelValues(texts: readonly string[], values: ReadonlyMap<string, string>): RedactionPropagation[] {
+  const terms = [...values].filter(([value]) => isSearchedValue(value)).map(([value, category]) => ({ value, category }))
+  if (terms.length === 0) return []
   return texts.flatMap((text, at) => {
     const candidates: Candidate[] = []
-    collectTermCandidates(text, terms, (start, end, category, priority) => candidates.push({ start, end, category, priority }))
+    collectTermCandidates(text, terms, (start, end, category, priority) => {
+      if (standsAlone(text, start, end)) candidates.push({ start, end, category, priority })
+    })
     return mergeCandidates(candidates).map(({ start, end, category }) => ({ text: at, start, end, category }))
   })
 }
@@ -117,7 +153,7 @@ export class NameModelDetector {
         return [...ruleDetections, ...dropOverlapping(await this.findOrFail(text, onFailure), ruleDetections)]
       },
       propagate: (texts, values) => this.propagate(texts, values),
-      identityKey: (value, category) => category === 'NAME' ? termIdentityKey(value, category) : this.rules.identityKey(value, category),
+      identityKey: (value, category) => MODEL_CATEGORIES.has(category) ? termIdentityKey(value, category) : this.rules.identityKey(value, category),
     }
   }
 
@@ -140,14 +176,15 @@ export class NameModelDetector {
 
   /**
    * Rules propagation for rule-found values, then terms-matcher propagation
-   * for model-found names. Rules ranges come first, so they win an overlap.
+   * for model-found values. Rules ranges come first, so they win an overlap.
    * @param texts - every submitted text.
    * @param values - every bound original mapped to its category.
    * @returns ranges naming their text by index.
    */
   private propagate(texts: readonly string[], values: ReadonlyMap<string, string>): RedactionPropagation[] {
-    const ruleValues = new Map([...values].filter(([, category]) => !MODEL_CATEGORIES.has(category)))
-    const names = [...values].filter(([value, category]) => category === 'NAME' && isPropagatableName(value)).map(([value]) => value)
-    return [...this.rules.propagate(texts, ruleValues), ...propagateNames(texts, names)]
+    const isModel = ([, category]: [string, string]): boolean => MODEL_CATEGORIES.has(category)
+    const ruleValues = new Map([...values].filter(entry => !isModel(entry)))
+    const modelValues = new Map([...values].filter(isModel))
+    return [...this.rules.propagate(texts, ruleValues), ...propagateModelValues(texts, modelValues)]
   }
 }

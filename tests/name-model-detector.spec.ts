@@ -35,8 +35,8 @@ async function maskWith(texts: string[], userTexts: string[] = texts, config = {
 
 describe('NameModelDetector', () => {
   it('runs the model on user texts only, and rules on every text', async () => {
-    const { masked } = await maskWith(['Ask Jordan', 'System: Jordan at ops@example.test'], ['Ask Jordan'])
-    expect(masked).toEqual(['Ask ⟦NAME_1⟧', 'System: Jordan at ⟦EMAIL_1⟧'])
+    const { masked } = await maskWith(['Ask Jordan', 'System: Jane at ops@example.test'], ['Ask Jordan'])
+    expect(masked).toEqual(['Ask ⟦NAME_1⟧', 'System: Jane at ⟦EMAIL_1⟧'])
   })
 
   it('lets a rules detection win over an overlapping model span', async () => {
@@ -53,9 +53,19 @@ describe('NameModelDetector', () => {
     expect(masked).toEqual(['請問⟦NAME_1⟧', '系統：⟦NAME_1⟧ 已回覆'])
   })
 
-  it('never propagates a single ASCII word, and masks ORG only where found', async () => {
-    const { masked } = await maskWith(['Ask Jordan at Acme', 'Jordan and Acme in the system prompt'], ['Ask Jordan at Acme'])
-    expect(masked).toEqual(['Ask ⟦NAME_1⟧ at ⟦ORG_1⟧', 'Jordan and Acme in the system prompt'])
+  it('propagates a single word and an ORG to every text, whole words only', async () => {
+    const { masked } = await maskWith(['Ask Jordan at Acme', 'JORDAN, Jordan\'s, Jordanian, ACME-Corp, Acmes'], ['Ask Jordan at Acme'])
+    expect(masked).toEqual(['Ask ⟦NAME_1⟧ at ⟦ORG_1⟧', '⟦NAME_1⟧, ⟦NAME_1⟧\'s, Jordanian, ⟦ORG_1⟧-Corp, Acmes'])
+  })
+
+  it('propagates a Han value as a substring, with no word edges', async () => {
+    const { masked } = await maskWith(['請問許雅雯', '許雅雯的報告在Jordan那裡'], ['請問許雅雯'])
+    expect(masked).toEqual(['請問⟦NAME_1⟧', '⟦NAME_1⟧的報告在Jordan那裡'])
+  })
+
+  it('masks a one-character value only where found', async () => {
+    const { masked } = await maskWith(['問許', '許可證'], ['問許'])
+    expect(masked).toEqual(['問⟦NAME_1⟧', '許可證'])
   })
 
   it('drops spans on the default allowlist, which covers tools and setting words', async () => {
