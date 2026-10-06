@@ -18,7 +18,7 @@ import { createServer } from 'node:http'
 import type { IncomingMessage, Server, ServerResponse } from 'node:http'
 import { RedactionError, RulesDetector, createStreamRestorer, emptyRedactionIndex, mask, screenText } from '../core/index.ts'
 import type { RedactionDetector, RedactionRegistry, StreamRestorer } from '../core/index.ts'
-import { NameModelDetector, NameModelError } from '../core/model/detector.ts'
+import { NameModelDetector, NameModelError, containsStandingAlone, isSearchedValue } from '../core/model/detector.ts'
 import type { NameModel } from '../core/model/name-model.ts'
 import type { ProxyConfig } from './config.ts'
 
@@ -153,6 +153,37 @@ function isUserText(body: Json, path: string): boolean {
   const item = (body[list as string] as Json[] | undefined)?.[Number(message)]
   if (item?.role !== 'user') return false
   return part === undefined || USER_TEXT_PARTS.has((item.content as Json[])[Number(part)]?.type)
+}
+
+/**
+ * Refuse a masked body that still holds a detected value: in a field the
+ * proxy does not rewrite (metadata, an image URL), or an occurrence masking
+ * could not cover. Values are matched as propagation matches them, as whole
+ * words for spaced scripts, so `Lee` inside `Leeds` is no leak. Keys are
+ * checked too.
+ * @param body - the masked request body.
+ * @param registry - bindings of the mask call.
+ * @throws {Refusal} 422 naming the JSON pointers, never the value.
+ */
+function refuseLeaks(body: Json, registry: RedactionRegistry): void {
+  // A value inside a JSON-text string (`arguments`) is written JSON-escaped.
+  const forms = registry.originals().filter(isSearchedValue).flatMap(original => [original, JSON.stringify(original).slice(1, -1)])
+  const where: string[] = []
+  const check = (text: string, path: string): void => {
+    if (forms.some(form => containsStandingAlone(text, form))) where.push(path)
+  }
+  const walk = (value: unknown, path: string): void => {
+    if (typeof value === 'string') check(value, path)
+    else if (value !== null && typeof value === 'object') {
+      for (const [key, item] of Object.entries(value)) {
+        const at = `${path}/${key}`
+        check(key, at)
+        walk(item, at)
+      }
+    }
+  }
+  walk(body, '')
+  if (where.length > 0) throw new Refusal(422, `a detected value is still unmasked at ${where.slice(0, 5).join(', ')}; the request was not forwarded`)
 }
 
 /**
@@ -434,22 +465,8 @@ export function createProxyServer(
       const category = span.id.slice(0, span.id.lastIndexOf('_'))
       stats.masked[category] = (stats.masked[category] ?? 0) + 1
     }
-    const outgoing = JSON.stringify(parsed)
-    const leaked = result.registry.originals().filter(original =>
-      outgoing.includes(original) || outgoing.includes(JSON.stringify(original).slice(1, -1)))
-    if (leaked.length > 0) {
-      const where = new Set<string>()
-      const walk = (value: unknown, path: string): void => {
-        if (typeof value === 'string') {
-          if (leaked.some(original => value.includes(original))) where.add(path)
-        } else if (value !== null && typeof value === 'object') {
-          for (const [key, item] of Object.entries(value)) walk(item, `${path}/${key}`)
-        }
-      }
-      walk(parsed, '')
-      throw new Refusal(422, `masked request still contains ${leaked.length} detected value(s) in fields the proxy does not rewrite: ${[...where].slice(0, 5).join(', ')}`)
-    }
-    return { outgoing, registry: result.registry, texts: all, userTexts }
+    refuseLeaks(parsed, result.registry)
+    return { outgoing: JSON.stringify(parsed), registry: result.registry, texts: all, userTexts }
   }
 
   const forward = async (req: IncomingMessage, res: ServerResponse, path: string, api: Api | undefined, body: Buffer | undefined): Promise<void> => {

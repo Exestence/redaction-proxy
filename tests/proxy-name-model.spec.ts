@@ -9,7 +9,9 @@ import { closeProxy, createProxyServer, listen } from '../src/proxy/server.ts'
 import { fakeNameModel } from './name-model-fake.ts'
 import type { FakeRuntime } from './name-model-fake.ts'
 
-const LABELS = { Jane: 'B-GIVEN_NAME', Doe: 'B-SURNAME', 許: 'B-SURNAME', 雅: 'I-GIVEN_NAME', 雯: 'I-GIVEN_NAME' } as const
+const LABELS = {
+  Jane: 'B-GIVEN_NAME', Doe: 'B-SURNAME', Lee: 'B-SURNAME', Berlin: 'B-CITY', 許: 'B-SURNAME', 雅: 'I-GIVEN_NAME', 雯: 'I-GIVEN_NAME',
+} as const
 
 let upstream: Server
 let upstreamPort = 0
@@ -74,6 +76,39 @@ describe('proxy with the name model', () => {
     ])
     // The reply gets the spelling the model found, which is bound before the propagated one.
     expect((await response.json()).choices[0].message.content).toEqual([{ type: 'text', text: '我是許雅雯, ask Jane Doe' }])
+  })
+
+  it('masks every model value in every message, tool-call arguments included, and leaves longer words alone', async () => {
+    await start()
+    const response = await chat([
+      { role: 'user', content: 'Please email Lee about Berlin today.' },
+      { role: 'assistant', content: 'Emailing Lee.', tool_calls: [{ id: 'c', type: 'function', function: { name: 'send', arguments: '{"to":"Lee"}' } }] },
+      { role: 'tool', tool_call_id: 'c', content: 'Sent to Lee, Berlin office; Leeds office skipped.' },
+    ])
+    expect(response.status).toBe(200)
+    expect(received[0].messages).toEqual([
+      { role: 'user', content: 'Please email ⟦NAME_1⟧ about ⟦LOC_1⟧ today.' },
+      { role: 'assistant', content: 'Emailing ⟦NAME_1⟧.', tool_calls: [{ id: 'c', type: 'function', function: { name: 'send', arguments: '{"to":"⟦NAME_1⟧"}' } }] },
+      { role: 'tool', tool_call_id: 'c', content: 'Sent to ⟦NAME_1⟧, ⟦LOC_1⟧ office; Leeds office skipped.' },
+    ])
+    expect((await response.json()).choices[0].message.content).toBe('Sent to Lee, Berlin office; Leeds office skipped.')
+  })
+
+  it('refuses a model value left in a field it does not rewrite, but not a longer word holding it', async () => {
+    await start()
+    const leeds = await fetch(`${base}/v1/chat/completions`, {
+      method: 'POST', headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ model: 'm', metadata: { office: 'Leeds' }, messages: [{ role: 'user', content: 'Ask Lee' }] }),
+    })
+    expect(leeds.status).toBe(200)
+    const leak = await fetch(`${base}/v1/chat/completions`, {
+      method: 'POST', headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ model: 'm', metadata: { owner: 'Lee' }, messages: [{ role: 'user', content: 'Ask Lee' }] }),
+    })
+    expect(leak.status).toBe(422)
+    const message = (await leak.json()).error.message
+    expect(message).toBe('a detected value is still unmasked at /metadata/owner; the request was not forwarded')
+    expect(received).toHaveLength(1)
   })
 
   it('does not run the model on assistant or tool text', async () => {
