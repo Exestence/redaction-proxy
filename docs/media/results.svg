@@ -1,83 +1,91 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 758" width="800" height="758" role="img" aria-labelledby="t">
-<title id="t">Share of sensitive values fully masked, by category, dev set (preliminary)</title>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 820" width="800" height="820" role="img" aria-labelledby="t">
+<title id="t">Share of sensitive values fully masked, by category, English prompts, held-out set (written blind, run once)</title>
 <style>text{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","Noto Sans",Helvetica,Arial,sans-serif;fill:#8b949e;font-size:13px}.h{font-size:16px;font-weight:600}.b{font-weight:600}</style>
-<text x="0" y="20" class="h">Fully masked, by category: dev set (preliminary)</text>
-<text x="0" y="40">1200 synthetic prompts (en, zh-TW, zh-CN, ja), 3122 sensitive values, detector rules-6</text>
-<rect x="0" y="56" width="12" height="12" rx="2" fill="#2f81f7"/><text x="18" y="66">redaction-proxy rules</text>
-<rect x="0" y="74" width="12" height="12" rx="2" fill="#bf8700"/><text x="18" y="84">Presidio 2.2.364 (en_core_web_lg, cutoff 0)</text>
+<text x="0" y="20" class="h">Fully masked, by category, English prompts: held-out set (written blind, run once)</text>
+<text x="0" y="40">1453 sensitive values in the English prompts of 1518 synthetic prompts (ja, en, zh-CN, zh-TW, de, fr, ko), detector rules-6</text>
+<rect x="0" y="56" width="12" height="12" rx="2" fill="#2f81f7"/><text x="18" y="66">rules, proxy default</text>
+<rect x="0" y="74" width="12" height="12" rx="2" fill="#bf8700"/><text x="18" y="84">rules + name model (experimental)</text>
 <rect x="0" y="92" width="12" height="12" rx="2" fill="#a475f9"/><text x="18" y="102">Presidio 2.2.364 (en_core_web_lg, cutoff 0.4)</text>
 <text x="160" y="152" text-anchor="end">PERSON</text>
 <rect x="170" y="128" width="1.0" height="11" rx="2" fill="#2f81f7"/>
 <text x="176" y="138" font-size="11">0%</text>
-<rect x="170" y="142" width="183.8" height="11" rx="2" fill="#bf8700"/>
-<text x="359.7948717948718" y="152" font-size="11">33%</text>
-<rect x="170" y="156" width="183.8" height="11" rx="2" fill="#a475f9"/>
-<text x="359.7948717948718" y="166" font-size="11">33%</text>
+<rect x="170" y="142" width="394.4" height="11" rx="2" fill="#bf8700"/>
+<text x="570.3661971830986" y="152" font-size="11">70%</text>
+<rect x="170" y="156" width="353.0" height="11" rx="2" fill="#a475f9"/>
+<text x="528.9577464788733" y="166" font-size="11">63%</text>
 <text x="160" y="208" text-anchor="end">EMAIL</text>
 <rect x="170" y="184" width="560.0" height="11" rx="2" fill="#2f81f7"/>
 <text x="736" y="194" font-size="11">100%</text>
 <rect x="170" y="198" width="560.0" height="11" rx="2" fill="#bf8700"/>
 <text x="736" y="208" font-size="11">100%</text>
-<rect x="170" y="212" width="560.0" height="11" rx="2" fill="#a475f9"/>
-<text x="736" y="222" font-size="11">100%</text>
+<rect x="170" y="212" width="312.7" height="11" rx="2" fill="#a475f9"/>
+<text x="488.7272727272727" y="222" font-size="11">56%</text>
 <text x="160" y="264" text-anchor="end">PHONE</text>
-<rect x="170" y="240" width="177.0" height="11" rx="2" fill="#2f81f7"/>
-<text x="352.99481865284974" y="250" font-size="11">32%</text>
-<rect x="170" y="254" width="504.9" height="11" rx="2" fill="#bf8700"/>
-<text x="680.8704663212435" y="264" font-size="11">90%</text>
-<rect x="170" y="268" width="484.6" height="11" rx="2" fill="#a475f9"/>
-<text x="660.5595854922279" y="278" font-size="11">87%</text>
+<rect x="170" y="240" width="26.1" height="11" rx="2" fill="#2f81f7"/>
+<text x="202.13333333333333" y="250" font-size="11">5%</text>
+<rect x="170" y="254" width="26.1" height="11" rx="2" fill="#bf8700"/>
+<text x="202.13333333333333" y="264" font-size="11">5%</text>
+<rect x="170" y="268" width="459.2" height="11" rx="2" fill="#a475f9"/>
+<text x="635.2" y="278" font-size="11">82%</text>
 <text x="160" y="320" text-anchor="end">NATIONAL_ID</text>
-<rect x="170" y="296" width="162.3" height="11" rx="2" fill="#2f81f7"/>
-<text x="338.3188405797101" y="306" font-size="11">29%</text>
-<rect x="170" y="310" width="446.4" height="11" rx="2" fill="#bf8700"/>
-<text x="622.3768115942029" y="320" font-size="11">80%</text>
-<rect x="170" y="324" width="186.7" height="11" rx="2" fill="#a475f9"/>
-<text x="362.66666666666663" y="334" font-size="11">33%</text>
+<rect x="170" y="296" width="518.5" height="11" rx="2" fill="#2f81f7"/>
+<text x="694.5185185185185" y="306" font-size="11">93%</text>
+<rect x="170" y="310" width="518.5" height="11" rx="2" fill="#bf8700"/>
+<text x="694.5185185185185" y="320" font-size="11">93%</text>
+<rect x="170" y="324" width="435.6" height="11" rx="2" fill="#a475f9"/>
+<text x="611.5555555555555" y="334" font-size="11">78%</text>
 <text x="160" y="376" text-anchor="end">CARD</text>
 <rect x="170" y="352" width="560.0" height="11" rx="2" fill="#2f81f7"/>
 <text x="736" y="362" font-size="11">100%</text>
 <rect x="170" y="366" width="560.0" height="11" rx="2" fill="#bf8700"/>
 <text x="736" y="376" font-size="11">100%</text>
-<rect x="170" y="380" width="560.0" height="11" rx="2" fill="#a475f9"/>
-<text x="736" y="390" font-size="11">100%</text>
-<text x="160" y="432" text-anchor="end">SECRET</text>
+<rect x="170" y="380" width="453.3" height="11" rx="2" fill="#a475f9"/>
+<text x="629.3333333333333" y="390" font-size="11">81%</text>
+<text x="160" y="432" text-anchor="end">IBAN</text>
 <rect x="170" y="408" width="560.0" height="11" rx="2" fill="#2f81f7"/>
 <text x="736" y="418" font-size="11">100%</text>
-<rect x="170" y="422" width="20.6" height="11" rx="2" fill="#bf8700"/>
-<text x="196.58027079303676" y="432" font-size="11">4%</text>
-<rect x="170" y="436" width="20.6" height="11" rx="2" fill="#a475f9"/>
-<text x="196.58027079303676" y="446" font-size="11">4%</text>
-<text x="160" y="488" text-anchor="end">HOME_PATH</text>
-<rect x="170" y="464" width="560.0" height="11" rx="2" fill="#2f81f7"/>
-<text x="736" y="474" font-size="11">100%</text>
-<rect x="170" y="478" width="1.0" height="11" rx="2" fill="#bf8700"/>
-<text x="176" y="488" font-size="11">0%</text>
-<rect x="170" y="492" width="1.0" height="11" rx="2" fill="#a475f9"/>
-<text x="176" y="502" font-size="11">0%</text>
-<text x="160" y="544" text-anchor="end">PRIVATE_IP</text>
-<rect x="170" y="520" width="560.0" height="11" rx="2" fill="#2f81f7"/>
-<text x="736" y="530" font-size="11">100%</text>
-<rect x="170" y="534" width="560.0" height="11" rx="2" fill="#bf8700"/>
-<text x="736" y="544" font-size="11">100%</text>
-<rect x="170" y="548" width="560.0" height="11" rx="2" fill="#a475f9"/>
-<text x="736" y="558" font-size="11">100%</text>
-<text x="160" y="600" text-anchor="end">INTERNAL_HOST</text>
-<rect x="170" y="576" width="560.0" height="11" rx="2" fill="#2f81f7"/>
-<text x="736" y="586" font-size="11">100%</text>
-<rect x="170" y="590" width="17.5" height="11" rx="2" fill="#bf8700"/>
-<text x="193.5" y="600" font-size="11">3%</text>
-<rect x="170" y="604" width="17.5" height="11" rx="2" fill="#a475f9"/>
-<text x="193.5" y="614" font-size="11">3%</text>
-<line x1="0" x2="800" y1="626" y2="626" stroke="#8b949e" stroke-opacity=".4"/>
-<text x="160" y="656" text-anchor="end" class="b">Macro average</text>
-<rect x="170" y="632" width="411.0" height="11" rx="2" fill="#2f81f7"/>
-<text x="587.03485102584" y="642" font-size="11">73%</text>
-<rect x="170" y="646" width="317.0" height="11" rx="2" fill="#bf8700"/>
-<text x="493.01360227815053" y="656" font-size="11">57%</text>
-<rect x="170" y="660" width="285.9" height="11" rx="2" fill="#a475f9"/>
-<text x="461.900154971867" y="670" font-size="11">51%</text>
-<text x="0" y="718">redaction-proxy: the core library's default rules (no international rules, no terms, no name model).</text>
-<text x="0" y="736">Presidio analyzes every prompt as English, so its non-English results are for reference only.</text>
-<text x="0" y="754">Regenerate: node bench/results-chart.mjs bench/results/public-bench-dev.json</text>
+<rect x="170" y="422" width="560.0" height="11" rx="2" fill="#bf8700"/>
+<text x="736" y="432" font-size="11">100%</text>
+<rect x="170" y="436" width="543.0" height="11" rx="2" fill="#a475f9"/>
+<text x="719.030303030303" y="446" font-size="11">97%</text>
+<text x="160" y="488" text-anchor="end">SECRET</text>
+<rect x="170" y="464" width="394.4" height="11" rx="2" fill="#2f81f7"/>
+<text x="570.3661971830986" y="474" font-size="11">70%</text>
+<rect x="170" y="478" width="394.4" height="11" rx="2" fill="#bf8700"/>
+<text x="570.3661971830986" y="488" font-size="11">70%</text>
+<rect x="170" y="492" width="55.2" height="11" rx="2" fill="#a475f9"/>
+<text x="231.2112676056338" y="502" font-size="11">10%</text>
+<text x="160" y="544" text-anchor="end">PATH</text>
+<rect x="170" y="520" width="20.2" height="11" rx="2" fill="#2f81f7"/>
+<text x="196.18018018018017" y="530" font-size="11">4%</text>
+<rect x="170" y="534" width="20.2" height="11" rx="2" fill="#bf8700"/>
+<text x="196.18018018018017" y="544" font-size="11">4%</text>
+<rect x="170" y="548" width="1.0" height="11" rx="2" fill="#a475f9"/>
+<text x="176" y="558" font-size="11">0%</text>
+<text x="160" y="600" text-anchor="end">HOST</text>
+<rect x="170" y="576" width="389.2" height="11" rx="2" fill="#2f81f7"/>
+<text x="565.2198581560283" y="586" font-size="11">70%</text>
+<rect x="170" y="590" width="389.2" height="11" rx="2" fill="#bf8700"/>
+<text x="565.2198581560283" y="600" font-size="11">70%</text>
+<rect x="170" y="604" width="224.4" height="11" rx="2" fill="#a475f9"/>
+<text x="400.39716312056737" y="614" font-size="11">40%</text>
+<text x="160" y="656" text-anchor="end">ADDRESS</text>
+<rect x="170" y="632" width="1.0" height="11" rx="2" fill="#2f81f7"/>
+<text x="176" y="642" font-size="11">0%</text>
+<rect x="170" y="646" width="1.0" height="11" rx="2" fill="#bf8700"/>
+<text x="176" y="656" font-size="11">0%</text>
+<rect x="170" y="660" width="1.0" height="11" rx="2" fill="#a475f9"/>
+<text x="176" y="670" font-size="11">0%</text>
+<line x1="0" x2="800" y1="682" y2="682" stroke="#8b949e" stroke-opacity=".4"/>
+<text x="160" y="712" text-anchor="end" class="b">Macro average</text>
+<rect x="170" y="688" width="302.8" height="11" rx="2" fill="#2f81f7"/>
+<text x="478.84180873711585" y="698" font-size="11">54%</text>
+<rect x="170" y="702" width="342.3" height="11" rx="2" fill="#bf8700"/>
+<text x="518.2784284554257" y="712" font-size="11">61%</text>
+<rect x="170" y="716" width="283.6" height="11" rx="2" fill="#a475f9"/>
+<text x="459.6412641851539" y="726" font-size="11">51%</text>
+<text x="0" y="762">rules, proxy default: every built-in rule except e164-phone, as the proxy enables them (no terms, no name model).</text>
+<text x="0" y="780">rules + name model: the proxy-default rules plus the experimental name model, which reads prose lines only.</text>
+<text x="0" y="798">Presidio: default recognizers; the cutoff is its score_threshold. English prompts only: it is an English analyzer.</text>
+<text x="0" y="816">Regenerate: node bench/results-chart.mjs</text>
 </svg>

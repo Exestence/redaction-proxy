@@ -130,24 +130,30 @@ What it reads, every number, and the options: [technical details §16](docs/DETA
 ## Results
 
 <!-- RESULTS:START -->
-**dev set (preliminary).** 1,200 synthetic prompts in English, Traditional Chinese, Simplified Chinese, and Japanese, written by the authors of the rules. No held-out result yet.
+**held-out set (written blind, run once).** 1,518 synthetic prompts in 7 languages (English, Traditional and Simplified Chinese, Japanese, Korean, German, French), written by someone who never saw the rules, frozen with a SHA-256 checksum, and scored once. Nothing was changed after the results were seen.
 
-![Bar chart: share of sensitive values fully masked per category, redaction-proxy rules against Presidio.](docs/media/results.svg)
+![Bar chart: share of sensitive values fully masked per category on the English held-out prompts, proxy-default rules and rules plus name model against Presidio at cutoff 0.4.](docs/media/results.svg)
 
-| dev set (preliminary) | redaction-proxy rules | Presidio, cutoff 0 | Presidio, cutoff 0.4 |
-| --- | --- | --- | --- |
-| Fully masked, all languages (macro average of 9 categories) | **73.4%** | 56.6%* | 51.1%* |
-| Fully masked, English only | 66.7% | 63.3% | 63.3% |
-| Masked regions that were sensitive (all languages) | 96.0% | 60.1%* | 68.9%* |
-| Restored byte for byte | 100% | n/a | n/a |
+| held-out, English prompts (330) | core default rules | proxy default rules | + name model (experimental) | Presidio, cutoff 0 | Presidio, cutoff 0.4 |
+| --- | --- | --- | --- | --- | --- |
+| Fully masked (macro average of 10 categories) | 34.6% | 54.1% | **61.1%** | 52.2% | 50.7% |
+| Masked regions that were sensitive | 95.2% | **95.7%** | 92.5% | 64.7% | 69.0% |
+| Median time per prompt | 0.06 ms | 0.07 ms | 7.4 ms | 8.6 ms | 8.6 ms |
+| Fully masked, all 7 languages | 38.8% | 56.0% | 64.3% | 46.6%* | 43.0%* |
 
-\* Presidio analyzes every prompt as English, so its non-English results are for reference only.
+\* Presidio analyzes every prompt as English, so its all-language results are for reference only. Restoring the masked text gave the original byte for byte in every prompt.
 
-- Fully masked: secrets, home paths, internal hosts, private IPs, emails, cards. Missed: names (no rule for them), and phone numbers and IDs from outside Taiwan, because this run used the core library's default rules; the proxy also turns on international rules, which this run did not measure.
-- Bare commit hashes are masked by mistake (46% of them).
-- Separately, on 698k lines of source code with no real keys: 0.76 false credential detections per 1,000 lines.
+Where it is weak:
 
-Per-category tables: [bench/results/public-bench-dev.md](bench/results/public-bench-dev.md). Reproduce: `pnpm run bench:public`.
+- **Phone numbers.** 95% of English phone numbers are left untouched with the proxy default (the international `e164-phone` rule is opt-in); Presidio fully masks 82–85%.
+- **Paths** are mostly only partly masked: the user name is masked, the rest of the path is kept.
+- **Hosts and secrets.** About 30% of hosts and 26–28% of secrets are left untouched.
+- **Addresses.** There is no address rule.
+- **The name model** fully masks 65–70% of names, and it also masks user-agent strings.
+
+The dev set scored much higher (77.8% English macro average for the proxy default) because it was written alongside the rules; it is kept only as a development check.
+
+Full tables: [held-out results](bench/results/public-bench-held-out.md), [dev results](bench/results/public-bench-dev.md). Method and other measurements: [technical details §18](docs/DETAILS.md#18-實測數字).
 <!-- RESULTS:END -->
 
 ## What it does not protect

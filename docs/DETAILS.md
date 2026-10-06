@@ -464,7 +464,8 @@ node scripts/fetch-name-model.mjs ~/models/nym       # 從 Hugging Face 下載�
 | 憑證誤遮 | 每千行程式碼 **0.76** 處 | 在不含真實金鑰的 DeepSeek Harness 原始碼上量測（69.8 萬行程式碼），平均約 1,300 行有一處被誤當成金鑰而遮掉。 |
 | 還原失敗 | 0 | 遮罩成功的檔案全部都能逐位元組還原。 |
 | 速度 | 約 85 萬行 / 5 秒 | Apple M5 Max。 |
-| 合成多語提示（dev 集，核心預設規則，不含國際規則） | 全部語言、9 個類別的宏平均：完全遮蔽 73.4%、未遮 26.5%；還原 100% | 英文、繁中、簡中、日文共 1,200 筆固定種子的提示，由規則作者撰寫；各類別結果與僅限英文的 Presidio 比較：[bench/results/public-bench-dev.md](../bench/results/public-bench-dev.md)。金鑰、家目錄、內部主機、私有 IP、電子郵件與卡號完全遮蔽；漏遮人名、台灣以外的電話與身分證號；沒有上下文的 commit 雜湊會被誤遮。尚無保留集（held-out）結果。 |
+| 合成多語提示，保留集（盲寫、只跑一次） | 英文 330 筆、10 類宏平均完全遮蔽：核心預設 34.6%、代理預設 54.1%、加人名模型 61.1%；Presidio cutoff 0 為 52.2%、cutoff 0.4 為 50.7%。遮掉的範圍確實是敏感值：規則 95.2–95.7%、加人名模型 92.5%、Presidio 64.7–69.0%。中位數耗時：規則 0.06–0.07 ms、加人名模型 7.4 ms、Presidio 8.6 ms。全部 7 種語言的宏平均：核心預設 38.8%、代理預設 56.0%、加人名模型 64.3%（Presidio 46.6%、43.0%，只當英文分析，僅供參考）。還原 100% | `heldout-v1.jsonl`（SHA-256 `be2ebb95…3e553`）：英、繁中、簡中、日、韓、德、法共 1,518 筆、6,453 個敏感值、2,215 個困難反例，由從未看過規則的人撰寫，凍結後只評分一次，看到結果後沒有修改；檔案不在本倉庫。弱點（英文、代理預設）：電話 95% 完全沒遮（`e164-phone` 需自行開啟），Presidio 完全遮蔽 82–85%；路徑 87% 只遮掉一部分（使用者名稱被遮，其餘保留）；主機 30%、金鑰 28% 完全沒遮；沒有地址規則；人名模型完全遮蔽 70% 的人名（全部語言 65%），且會遮掉 user-agent 字串。完整結果：[bench/results/public-bench-held-out.md](../bench/results/public-bench-held-out.md)。 |
+| 合成多語提示，開發集（初步） | 代理預設、9 類宏平均完全遮蔽：英文 77.8%、全部語言 83.4% | 1,200 筆固定種子的提示（英、繁中、簡中、日），由規則作者撰寫、和規則一起調整，所以分數比保留集高得多；只當開發時的檢查：[bench/results/public-bench-dev.md](../bench/results/public-bench-dev.md)。 |
 
 誤遮的代價是模型看到一個不必要的佔位符，回覆時會被換回原值。語料是英文程式碼，中文散文的誤遮率尚未量測。以 `pnpm test`、`pnpm bench` 與 `pnpm run bench:public` 重現；加上 `--heldout <set.jsonl>` 可另外評分凍結的保留集（格式與 MANIFEST 檢查見 `bench/public/heldout.ts`）。
 
@@ -489,7 +490,7 @@ README 的圖片與影片都放在 `docs/media/`，可重新產生：
 | 檔案 | 來源 | 重新產生 |
 | --- | --- | --- |
 | `hero.svg` | 手繪 SVG | 直接編輯 |
-| `results.svg` | 評測結果 JSON | `node bench/results-chart.mjs [results.json] [out.svg] [標籤]`；預設讀 `bench/results/public-bench-dev.json`，標籤為「dev set (preliminary)」 |
+| `results.svg` | 評測結果 JSON | `node bench/results-chart.mjs`；預設讀 `bench/results/public-bench-held-out.json` 的英文提示，畫代理預設、加人名模型與 Presidio cutoff 0.4 三個系統；`--split allLanguages`、`--systems "名稱;名稱"`、`--input`、`--out`、`--label` 可改（見腳本開頭） |
 | `src/captured.json` | 真實代理輸出：`bench/demo.mjs`，以及另一個經代理送往本機假上游的串流請求 | `pnpm build && node docs/media/src/capture.mjs` |
 | `before-after.png`、`intro.mp4`、`intro.gif` | `src/before-after.html`、`src/intro.html` 讀 `captured.json` | `PLAYWRIGHT=… FFMPEG=… node docs/media/src/render.mjs`（Playwright 與 ffmpeg 都不是倉庫依賴，取得方式見腳本開頭） |
 
