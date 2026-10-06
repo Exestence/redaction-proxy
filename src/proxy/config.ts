@@ -10,7 +10,7 @@ import { readFileSync } from 'node:fs'
 import { resolveRulesConfig } from '../core/index.ts'
 import type { RulesRedactionConfig } from '../core/index.ts'
 import { resolveNameModelConfig } from '../core/model/config.ts'
-import type { NameModelConfig } from '../core/model/config.ts'
+import type { ResolvedNameModelConfig } from '../core/model/config.ts'
 
 /** How a request string the rules cannot reason about is handled. */
 export type ScreenMode = 'replace' | 'refuse'
@@ -30,7 +30,7 @@ export interface ProxyConfig {
   /** Rules detector configuration. */
   redaction: RulesRedactionConfig
   /** Optional name model; absent means rules only. */
-  nameModel?: NameModelConfig
+  nameModel?: ResolvedNameModelConfig
   /**
    * `replace` (default) rewrites control characters, U+FFFD, lone surrogates,
    * and pre-existing `⟦`/`⟧` in request text to visible stand-ins before
@@ -60,14 +60,13 @@ function upstream(value: unknown, label: string): string {
  * its directory and so turns it on.
  * @param value - the file's `nameModel` value.
  * @param dir - the environment's model directory.
- * @returns the validated block, or `undefined` when the model is off.
+ * @returns the resolved block, or `undefined` when the model is off.
  * @throws {Error} on an invalid block.
  */
-function nameModel(value: unknown, dir: string | undefined): NameModelConfig | undefined {
-  if (value === undefined && dir === undefined) return undefined
-  const config = dir === undefined ? value : { ...value as object | undefined, dir }
-  resolveNameModelConfig(config)
-  return config as NameModelConfig
+function nameModel(value: unknown, dir: string | undefined): ResolvedNameModelConfig | undefined {
+  if (dir === undefined) return value === undefined ? undefined : resolveNameModelConfig(value)
+  if (value !== undefined && (value === null || typeof value !== 'object' || Array.isArray(value))) throw new Error('nameModel: must be an object')
+  return resolveNameModelConfig({ ...value, dir })
 }
 
 /**

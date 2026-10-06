@@ -1,5 +1,8 @@
 // The name model is opt-in: without a `nameModel` block nothing about detection changes, and with one the policy
 // digest names the model files and every detection setting.
+import { mkdtempSync, writeFileSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import { RulesDetector } from '../src/core/index.ts'
 import { DEFAULT_NAME_MODEL_ALLOWLIST, resolveNameModelConfig } from '../src/core/model/config.ts'
@@ -48,11 +51,18 @@ describe('nameModel configuration', () => {
   })
 
   it('takes the model directory from the environment, which turns the model on', () => {
-    expect(loadConfig(undefined, { REDACTION_PROXY_NAME_MODEL_DIR: '/models/nym' }).nameModel).toEqual({ dir: '/models/nym' })
+    expect(loadConfig(undefined, { REDACTION_PROXY_NAME_MODEL_DIR: '/models/nym' }).nameModel).toMatchObject({ dir: '/models/nym', threshold: 0.3 })
+  })
+
+  it('refuses a nameModel block that is not an object, also when the environment sets the directory', () => {
+    const file = join(mkdtempSync(join(tmpdir(), 'name-model-config-')), 'config.json')
+    writeFileSync(file, JSON.stringify({ nameModel: '/models/nym' }))
+    expect(() => loadConfig(file, {})).toThrow('nameModel: must be an object')
+    expect(() => loadConfig(file, { REDACTION_PROXY_NAME_MODEL_DIR: '/models/nym' })).toThrow('nameModel: must be an object')
   })
 
   it('fails at load, naming every missing file', async () => {
-    await expect(loadNameModel({ dir: '/nonexistent/nym' })).rejects.toThrow(
+    await expect(loadNameModel(resolveNameModelConfig({ dir: '/nonexistent/nym' }))).rejects.toThrow(
       'nameModel: /nonexistent/nym is missing model_int8.onnx, config.json, vocab.json, merges.txt, added_tokens.json',
     )
   })

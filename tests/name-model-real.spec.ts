@@ -4,6 +4,7 @@ import { spawn } from 'node:child_process'
 import { fileURLToPath } from 'node:url'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { RulesDetector, emptyRedactionIndex, mask } from '../src/core/index.ts'
+import { resolveNameModelConfig } from '../src/core/model/config.ts'
 import { NameModelDetector } from '../src/core/model/detector.ts'
 import { loadNameModel } from '../src/core/model/name-model.ts'
 import type { NameModel } from '../src/core/model/name-model.ts'
@@ -40,7 +41,7 @@ describe.skipIf(MODEL_DIR === undefined)('real name model', () => {
   let model: NameModel
 
   beforeAll(async () => {
-    model = await loadNameModel({ dir: MODEL_DIR as string })
+    model = await loadNameModel(resolveNameModelConfig({ dir: MODEL_DIR as string }))
   })
 
   afterAll(async () => {

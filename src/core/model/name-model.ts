@@ -6,8 +6,8 @@
  */
 
 import { createHash } from 'node:crypto'
-import type { NameModelCategory, NameModelConfig, ResolvedNameModelConfig } from './config.ts'
-import { SPECIAL_TOKENS_PER_WINDOW, resolveNameModelConfig } from './config.ts'
+import type { NameModelCategory, ResolvedNameModelConfig } from './config.ts'
+import { SPECIAL_TOKENS_PER_WINDOW } from './config.ts'
 import { proseLayout } from './prose.ts'
 import type { NameModelRuntime, TokenEncoding } from './runtime.ts'
 import { loadNymRuntime } from './runtime.ts'
@@ -175,12 +175,11 @@ export class NameModel {
 }
 
 /**
- * Validate the configuration and load the model before any request is served.
- * @param config - the `nameModel` configuration block.
+ * Load the model before any request is served.
+ * @param config - the resolved `nameModel` configuration.
  * @returns the loaded model.
- * @throws {Error} on an invalid configuration, a missing file or optional dependency, or a model that does not load.
+ * @throws {Error} on a missing file or optional dependency, or a model that does not load.
  */
-export async function loadNameModel(config: NameModelConfig): Promise<NameModel> {
-  const resolved = resolveNameModelConfig(config)
-  return new NameModel(resolved, await loadNymRuntime(resolved.dir))
+export async function loadNameModel(config: ResolvedNameModelConfig): Promise<NameModel> {
+  return new NameModel(config, await loadNymRuntime(config.dir))
 }
