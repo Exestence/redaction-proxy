@@ -11,7 +11,7 @@
 | 限制 | 意思 |
 | --- | --- |
 | 藏實體，不藏語意 | 上游仍讀得到佔位符周圍的一切。`⟦PATH_1⟧/clients/acme-layoffs.md` 依然透露很多。 |
-| 人名、地址只有列出才遮 | 沒有自由文字的人名偵測，也沒有地址規則。人名、公司名、代號要列進 `terms` 或 `projectNames`。病況、薪資、通訊地址照原樣送出。 |
+| 人名、地址只有列出才遮 | 預設沒有自由文字的人名偵測，也沒有地址規則。人名、公司名、代號要列進 `terms` 或 `projectNames`，或開啟[實驗性的人名模型](#-選用的人名模型實驗性)，但它會漏掉一些人名。病況、薪資照原樣送出。 |
 | 有些欄位不遮 | 圖片、PDF、音訊、`metadata`、工具名稱、帶簽章的 thinking 原樣轉送。若偵測到的值出現在這些欄位，整個請求以 422 拒絕。 |
 | Cursor 不能用 | Cursor 的自訂 base URL 請求是從 Cursor 自己的伺服器發出，連不到你的 `127.0.0.1`；而且 Cursor 後端在任何代理之前就看到未遮罩的提示。 |
 | 有些拆開的寫法抓不到 | 偵測不到：點後加空格的私有 IP（`192. 168. 1. 2`）；被空格或換行拆開的 API 金鑰（高熵規則只抓得到部分片段）；寫成 `name @ domain`（`@` 兩側有空白，`wang.yichun @ example.tw`）或單獨用 ` at `（`wang.yichun at example.tw`）的 email 不遮，因為 shell 提示字元（`root @ web01.example.com`）、帳號標記（`cc @ alice.me`）、英文散文（`socket.io at github.com`）與矩陣程式碼（`a.b @ c.de`）長得一樣；這類 email 只有隱私分類器把關。抓得到：加了空格或連字號的 terms、`＠`、`(at)`、`[at]`、`[dot]`，以及中間有一個分隔符的身分證字號、統編、手機號碼。 |
@@ -127,6 +127,7 @@ curl http://127.0.0.1:8787/v1/chat/completions \
 | `redaction.projectNames` | 無 | 要遮的專案代號。 |
 | `redaction.allowlist` | `git@github.com`、`noreply@github.com` | 永遠不遮的值。 |
 | `redaction.rules` | 全部 | 要啟用的內建規則。 |
+| `nameModel` | 無 | 開啟[實驗性的人名模型](#-選用的人名模型實驗性)。 |
 | `screen` | `replace` | 遇到控制字元時改成可見字元（`replace`）或拒絕請求（`refuse`）。 |
 | `debugMasked` | `false` | 在日誌中記錄遮罩後的請求本文。 |
 
@@ -140,6 +141,58 @@ curl http://127.0.0.1:8787/v1/chat/completions \
 ```
 
 對應的環境變數與完整說明見[技術細節](docs/DETAILS.md#12-完整設定)。日誌每個請求一行，只有計數與耗時，絕不含原始值或標頭。
+
+## 🧪 選用的人名模型（實驗性）
+
+預設關閉。設定後，一個小型本機模型（[`Wismut/nym-pii-multilingual-small`](https://huggingface.co/Wismut/nym-pii-multilingual-small)，MIT 授權，edge-int8，108 MB）會在**你**寫的文字中另外遮掉人名（`⟦NAME_1⟧`）、公司（`⟦ORG_1⟧`）、地名（`⟦LOC_1⟧`）與地址（`⟦ADDR_1⟧`）。它是實驗性功能：會漏掉一些人名，也會把一些不是人名的字遮掉。以下數字來自合成資料，在 Apple M5 Max CPU 上量測。
+
+它讀什麼、不讀什麼：
+
+- 只讀使用者訊息中你自己寫的散文段落。系統提示、助理回覆、工具結果、程式碼區塊，以及看起來像程式碼、JSON、YAML 或日誌的行都不讀，所以貼上的程式碼或日誌裡的人名在那裡不會被找到。
+- 它找到的人名，會在同一請求的其他地方（包括系統提示與工具輸出）用同一個佔位符遮掉（`許雅雯` 與 `許 雅 雯` 共用一個）。單一個 ASCII 單字（`Jordan`）只在模型找到的位置遮，因為同一個字在別處常是產品或設定值。公司、地名、地址只在找到的位置遮。
+- 規則優先：與 email、金鑰等規則偵測重疊的範圍會被捨棄。
+- `Kafka`、`Docker`、`Podman`、`Default`、`High`、`Low` 這類字在預設允許清單（`nameModel.allowlist`）中。
+
+實測（保留集只跑一次；未註明者為召回率）：
+
+| 項目 | 結果 | 說明 |
+| --- | --- | --- |
+| 散文中的人名，英文／日文 | 1.00／1.00 | |
+| 散文中的人名，繁體中文 | **0.87** | 未達 0.90 目標：大約每 8 個人名漏 1 個。 |
+| 散文中的人名，簡體中文 | 保留集 1.00、開發集 0.75 | 樣本小（開發集 16 個人名）。 |
+| 貼上的程式碼、日誌、JSON 中的人名 | 0.10–0.30 | 設計上不處理；這類人名請列進 `terms`。 |
+| 散文中的公司／地名／地址 | 0.71／0.88／0.82 | 地址：簡體中文 0.42、法文 0.67。 |
+| 精確率 | 0.94 | 被遮的範圍中確實是人名、公司或地名的比例。 |
+| 技術對話中的誤遮 | 每千句 46 處（開發集 113 處） | 量測時尚未有允許清單與「單字不擴散」規則；多半是 `Default` 或工具名稱。 |
+| 程式碼中的誤遮 | 0 | 程式碼不讀。 |
+| 增加的記憶體 | 約 +420 MB | 512 token 視窗；處理過 16 KB 訊息後約 +440 MB。 |
+| 增加的延遲 | 2 KB 中文散文 p95 約 130 ms，中英混合約 80 ms | 16 KB 中文散文約 1 秒。看過的段落會快取。 |
+
+設定方式：
+
+```sh
+pnpm install                                         # 會安裝 onnxruntime-node 與 tokenizers（選用相依套件，約 350 MB；只用規則可改用 pnpm install --no-optional）
+node scripts/fetch-name-model.mjs ~/models/nym       # 從 Hugging Face 下載約 125 MB，並檢查 sha256
+```
+
+這個腳本從 `Wismut/nym-pii-multilingual-small` 的 `4348999cd3c2e20c49615e9af7c6bbb45b64cd85` 版本下載 `edge-int8/model_int8.onnx`、`edge-int8/config.json`、`edge-int8/tokenizer.json` 與 `README.md`（授權聲明），再在同一目錄寫出 `vocab.json`、`merges.txt`、`added_tokens.json`；代理載入這三個檔，不載入 12 MB 的 `tokenizer.json`，可省下約 220 MB 記憶體。接著在設定檔加上：
+
+```json
+{ "nameModel": { "dir": "/Users/you/models/nym" } }
+```
+
+或設定 `REDACTION_PROXY_NAME_MODEL_DIR=/Users/you/models/nym`。
+
+| 鍵 | 預設 | 說明 |
+| --- | --- | --- |
+| `nameModel.dir` | 必填 | 腳本寫入的目錄，絕對路徑。 |
+| `nameModel.threshold` | `0.3` | 越低找到越多，也越常遮到不是人名的字。 |
+| `nameModel.categories` | `NAME`、`ORG`、`LOC`、`ADDR` | 要遮的類別。 |
+| `nameModel.windowTokens`／`windowOverlap` | `512`／`128` | 每次模型推論的 token 數與重疊；視窗越大越耗記憶體，找到的人名也越少。 |
+| `nameModel.allowlist` | 工具與設定值用字 | 整段完全相符就不遮；設定後取代預設清單。 |
+| `nameModel.required` | `false` | 推論失敗時，`false` 讓該請求只用規則遮罩並在日誌記 `nameModel failed`；`true` 以 503 拒絕。 |
+
+模型在開放連接埠之前載入；缺檔案或套件時啟動失敗並指出缺什麼。開啟模型會改變 policy digest，所以保存 span index 的宿主不會在新設定下接續舊的 index。
 
 ## 📊 實測數字
 
@@ -169,7 +222,7 @@ curl http://127.0.0.1:8787/v1/chat/completions \
 
 **為什麼用 `⟦EMAIL_1⟧`，不用假的 email？** 實測時模型逐字保留佔位符的比例是 100%，假值只有 75%，而且假值造成了無法還原的靜默錯誤。
 
-**我的名字會被遮嗎？** 只有列進 `terms` 才會。
+**我的名字會被遮嗎？** 列進 `terms` 就一定會。開啟實驗性人名模型時，你在訊息中寫到它通常會被遮，但不保證：繁體中文人名大約每 8 個漏 1 個，程式碼與日誌也不讀。
 
 **為什麼請求被 422 拒絕？** 偵測到的值也出現在代理不改寫的欄位（例如圖片 URL 或 metadata），或你設定了 `screen: "refuse"`。訊息會指出欄位，不含值。
 

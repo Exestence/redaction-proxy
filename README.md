@@ -11,7 +11,7 @@ A small proxy that runs on your machine. Before your AI tool sends a prompt to a
 | Limitation | What it means |
 | --- | --- |
 | Hides entities, not meaning | The upstream still reads everything around the placeholders. `⟦PATH_1⟧/clients/acme-layoffs.md` still says a lot. |
-| Names and addresses only if listed | There is no free-text name detection and no address rule. List names, companies, and code names in `terms` or `projectNames`. Health conditions, salaries, and postal addresses go through as written. |
+| Names and addresses only if listed | By default there is no free-text name detection and no address rule. List names, companies, and code names in `terms` or `projectNames`, or turn on the [experimental name model](#-optional-name-model-experimental), which misses some names. Health conditions and salaries go through as written. |
 | Some fields are not masked | Images, PDFs, audio, `metadata`, tool names, and signed thinking are forwarded unchanged. If a detected value appears in one of them, the whole request is refused with 422. |
 | Cursor cannot use it | Cursor sends custom base-URL requests from Cursor's own servers, which cannot reach your `127.0.0.1`; and Cursor's backend sees the unmasked prompt before any proxy would. |
 | Some split spellings are missed | Not detected: a private IP with spaces after the dots (`192. 168. 1. 2`); an API key split by a space or a line break (the high-entropy rule catches some halves); an email address written `name @ domain` with spaces (`wang.yichun @ example.tw`) or with a bare ` at ` (`wang.yichun at example.tw`) is not masked, because shell prompts (`root @ web01.example.com`), handles (`cc @ alice.me`), prose (`socket.io at github.com`), and matrix code (`a.b @ c.de`) look the same; the privacy classifier is the only guard for it. Detected: spaced or dashed terms, `＠`, `(at)`, `[at]`, `[dot]`, and IDs, business numbers, and mobile numbers with one separator inside. |
@@ -127,6 +127,7 @@ Pass a JSON file with `node lib/cli.js --config redaction.json`; environment var
 | `redaction.projectNames` | none | Project code names to mask. |
 | `redaction.allowlist` | `git@github.com`, `noreply@github.com` | Values never masked. |
 | `redaction.rules` | all | Built-in rules to enable. |
+| `nameModel` | none | Turns on the [experimental name model](#-optional-name-model-experimental). |
 | `screen` | `replace` | On control characters, replace them with visible stand-ins (`replace`) or refuse the request (`refuse`). |
 | `debugMasked` | `false` | Log each masked request body. |
 
@@ -140,6 +141,58 @@ Pass a JSON file with `node lib/cli.js --config redaction.json`; environment var
 ```
 
 See the [technical details](docs/DETAILS.md#12-完整設定) for the matching environment variables and the full reference. The log has one line per request with counts and duration only, never an original value or a header.
+
+## 🧪 Optional name model (experimental)
+
+Off by default. When configured, a small local model ([`Wismut/nym-pii-multilingual-small`](https://huggingface.co/Wismut/nym-pii-multilingual-small), MIT, edge-int8, 108 MB) also masks person names (`⟦NAME_1⟧`), companies (`⟦ORG_1⟧`), places (`⟦LOC_1⟧`), and addresses (`⟦ADDR_1⟧`) in what **you** write. It is experimental: it misses some names and masks some words that are not names. The numbers below are from synthetic data on an Apple M5 Max CPU.
+
+What it reads, and what it does not:
+
+- Only user messages: prose paragraphs of your own text. System prompts, assistant turns, tool results, code blocks, and code-, JSON-, YAML-, or log-shaped lines are not read, so a name inside pasted code or logs is not found there.
+- A person name it finds is masked everywhere else in the request too, including system prompts and tool output, with the same placeholder (`許雅雯` and `許 雅 雯` share one). A single ASCII word (`Jordan`) is masked only where the model found it, because the same word elsewhere is too often a product or a setting. Companies, places, and addresses are masked only where found.
+- Rules win: a span that overlaps an email, key, or other rule detection is dropped.
+- Words such as `Kafka`, `Docker`, `Podman`, `Default`, `High`, and `Low` are on a default allowlist (`nameModel.allowlist`).
+
+Measured (one held-out run, numbers are recall unless noted):
+
+| Item | Result | Note |
+| --- | --- | --- |
+| Names in prose, English / Japanese | 1.00 / 1.00 | |
+| Names in prose, Traditional Chinese | **0.87** | Below the 0.90 target: about 1 name in 8 is missed. |
+| Names in prose, Simplified Chinese | 1.00 held out, 0.75 dev | Small sample (16 names in dev). |
+| Names in pasted code, logs, or JSON | 0.10–0.30 | Out of scope by design; list such names in `terms`. |
+| Companies / places / addresses in prose | 0.71 / 0.88 / 0.82 | Addresses: Simplified Chinese 0.42, French 0.67. |
+| Precision | 0.94 | Share of masked spans that were real names, companies, or places. |
+| False positives in technical chat | 46 per 1,000 sentences (113 on the dev set) | Before the allowlist and the no-propagation rule for single words; mostly `Default` or tool names. |
+| False positives in code | 0 | Code is not read. |
+| Added memory | about +420 MB | With the 512-token window; +440 MB after a 16 KB message. |
+| Added latency | p95 about 130 ms for 2 KB of Chinese prose, 80 ms for mixed prose | 16 KB of Chinese prose: about 1 s. Paragraphs already seen are cached. |
+
+Setup:
+
+```sh
+pnpm install                                         # installs onnxruntime-node and tokenizers (optional, about 350 MB; rules-only: pnpm install --no-optional)
+node scripts/fetch-name-model.mjs ~/models/nym       # about 125 MB from Hugging Face, sha256-checked
+```
+
+The script downloads `edge-int8/model_int8.onnx`, `edge-int8/config.json`, `edge-int8/tokenizer.json`, and `README.md` (the license notice) from `Wismut/nym-pii-multilingual-small` at revision `4348999cd3c2e20c49615e9af7c6bbb45b64cd85`, then writes `vocab.json`, `merges.txt`, and `added_tokens.json` beside them; the proxy loads those instead of the 12 MB `tokenizer.json`, which saves about 220 MB of memory. Then add to the config file:
+
+```json
+{ "nameModel": { "dir": "/Users/you/models/nym" } }
+```
+
+or set `REDACTION_PROXY_NAME_MODEL_DIR=/Users/you/models/nym`.
+
+| Key | Default | Meaning |
+| --- | --- | --- |
+| `nameModel.dir` | required | Absolute path of the directory the script filled. |
+| `nameModel.threshold` | `0.3` | Lower finds more and masks more non-names. |
+| `nameModel.categories` | `NAME`, `ORG`, `LOC`, `ADDR` | Categories to mask. |
+| `nameModel.windowTokens` / `windowOverlap` | `512` / `128` | Tokens per model pass and overlap; larger windows use more memory and found fewer names. |
+| `nameModel.allowlist` | tools and setting words | Whole spans never masked; replaces the default list. |
+| `nameModel.required` | `false` | If inference fails, `false` masks that request with the rules only and logs `nameModel failed`; `true` refuses it with 503. |
+
+The model loads before the port opens; a missing file or package stops startup and names it. Turning the model on changes the policy digest, so a host that keeps a span index refuses to continue an older index under it.
 
 ## 📊 Measured numbers
 
@@ -169,7 +222,7 @@ A false positive costs the model one unnecessary placeholder, which is restored 
 
 **Why `⟦EMAIL_1⟧` and not a fake email?** In measurements, models kept placeholders verbatim 100% of the time against 75% for fake values, and fake values caused silent errors no restore can undo.
 
-**Will my name be masked?** Only if you list it in `terms`.
+**Will my name be masked?** If you list it in `terms`, always. With the experimental name model, usually when you write it in a message, but not always: it finds about 7 of 8 Traditional Chinese names and does not read code or logs.
 
 **Why was my request refused with 422?** A detected value also appears in a field the proxy does not rewrite (an image URL or metadata, for instance), or you set `screen: "refuse"`. The message names the field, never the value.
 
