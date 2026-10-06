@@ -35,7 +35,7 @@
   "engines": {
     "node": "^22.19.0 || >=24.0.0"
   },
-  "license": "UNLICENSED",
+  "license": "Apache-2.0",
   "peerDependencies": {
     "onnxruntime-node": "1.30.0",
     "tokenizers": "0.23.2"
