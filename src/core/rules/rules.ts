@@ -9,6 +9,7 @@
 
 import { afterHighEscape, endsHighEscape, isAlnum, isAsciiPrintable, projectNfkc, shannon, unicodeEscapeForms } from './normalize.ts'
 import type { PushCandidate } from './candidate.ts'
+import { isTaiwanBusinessNumber, isTaiwanNationalId, luhn } from './checksum.ts'
 import { PRIORITY_ENTROPY, PRIORITY_PII, PRIORITY_SECRET, PRIORITY_TERM } from './candidate.ts'
 
 /**
@@ -74,12 +75,18 @@ const PHONE_MOBILE = new RegExp(
 const PHONE_MOBILE_SPLIT = /(?<![A-Za-z0-9-])09([- \u3000])(\d{4})\1\d{4}(?![A-Za-z0-9]|\1\d|-[A-Za-z0-9])/g
 /** A middle group that reads as a year, which makes `09-2026-1005` a date. */
 const PHONE_YEAR = /^(?:19|20)\d\d$/
+/** Characters between a keyword and its value: a colon, a space, a short word such as `is`. */
+export const KEYWORD_GAP = '[^\\n]{0,8}?'
 const PHONE_KEYWORD = new RegExp(
   '(?:電話|电话|手機|手机|傳真|传真|聯絡|联络|phone|tel|fax|mobile)'
-  + '[^\\n]{0,8}?(\\(?(?<!\\d)0\\d{1,2}\\)?[-\\s]{0,2}\\d{3,4}[-\\s]?\\d{3,4}(?!\\d))',
+  + `${KEYWORD_GAP}(\\(?(?<!\\d)0\\d{1,2}\\)?[-\\s]{0,2}\\d{3,4}[-\\s]?\\d{3,4}(?!\\d))`,
   'gi',
 )
-const TAX_ID = /(?:統一編號|統編|營利事業|tax[ _-]?id|taxid|vat)[^\n]{0,8}?((?<!\d)(?:\d{8}(?!\d)|\d{1,7}[- \u3000]\d{1,7}(?!\d|[- \u3000]\d)))/gi
+const TAX_ID = new RegExp(
+  `(?:統一編號|統編|營利事業|tax[ _-]?id|taxid|vat)${KEYWORD_GAP}`
+  + '((?<!\\d)(?:\\d{8}(?!\\d)|\\d{1,7}[- \\u3000]\\d{1,7}(?!\\d|[- \\u3000]\\d)))',
+  'gi',
+)
 const CARD_RUN = /(?<!\d)\d{4,}(?:[ -]\d{3,})*/g
 const PRIVATE_IP = new RegExp(
   '(?<![\\d.])(?:10\\.\\d{1,3}\\.\\d{1,3}\\.\\d{1,3}'
@@ -113,16 +120,11 @@ const SECRET_CONTEXT = /secret|token|password|api[_-]?key|authorization|credenti
 /** Identifiers whose member access reads as code rather than a host name. */
 const HOST_CODE_ROOTS = new Set(['this', 'ctx', 'self', 'globalThis', 'window', 'req', 'res', 'opts', 'config'])
 
-/** Weights of the Taiwan business-number checksum. */
-const TAX_ID_WEIGHTS = [1, 2, 1, 2, 1, 2, 4, 1]
 /** Separators a configured term's parts may be joined or split by. */
 const TERM_SEPARATOR = '[\\s\\-_‧・·]'
 const TERM_SEPARATORS = /[\s\-_‧・·]+/g
 /** One CJK character, which is a part of its own: CJK text has no word spaces. */
 const TERM_CJK = /[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}\p{Script=Hangul}]/u
-
-/** Letter values of the Taiwan identification-number checksum. */
-const TW_LETTER_VALUES = 'ABCDEFGHJKLMNPQRSTUVXYWZIO'
 
 /** One configured literal term and the category it is masked under. */
 export interface ConfiguredTerm {
@@ -130,40 +132,6 @@ export interface ConfiguredTerm {
   value: string
   /** Placeholder category, `TERM` or `PROJECT`. */
   category: string
-}
-
-/**
- * Whether a ten-character candidate passes the Taiwan identification-number
- * checksum. National numbers carry `1` or `2`; resident certificate numbers
- * issued since 2021 carry `8` or `9`.
- * @param candidate - one upper-case letter, `1`, `2`, `8`, or `9`, and eight digits.
- * @returns whether the weighted checksum is divisible by ten.
- */
-export function isTaiwanNationalId(candidate: string): boolean {
-  if (!/^[A-Z][1289]\d{8}$/.test(candidate)) return false
-  const code = TW_LETTER_VALUES.indexOf(candidate.charAt(0)) + 10
-  const digits = `${Math.floor(code / 10)}${code % 10}${candidate.slice(1)}`
-  const weights = [1, 9, 8, 7, 6, 5, 4, 3, 2, 1, 1]
-  let sum = 0
-  for (const [i, weight] of weights.entries()) sum += (digits.charCodeAt(i) - 48) * weight
-  return sum % 10 === 0
-}
-
-/**
- * Whether eight digits pass the Taiwan business-number (統一編號) checksum:
- * the digit sums of the weighted products total a multiple of 5, or one less
- * than a multiple of 5 when the seventh digit is 7.
- * @param digits - eight decimal digits.
- * @returns whether the checksum holds.
- */
-export function isTaiwanBusinessNumber(digits: string): boolean {
-  if (!/^\d{8}$/.test(digits)) return false
-  let sum = 0
-  for (const [i, weight] of TAX_ID_WEIGHTS.entries()) {
-    const product = (digits.charCodeAt(i) - 48) * weight
-    sum += Math.floor(product / 10) + (product % 10)
-  }
-  return sum % 5 === 0 || (digits.charAt(6) === '7' && (sum + 1) % 5 === 0)
 }
 
 /**
@@ -216,26 +184,6 @@ function termPattern(value: string): RegExp | undefined {
  */
 export function termIdentityKey(value: string, category: string): string {
   return `\u0000${category}\u0000${projectNfkc(value).lower.replaceAll(TERM_SEPARATORS, '')}`
-}
-
-/**
- * Whether a digit run passes the Luhn checksum.
- * @param digits - decimal digits only.
- * @returns whether the checksum is divisible by ten.
- */
-function luhn(digits: string): boolean {
-  let sum = 0
-  let double = false
-  for (let i = digits.length - 1; i >= 0; i -= 1) {
-    let n = digits.charCodeAt(i) - 48
-    if (double) {
-      n *= 2
-      if (n > 9) n -= 9
-    }
-    sum += n
-    double = !double
-  }
-  return sum % 10 === 0
 }
 
 /**

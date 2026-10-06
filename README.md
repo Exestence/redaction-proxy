@@ -2,7 +2,7 @@
 
 [繁體中文](README.zh-TW.md) · [Technical details (zh-TW)](docs/DETAILS.md)
 
-A small proxy that runs on your machine. Before your AI tool sends a prompt to a cloud LLM, it replaces email addresses, Taiwan national IDs, phone numbers, API keys, home-directory paths, and similar values with placeholders such as `⟦EMAIL_1⟧`; when the model's reply comes back, it puts the original values back, streamed replies included. It works with any OpenAI-compatible or Anthropic-compatible client and needs no local model. It **reduces** leakage of personal data and secrets; it does **not** make a conversation private.
+A small proxy that runs on your machine. Before your AI tool sends a prompt to a cloud LLM, it replaces email addresses, national ID numbers from Taiwan and 10 other countries and regions, IBANs, phone numbers, API keys, home-directory paths, and similar values with placeholders such as `⟦EMAIL_1⟧`; when the model's reply comes back, it puts the original values back, streamed replies included. It works with any OpenAI-compatible or Anthropic-compatible client and needs no local model. It **reduces** leakage of personal data and secrets; it does **not** make a conversation private.
 
 > Status: private, pre-release, not published to npm. Tested against a local fake upstream only.
 
@@ -65,6 +65,7 @@ sequenceDiagram
 | Landline (after a keyword such as 電話 or tel) | `電話 02-2345-6789` | `電話 ⟦PHONE_1⟧` |
 | Business number 統一編號 (after a keyword) | `統編 12345678` | `統編 ⟦TAXID_1⟧` |
 | Card number (**Luhn verified**) | 13–19 digit card number | `⟦CARD_1⟧` |
+| International identifiers (**checksum verified** where one exists) | IBAN, `+44 20 7946 0958`, EU VAT, US SSN/ITIN, UK NINO, German Steuer-ID, French NIR, Spanish DNI/NIE, Italian codice fiscale, Chinese resident ID and mobile, HKID, My Number, Japanese mobile, Korean RRN | `⟦IBAN_1⟧`, `⟦PHONE_1⟧`, `⟦TAXID_1⟧`, `⟦NATID_1⟧` |
 | Private IP | `192.168.1.20` | `⟦IP_1⟧` |
 | Internal host name | `nas.local`, `db.internal` | `⟦HOST_1⟧` |
 | High-entropy string | hex or base64 of 32+ characters | `⟦ENTROPY_1⟧` |
@@ -126,7 +127,7 @@ Pass a JSON file with `node lib/cli.js --config redaction.json`; environment var
 | `redaction.terms` | none | Names and other words to mask, case-insensitive. |
 | `redaction.projectNames` | none | Project code names to mask. |
 | `redaction.allowlist` | `git@github.com`, `noreply@github.com` | Values never masked. |
-| `redaction.rules` | all | Built-in rules to enable. |
+| `redaction.rules` | all but `e164-phone` | Built-in rules to enable. The proxy enables every rule except `e164-phone`, which masks numeric diff lines; the core library's default leaves the international rules off (see the [technical details](docs/DETAILS.md#國際規則)). |
 | `screen` | `replace` | On control characters, replace them with visible stand-ins (`replace`) or refuse the request (`refuse`). |
 | `debugMasked` | `false` | Log each masked request body. |
 
@@ -145,7 +146,7 @@ See the [technical details](docs/DETAILS.md#12-完整設定) for the matching en
 
 | Item | Result | What it means |
 | --- | --- | --- |
-| Tests | 418, all passing | Rules, engine, adversarial inputs, and streamed and non-streamed requests for all three APIs against a fake upstream. |
+| Tests | 894, all passing | Rules, engine, adversarial inputs, and streamed and non-streamed requests for all three APIs against a fake upstream. |
 | Credential false positives | **0.76** per 1,000 code lines | Measured on DeepSeek Harness source, which holds no real key (698k code lines): about one spot every 1,300 lines is mistaken for a key and masked. |
 | Restore failures | 0 | Every file that was masked restores byte for byte. |
 | Speed | about 850k lines in 5 s | Apple M5 Max. |
