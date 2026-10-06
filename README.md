@@ -1,110 +1,56 @@
 # redaction-proxy
 
-[繁體中文](README.zh-TW.md) · [Technical details (zh-TW)](docs/DETAILS.md)
+**English** · [繁體中文](README.zh-TW.md) · [简体中文](README.zh-CN.md) · [日本語](README.ja.md)
 
-A small proxy that runs on your machine. Before your AI tool sends a prompt to a cloud LLM, it replaces email addresses, national ID numbers from Taiwan and 10 other countries and regions, IBANs, phone numbers, API keys, home-directory paths, and similar values with placeholders such as `⟦EMAIL_1⟧`; when the model's reply comes back, it puts the original values back, streamed replies included. It works with any OpenAI-compatible or Anthropic-compatible client and needs no local model. It **reduces** leakage of personal data and secrets; it does **not** make a conversation private.
+A small proxy on your own machine that replaces emails, API keys, ID numbers, and other personal data with placeholders before a prompt reaches a cloud LLM, and puts the real values back in the reply.
 
-> Status: private, pre-release, not published to npm. Tested against a local fake upstream only.
+![Your AI tool sends lin@example.test to redaction-proxy on 127.0.0.1; the cloud LLM receives ⟦EMAIL_1⟧; the reply comes back with ⟦EMAIL_1⟧ and the proxy restores lin@example.test.](docs/media/hero.svg)
 
-## ⚠️ Read first: what it does not protect
+It works with any OpenAI- or Anthropic-compatible client, streaming included, and needs no local model. It **reduces** leaks of personal data and secrets; it does **not** make a conversation private.
 
-| Limitation | What it means |
-| --- | --- |
-| Hides entities, not meaning | The upstream still reads everything around the placeholders. `⟦PATH_1⟧/clients/acme-layoffs.md` still says a lot. |
-| Names and addresses only if listed | By default there is no free-text name detection and no address rule. List names, companies, and code names in `terms` or `projectNames`, or turn on the [experimental name model](#-optional-name-model-experimental), which misses some names. Health conditions and salaries go through as written. |
-| Some fields are not masked | Images, PDFs, audio, `metadata`, tool names, and signed thinking are forwarded unchanged. If a detected value appears in one of them, the whole request is refused with 422. |
-| Cursor cannot use it | Cursor sends custom base-URL requests from Cursor's own servers, which cannot reach your `127.0.0.1`; and Cursor's backend sees the unmasked prompt before any proxy would. |
-| Some split spellings are missed | Not detected: a private IP with spaces after the dots (`192. 168. 1. 2`); an API key split by a space or a line break (the high-entropy rule catches some halves); an email address written `name @ domain` with spaces (`wang.yichun @ example.tw`) or with a bare ` at ` (`wang.yichun at example.tw`) is not masked, because shell prompts (`root @ web01.example.com`), handles (`cc @ alice.me`), prose (`socket.io at github.com`), and matrix code (`a.b @ c.de`) look the same; the privacy classifier is the only guard for it. Detected: spaced or dashed terms, `＠`, `(at)`, `[at]`, `[dot]`, and IDs, business numbers, and mobile numbers with one separator inside. |
-| Some encoded spellings are missed | Percent-encoded values (`lin.yating%40example.com`, `%E6%98%9F…` in a query string, `%2FUsers%2F…`) are decoded one level and masked as written, and the reply gets the encoded text back. A stray or truncated escape (`%FF`, a URL cut after `%E6`) does not stop the rest from decoding, decoded full-width or zero-width characters are folded as in plain text, and a stray escape right before a number or a token (`%E6%2B886…`, `%E609-1234-5678`, `%FFsk-…`) does not hide it. Not detected: a double-encoded value (`%2540`); a `+` meant as a space in a form-encoded query (`星河+計畫`); a value base64-encoded inside a URL (the privacy router decodes base64 only in tool output); an identification number right after a stray escape (`%E6A123456789`), because in Big5 and Shift-JIS the letter after a lead byte is part of the character (`%A4A` is 乙). For the same reason a Shift-JIS character whose trail byte is `A` can turn `%83AKIA…` into a masked key-shaped span. |
-| One placeholder per term, first spelling restored | `星河計畫`, `星河 計畫`, and `NIMBUS-7` / `nimbus 7` each share one placeholder per configured term, and the reply gets the first spelling of the request back at every position. |
-| Only the canonical placeholder | If the model rewrites `⟦EMAIL_1⟧` as `[EMAIL_1]`, you see it as written. |
-| Model quality can drop | Tasks that operate on the masked value itself (turning an absolute path into a relative one, say) get worse. You see the placeholder; the failure is not silent. |
-| Some characters are changed | By default control characters become visible stand-ins (`␛`), and a `⟦` or `⟧` already in the text becomes `⟪` or `⟫`. |
-| A restart forgets continuations | Responses API `previous_response_id` relies on the last 256 responses held in memory; after a restart, placeholders from earlier turns are not restored. |
-| No local authentication | It binds `127.0.0.1` only, but any process on your machine can use it. |
-| Not tested against real services | Tests and the demo use a local fake upstream; nothing has been verified against OpenAI, Anthropic, DeepSeek, or real clients yet. A harness for that exists ([e2e/real](e2e/real/README.md)) but has not been run. |
+> **Status:** pre-release, not on npm. Tested only against a local fake upstream; nothing has been verified with a real service or client yet.
 
-## 🔄 How it works
+## Intro video
 
-```mermaid
-flowchart LR
-  C["Your client"] -- "original prompt" --> M["Proxy: mask"]
-  M -- "placeholders such as ⟦EMAIL_1⟧" --> U["Cloud LLM"]
-  U -- "streamed reply with placeholders" --> R["Proxy: restore"]
-  R -- "originals put back" --> C
-```
+[![A 30-second terminal recording: pnpm demo sends an email, a national ID, and a home path; the cloud sees only placeholders; the reply comes back with the real values.](docs/media/intro.gif)](docs/media/intro.mp4)
 
-- The same value gets the same placeholder throughout a request.
-- The proxy keeps no conversation state. It renumbers from the full history on every request, so a conversation keeps the same numbering on every turn and upstream prompt caching keeps working.
-- If a detected value can still be found in the request after masking, the proxy refuses to send it (422) instead of risking a leak. A rules value counts anywhere, even inside a longer word (`tel0912345678`). A [name-model](#-optional-name-model-experimental) value in a spaced script counts only as a whole word, so `Lee` inside `Leeds` is not a leak; Chinese, Japanese, and Korean values count anywhere.
-- Your client sends its own key as usual; the proxy forwards it unchanged and never stores it.
+The recording replays real output of `pnpm demo` and of one more request through the proxy. [MP4 version](docs/media/intro.mp4).
 
-When a placeholder is split across two streamed chunks, the proxy holds back only the part that could be a placeholder and sends everything else at once:
+## Quick start (30 seconds)
 
-```mermaid
-sequenceDiagram
-  participant U as Cloud LLM
-  participant P as Proxy
-  participant C as Client
-  U->>P: "I will email ⟦EM"
-  P->>C: "I will email "
-  Note over P: holds ⟦EM
-  U->>P: "AIL_1⟧ about"
-  P->>C: "lin@example.test about"
-```
-
-## 🔍 What gets masked
-
-| Category | Example input | Upstream sees |
-| --- | --- | --- |
-| Email | `lin@example.test` | `⟦EMAIL_1⟧` |
-| Home-directory path (prefix only) | `/Users/lin/notes.md` | `⟦PATH_1⟧/notes.md` |
-| API keys and credentials | `sk-...`, `ghp_...`, `AKIA...`, JWT, `Bearer ...`, `password=...` | `⟦KEY_1⟧` (key names such as `password=` stay) |
-| Taiwan national ID and resident certificate (**checksum verified**) | `A123456789` | `⟦TWID_1⟧` |
-| Taiwan mobile | `0912-345-678`, `+886 912 345 678` | `⟦PHONE_1⟧` |
-| Landline (after a keyword such as 電話 or tel) | `電話 02-2345-6789` | `電話 ⟦PHONE_1⟧` |
-| Business number 統一編號 (after a keyword) | `統編 12345678` | `統編 ⟦TAXID_1⟧` |
-| Card number (**Luhn verified**) | 13–19 digit card number | `⟦CARD_1⟧` |
-| International identifiers (**checksum verified** where one exists) | IBAN, `+44 20 7946 0958`, EU VAT, US SSN/ITIN, UK NINO, German Steuer-ID, French NIR, Spanish DNI/NIE, Italian codice fiscale, Chinese resident ID and mobile, HKID, My Number, Japanese mobile, Korean RRN | `⟦IBAN_1⟧`, `⟦PHONE_1⟧`, `⟦TAXID_1⟧`, `⟦NATID_1⟧` |
-| Private IP | `192.168.1.20` | `⟦IP_1⟧` |
-| Internal host name | `nas.local`, `db.internal` | `⟦HOST_1⟧` |
-| High-entropy string | hex or base64 of 32+ characters | `⟦ENTROPY_1⟧` |
-| Words you list (`terms`) | `林小明` | `⟦TERM_1⟧` |
-| Code names you list (`projectNames`) | `Nimbus` | `⟦PROJECT_1⟧` |
-
-Full-width digits (`０９１２３４５６７８`), a full-width `＠`, and values split by zero-width characters are caught too. See the [technical details](docs/DETAILS.md#3-偵測規則) for every rule.
-
-## 🚀 Quick start
-
-Requires Node 22.19+ and pnpm.
+Requires Node 22.19+ and pnpm. From a clone of this repository:
 
 ```sh
 pnpm install
-pnpm demo          # keyless: fake upstream + proxy + one streamed request
+pnpm demo          # no API key: fake upstream + proxy + one streamed request
 pnpm build
-node lib/cli.js    # starts on http://127.0.0.1:8787
+node lib/cli.js    # the proxy, on http://127.0.0.1:8787
 ```
 
 `pnpm demo` prints:
 
 ```text
 client sends:      請寄信給 lin.fictional@example.test，身分證 A123456789，檔案在 /Users/fictional-user/notes.md
-[proxy log] POST /v1/chat/completions -> 200 masked 3 (EMAIL 1, TWID 1, PATH 1) restored 3 unknown 0 7ms
+[proxy log] POST /v1/chat/completions -> 200 masked 3 (EMAIL 1, TWID 1, PATH 1) restored 3 unknown 0 8ms
 upstream received: 請寄信給 ⟦EMAIL_1⟧，身分證 ⟦TWID_1⟧，檔案在 ⟦PATH_1⟧/notes.md
 client receives:   I will email lin.fictional@example.test about /Users/fictional-user/notes.md (ID A123456789).
 ```
 
-## 🔌 Pointing clients at it
+## Point your tool at it
 
-> **None of these has been verified with a real client yet.** Only `pnpm demo` and the tests against a fake upstream have actually run.
+> **Untested with real clients.** Only `pnpm demo` and the tests against a fake upstream have run. A harness for real services exists ([e2e/real](e2e/real/README.md)) but has not been run yet.
 
-| Client | Setting | Status |
+Your tool keeps sending its own API key; the proxy forwards it and never stores it.
+
+| Tool | Setting | Status |
 | --- | --- | --- |
 | Claude Code | `ANTHROPIC_BASE_URL=http://127.0.0.1:8787 claude` | Untested |
 | Anthropic SDK | `ANTHROPIC_BASE_URL=http://127.0.0.1:8787` (no `/v1`) | Untested |
 | OpenAI SDK and most compatible tools | `OPENAI_BASE_URL=http://127.0.0.1:8787/v1` (with `/v1`) | Untested |
-| curl | See below | Untested |
-| Cursor | Not supported; see the limitations | — |
+| DeepSeek | Start the proxy with `REDACTION_PROXY_OPENAI_UPSTREAM=https://api.deepseek.com node lib/cli.js`, then use `OPENAI_BASE_URL=http://127.0.0.1:8787/v1` with your DeepSeek key. This replaces the OpenAI upstream. | Untested |
+| Cursor | Not supported: Cursor sends custom base-URL requests from its own servers, which cannot reach your `127.0.0.1`. | — |
+
+<details><summary>curl example and configuration file</summary>
 
 ```sh
 curl http://127.0.0.1:8787/v1/chat/completions \
@@ -113,11 +59,7 @@ curl http://127.0.0.1:8787/v1/chat/completions \
   -d '{"model":"gpt-4o-mini","messages":[{"role":"user","content":"email lin@example.test"}]}'
 ```
 
-To use another compatible service, such as DeepSeek: `REDACTION_PROXY_OPENAI_UPSTREAM=https://api.deepseek.com node lib/cli.js`.
-
-## ⚙️ Configuration
-
-Pass a JSON file with `node lib/cli.js --config redaction.json`; environment variables override it. Keys never go in the file; an unknown key stops startup.
+Pass a JSON file with `node lib/cli.js --config redaction.json`; environment variables override it. Keys never go in the file, and an unknown key stops startup.
 
 | Key | Default | Meaning |
 | --- | --- | --- |
@@ -127,9 +69,9 @@ Pass a JSON file with `node lib/cli.js --config redaction.json`; environment var
 | `redaction.terms` | none | Names and other words to mask, case-insensitive. |
 | `redaction.projectNames` | none | Project code names to mask. |
 | `redaction.allowlist` | `git@github.com`, `noreply@github.com` | Values never masked. |
-| `redaction.rules` | all but `e164-phone` | Built-in rules to enable. The proxy enables every rule except `e164-phone`, which masks numeric diff lines; the core library's default leaves the international rules off (see the [technical details](docs/DETAILS.md#國際規則)). |
-| `nameModel` | none | Turns on the [experimental name model](#-optional-name-model-experimental). |
-| `screen` | `replace` | On control characters, replace them with visible stand-ins (`replace`) or refuse the request (`refuse`). |
+| `redaction.rules` | all but `e164-phone` | Built-in rules to enable. `e164-phone` is off because it masks numeric diff lines. |
+| `nameModel` | none | Turns on the [experimental name model](#optional-name-model-experimental). |
+| `screen` | `replace` | On control characters: replace them with visible stand-ins (`replace`) or refuse the request (`refuse`). |
 | `debugMasked` | `false` | Log each masked request body. |
 
 ```json
@@ -141,100 +83,88 @@ Pass a JSON file with `node lib/cli.js --config redaction.json`; environment var
 }
 ```
 
-See the [technical details](docs/DETAILS.md#12-完整設定) for the matching environment variables and the full reference. The log has one line per request with counts and duration only, never an original value or a header.
+Environment variables and every option: [technical details §12](docs/DETAILS.md#12-完整設定) (Traditional Chinese). The log has one line per request with counts and duration, never an original value or a header.
 
-## 🧪 Optional name model (experimental)
+</details>
 
-Off by default. When configured, a small local model ([`Wismut/nym-pii-multilingual-small`](https://huggingface.co/Wismut/nym-pii-multilingual-small), MIT, edge-int8, 108 MB) also masks person names (`⟦NAME_1⟧`), companies (`⟦ORG_1⟧`), places (`⟦LOC_1⟧`), and addresses (`⟦ADDR_1⟧`) in what **you** write. It is experimental: it misses some names and masks some words that are not names. The numbers below are from synthetic data on an Apple M5 Max CPU.
+## What it masks
 
-What it reads, and what it does not:
+![A real request through the proxy: the tool sends a host name, a private IP, a home path, an API key, and an email; the cloud LLM receives placeholders such as ⟦HOST_1⟧ and ⟦KEY_1⟧; the reply comes back with the real values.](docs/media/before-after.png)
 
-- Only user messages: prose paragraphs of your own text. System prompts, assistant turns, tool results, code blocks, and code-, JSON-, YAML-, or log-shaped lines are not read, so a name inside pasted code or logs is not found there.
-- Every name, company, place, and address it finds is masked everywhere in the request with the same placeholder: system prompts, assistant turns, tool results, and tool-call arguments (`許雅雯` and `許 雅 雯` share one, and so do `Jordan` and `JORDAN`). Values in spaced scripts match whole words only (`Lee` is not masked inside `Leeds`); Chinese, Japanese, and Korean values match anywhere. A value of one character is masked only where found.
-- A full name masks only the full name elsewhere: after `Lee Morgan` is found, `Lee` or `Morgan` alone, or `Lee "Lefty" Morgan`, is sent as written. Encoded forms (`Lee%20Morgan` in a URL) and glued forms (`LeeMorgan`) are neither masked nor refused.
-- A word the model wrongly takes for a name is masked everywhere too. The allowlist is what stops that.
-- Rules win: a span that overlaps an email, key, or other rule detection is dropped.
-- Words such as `Kafka`, `Docker`, `Podman`, `Default`, `High`, and `Low` are on a default allowlist (`nameModel.allowlist`).
-- A span can be too short or too long. A partly found Chinese name sends the rest as written (`林小明` → `⟦NAME_1⟧明`), and a Chinese span can take the next character (`刘建国会`). Honorifics and particles after a Japanese name (`さん`, `様`, `に`, `は`, ...) are cut off the span, so `佐藤美咲さんに` is sent as `⟦NAME_1⟧さんに`.
-
-Measured (one held-out run, numbers are recall unless noted):
-
-| Item | Result | Note |
+| Category | Example | The cloud sees |
 | --- | --- | --- |
-| Names in prose, English / Japanese | 1.00 / 1.00 | |
-| Names in prose, Traditional Chinese | **0.87** | Below the 0.90 target: about 1 name in 8 is missed. |
-| Names in prose, Simplified Chinese | 1.00 held out, 0.75 dev | Small sample (16 names in dev). |
-| Names in pasted code, logs, or JSON | 0.10–0.30 | Out of scope by design; list such names in `terms`. |
-| Companies / places / addresses in prose | 0.71 / 0.88 / 0.82 | Addresses: Simplified Chinese 0.42, French 0.67. |
-| Precision | 0.94 | Share of masked spans that were real names, companies, or places. |
-| False positives in technical chat | 46 per 1,000 sentences (113 on the dev set) | Before the allowlist; mostly `Default` or tool names. With the default allowlist, 4 per 1,000 dev sentences, but the list was built from that set. Each one is masked everywhere in the request. |
-| False positives in code | 0 | Code is not read. |
-| Added memory | about +420 MB | With the 512-token window; +440 MB after a 16 KB message. |
-| Added latency | p95 about 130 ms for 2 KB of Chinese prose, 80 ms for mixed prose | 16 KB of Chinese prose: about 1 s. Paragraphs already seen are cached. |
+| Email | `lin@example.test` | `⟦EMAIL_1⟧` |
+| API keys and credentials | `sk-…`, `ghp_…`, `AKIA…`, JWT, `Bearer …`, `password=…` | `⟦KEY_1⟧` |
+| Home-directory path (prefix only) | `/Users/lin/notes.md` | `⟦PATH_1⟧/notes.md` |
+| Private IP, internal host | `192.168.1.20`, `nas.local` | `⟦IP_1⟧`, `⟦HOST_1⟧` |
+| Card number (Luhn checked) | 13–19 digits | `⟦CARD_1⟧` |
+| Taiwan ID, mobile, business number | `A123456789`, `0912-345-678` | `⟦TWID_1⟧`, `⟦PHONE_1⟧` |
+| IDs from 10 more countries and regions, IBAN | US SSN, UK NINO, Chinese resident ID, My Number, … | `⟦NATID_1⟧`, `⟦IBAN_1⟧` |
+| Long random strings | hex or base64, 32+ characters | `⟦ENTROPY_1⟧` |
+| Words you list | `terms`, `projectNames` | `⟦TERM_1⟧`, `⟦PROJECT_1⟧` |
 
-Setup:
+The same value gets the same placeholder throughout a request. If a detected value is still in the request after masking, the proxy refuses to send it (422) rather than leak it. Full-width digits, `＠`, and zero-width characters are folded first. Every rule: [technical details §3](docs/DETAILS.md#3-偵測規則).
+
+## Optional name model (experimental)
+
+Off by default. Rules alone do not find names. Turn on a small local model ([`Wismut/nym-pii-multilingual-small`](https://huggingface.co/Wismut/nym-pii-multilingual-small), MIT, 108 MB) and it also masks person names, companies, places, and addresses in what **you** write (`⟦NAME_1⟧`, `⟦ORG_1⟧`, `⟦LOC_1⟧`, `⟦ADDR_1⟧`).
 
 ```sh
-pnpm add -D onnxruntime-node@1.30.0 tokenizers@0.23.2  # the model's runtime, about 350 MB; pnpm install alone leaves it out
-node scripts/fetch-name-model.mjs ~/models/nym       # about 125 MB from Hugging Face, sha256-checked
+pnpm add -D onnxruntime-node@1.30.0 tokenizers@0.23.2   # the runtime, about 350 MB
+node scripts/fetch-name-model.mjs ~/models/nym        # about 125 MB, sha256-checked
+REDACTION_PROXY_NAME_MODEL_DIR=$HOME/models/nym node lib/cli.js
 ```
 
-The script downloads `edge-int8/model_int8.onnx`, `edge-int8/config.json`, `edge-int8/tokenizer.json`, and `README.md` (the license notice) from `Wismut/nym-pii-multilingual-small` at revision `4348999cd3c2e20c49615e9af7c6bbb45b64cd85`, then writes `vocab.json`, `merges.txt`, and `added_tokens.json` beside them; the proxy loads those instead of the 12 MB `tokenizer.json`, which saves about 220 MB of memory. Then add to the config file:
+It misses some names and masks some words that are not names. Measured on synthetic data:
 
-```json
-{ "nameModel": { "dir": "/Users/you/models/nym" } }
-```
+| | Result |
+| --- | --- |
+| Names in prose: English, Japanese | 1.00, 1.00 recall |
+| Names in prose: Traditional Chinese | **0.87** recall (about 1 name in 8 missed) |
+| Names in pasted code, logs, JSON | 0.10–0.30 recall: code is not read; list such names in `terms` |
+| Precision | 0.94 |
+| Cost | about +420 MB memory, p95 about 130 ms per 2 KB of Chinese prose |
 
-or set `REDACTION_PROXY_NAME_MODEL_DIR=/Users/you/models/nym`.
+What it reads, every number, and the options: [technical details §16](docs/DETAILS.md#16-人名模型實驗性).
 
-| Key | Default | Meaning |
-| --- | --- | --- |
-| `nameModel.dir` | required | Absolute path of the directory the script filled. |
-| `nameModel.threshold` | `0.3` | Lower finds more and masks more non-names. |
-| `nameModel.categories` | `NAME`, `ORG`, `LOC`, `ADDR` | Categories to mask. |
-| `nameModel.windowTokens` / `windowOverlap` | `512` / `128` | Tokens per model pass and overlap; larger windows use more memory and found fewer names. |
-| `nameModel.allowlist` | tools and setting words | Whole spans never masked; replaces the default list. |
-| `nameModel.required` | `false` | If inference fails, `false` masks that request with the rules only and logs `nameModel failed`; `true` refuses it with 503. |
+## Results
 
-The model loads before the port opens; a missing file or package stops startup and names it. Turning the model on changes the policy digest, so a host that keeps a span index refuses to continue an older index under it.
+<!-- RESULTS:START -->
+**dev set (preliminary).** 1,200 synthetic prompts in English, Traditional Chinese, Simplified Chinese, and Japanese, written by the authors of the rules. No held-out result yet.
 
-## 📊 Measured numbers
+![Bar chart: share of sensitive values fully masked per category, redaction-proxy rules against Presidio.](docs/media/results.svg)
 
-| Item | Result | What it means |
-| --- | --- | --- |
-| Tests | 894, all passing | Rules, engine, adversarial inputs, and streamed and non-streamed requests for all three APIs against a fake upstream. |
-| Credential false positives | **0.76** per 1,000 code lines | Measured on DeepSeek Harness source, which holds no real key (698k code lines): about one spot every 1,300 lines is mistaken for a key and masked. |
-| Restore failures | 0 | Every file that was masked restores byte for byte. |
-| Speed | about 850k lines in 5 s | Apple M5 Max. |
-| Synthetic multilingual prompts (dev set) | all languages, macro average over 9 categories: 73.4% fully masked, 26.5% untouched; restore 100% | 1,200 seeded prompts in English, zh-TW, zh-CN, and Japanese, written by the authors of the rules; per-category results and an English-only comparison with Presidio: [bench/results/public-bench-dev.md](bench/results/public-bench-dev.md). Fully masks secrets, home paths, internal hosts, private IPs, e-mails, and cards; misses names, non-Taiwan phone numbers and IDs; masks bare commit hashes. No held-out result yet. |
+| dev set (preliminary) | redaction-proxy rules | Presidio, cutoff 0 | Presidio, cutoff 0.4 |
+| --- | --- | --- | --- |
+| Fully masked, all languages (macro average of 9 categories) | **73.4%** | 56.6%* | 51.1%* |
+| Fully masked, English only | 66.7% | 63.3% | 63.3% |
+| Masked regions that were sensitive (all languages) | 96.0% | 60.1%* | 68.9%* |
+| Restored byte for byte | 100% | n/a | n/a |
 
-A false positive costs the model one unnecessary placeholder, which is restored in the reply. The corpus is English code; Chinese prose has not been measured. Reproduce with `pnpm test`, `pnpm bench`, and `pnpm run bench:public`; add `--heldout <set.jsonl>` to also score a frozen held-out set (format and MANIFEST check in `bench/public/heldout.ts`).
+\* Presidio analyzes every prompt as English, so its non-English results are for reference only.
 
-## 🆚 Compared with dsh-privacy-router
+- Fully masked: secrets, home paths, internal hosts, private IPs, emails, cards. Missed: names (no rule for them), and phone numbers and IDs from outside Taiwan, because this run used the core library's default rules; the proxy also turns on international rules, which this run did not measure.
+- Bare commit hashes are masked by mistake (46% of them).
+- Separately, on 698k lines of source code with no real keys: 0.76 false credential detections per 1,000 lines.
 
-| | redaction-proxy (this repo) | [dsh-privacy-router](https://github.com/PersonalAssistanceHsin/dsh-privacy-router) |
-| --- | --- | --- |
-| Form | Standalone HTTP proxy | dsh plugin |
-| Clients | Any OpenAI- or Anthropic-compatible client | dsh only |
-| Routing | None: every request goes upstream, masked | Decides per turn between a local model and the cloud |
-| Local model | Not needed | Needed |
-| Masking core | Lives here (`src/core/`) | dsh-addons' redaction packages vendor this core as a git submodule |
-| Streaming restore | `src/core/restore.ts` | Still has its own restorer; unification is planned |
+Per-category tables: [bench/results/public-bench-dev.md](bench/results/public-bench-dev.md). Reproduce: `pnpm run bench:public`.
+<!-- RESULTS:END -->
 
-## ❓ FAQ
+## What it does not protect
 
-**Does it make my conversation private?** No. It reduces leakage of detectable personal data and credentials, but the upstream still reads everything else.
+- **Meaning.** The cloud still reads everything around the placeholders: `⟦PATH_1⟧/clients/acme-layoffs.md` still says a lot.
+- **Names, addresses, health details, salaries**, unless you list them in `terms` or the name model finds them.
+- **Images, PDFs, audio, `metadata`, tool names, signed thinking.** These are forwarded unchanged; if a detected value appears in one, the whole request is refused with 422.
+- **Unusual spellings.** Some split or encoded forms slip through, such as `name @ domain` with spaces or a double percent-encoded value.
+- **Cursor**, or any tool that sends requests from its own servers.
+- **Other programs on your machine.** The proxy binds `127.0.0.1` only, with no authentication.
 
-**Why `⟦EMAIL_1⟧` and not a fake email?** In measurements, models kept placeholders verbatim 100% of the time against 75% for fake values, and fake values caused silent errors no restore can undo.
+Also: a model that rewrites `⟦EMAIL_1⟧` as `[EMAIL_1]` shows it to you as written; tasks that need the masked value itself get worse; control characters become visible stand-ins; a restart forgets Responses API continuations. Full list: [technical details §17](docs/DETAILS.md#17-完整限制清單); threat model: [§11](docs/DETAILS.md#11-威脅模型).
 
-**Will my name be masked?** If you list it in `terms`, always. With the experimental name model, usually when you write it in a message, but not always: it finds about 7 of 8 Traditional Chinese names and does not read code or logs.
+## More
 
-**Why was my request refused with 422?** A detected value is still in the masked request, usually in a field the proxy does not rewrite (an image URL or metadata, for instance), or you set `screen: "refuse"`. The message names the field, never the value.
+[docs/DETAILS.md](docs/DETAILS.md) (Traditional Chinese) covers the architecture, the comparison with dsh-privacy-router, the core API, every rule, streaming restore, 422 refusals, the threat model, the full configuration, tests, measurement methods, an FAQ, and how to regenerate the images and video in this README.
 
-**Does the proxy store my key or my conversation?** Keys are forwarded and never stored. Conversations are not stored, except the inputs of the last 256 Responses API responses, kept in memory for continuations.
+## License
 
-**Can I run it on a server for other people?** No. The bind address is fixed to `127.0.0.1`, and there is no authentication.
-
-## 📚 More
-
-[docs/DETAILS.md](docs/DETAILS.md) (Traditional Chinese) covers the architecture, core API, masking order and prompt caching, unmasked fields, 422 refusals, streaming restore internals, `previous_response_id`, logging, control-character screening, the threat model, the full configuration, tests, and the false-positive method.
+[Apache-2.0](LICENSE). Parts of the rules and engine descend from [LYiHub/pub-dsh-privacy-router](https://github.com/LYiHub/pub-dsh-privacy-router) (MIT); see [NOTICE](NOTICE).

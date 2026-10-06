@@ -1,0 +1,170 @@
+# redaction-proxy
+
+[English](README.md) · [繁體中文](README.zh-TW.md) · [简体中文](README.zh-CN.md) · **日本語**
+
+手元のマシンで動く小さなプロキシです。プロンプトがクラウドの LLM に届く前に、メールアドレス・API キー・個人番号などの個人情報をプレースホルダーに置き換え、返ってきた応答では元の値に戻します。
+
+![AI ツールが lin@example.test を 127.0.0.1 の redaction-proxy に送り、クラウド LLM には ⟦EMAIL_1⟧ が届きます。応答は ⟦EMAIL_1⟧ のまま戻り、プロキシが lin@example.test に復元します。](docs/media/hero.svg)
+
+OpenAI 互換・Anthropic 互換のクライアントならストリーミングも含めてそのまま使え、ローカルモデルは不要です。個人情報や認証情報の漏えいを**減らします**が、会話を**秘密にするものではありません**。
+
+> **ステータス：** 正式リリース前で、npm には公開していません。テストはローカルのダミー上流サーバーに対してのみで、実際のサービスやクライアントでの検証はまだです。
+
+## 紹介動画
+
+[![30 秒のターミナル録画：pnpm demo がメールアドレス・身分証番号・ホームディレクトリのパスを送信し、クラウドにはプレースホルダーだけが届き、応答では元の値に戻ります。](docs/media/intro.gif)](docs/media/intro.mp4)
+
+`pnpm demo` と、プロキシを通したもう 1 件のリクエストの実際の出力を再生しています（字幕は英語）。[MP4 版](docs/media/intro.mp4)
+
+## 30 秒クイックスタート
+
+Node 22.19 以上と pnpm が必要です。このリポジトリを clone したディレクトリで実行します。
+
+```sh
+pnpm install
+pnpm demo          # API キー不要：ダミー上流 + プロキシ + ストリーミングリクエスト 1 件
+pnpm build
+node lib/cli.js    # プロキシを http://127.0.0.1:8787 で起動
+```
+
+`pnpm demo` の出力（デモの入力は繁体字中国語です）：
+
+```text
+client sends:      請寄信給 lin.fictional@example.test，身分證 A123456789，檔案在 /Users/fictional-user/notes.md
+[proxy log] POST /v1/chat/completions -> 200 masked 3 (EMAIL 1, TWID 1, PATH 1) restored 3 unknown 0 8ms
+upstream received: 請寄信給 ⟦EMAIL_1⟧，身分證 ⟦TWID_1⟧，檔案在 ⟦PATH_1⟧/notes.md
+client receives:   I will email lin.fictional@example.test about /Users/fictional-user/notes.md (ID A123456789).
+```
+
+## ツールの接続先を変える
+
+> **実際のクライアントでは未検証です。** 実行済みなのは `pnpm demo` とダミー上流に対するテストだけです。実サービス向けの検証ツール（[e2e/real](e2e/real/README.md)）は用意してありますが、まだ実行していません。
+
+API キーはこれまでどおりツールから送ってください。プロキシはそのまま転送し、保存しません。
+
+| ツール | 設定 | 状態 |
+| --- | --- | --- |
+| Claude Code | `ANTHROPIC_BASE_URL=http://127.0.0.1:8787 claude` | 未検証 |
+| Anthropic SDK | `ANTHROPIC_BASE_URL=http://127.0.0.1:8787`（`/v1` なし） | 未検証 |
+| OpenAI SDK と多くの互換ツール | `OPENAI_BASE_URL=http://127.0.0.1:8787/v1`（`/v1` あり） | 未検証 |
+| DeepSeek | `REDACTION_PROXY_OPENAI_UPSTREAM=https://api.deepseek.com node lib/cli.js` でプロキシを起動し、DeepSeek のキーと `OPENAI_BASE_URL=http://127.0.0.1:8787/v1` を使います。OpenAI の上流はこれで置き換わります。 | 未検証 |
+| Cursor | 非対応：Cursor はカスタム base URL へのリクエストを Cursor 自身のサーバーから送るため、手元の `127.0.0.1` に届きません。 | — |
+
+<details><summary>curl の例と設定ファイル</summary>
+
+```sh
+curl http://127.0.0.1:8787/v1/chat/completions \
+  -H "authorization: Bearer $OPENAI_API_KEY" \
+  -H "content-type: application/json" \
+  -d '{"model":"gpt-4o-mini","messages":[{"role":"user","content":"lin@example.test にメールして"}]}'
+```
+
+`node lib/cli.js --config redaction.json` で JSON の設定ファイルを指定します。環境変数はファイルより優先されます。キーはファイルに書きません。知らない項目があると起動に失敗します。
+
+| 項目 | 既定値 | 説明 |
+| --- | --- | --- |
+| `port` | `8787` | `127.0.0.1` だけで待ち受けます。 |
+| `openaiUpstream` | `https://api.openai.com` | Chat Completions と Responses の上流。 |
+| `anthropicUpstream` | `https://api.anthropic.com` | Anthropic Messages の上流。 |
+| `redaction.terms` | なし | マスクしたい人名などの語句。大文字小文字は区別しません。 |
+| `redaction.projectNames` | なし | マスクしたいプロジェクトのコードネーム。 |
+| `redaction.allowlist` | `git@github.com`、`noreply@github.com` | 決してマスクしない値。 |
+| `redaction.rules` | `e164-phone` 以外すべて | 有効にする組み込みルール。`e164-phone` は数字で始まる diff の追加行を電話番号とみなしてしまうため、既定ではオフです。 |
+| `nameModel` | なし | [実験的な人名モデル](#オプションの人名モデル実験的)を有効にします。 |
+| `screen` | `replace` | 制御文字を見える文字に置き換える（`replace`）か、リクエストを拒否する（`refuse`）か。 |
+| `debugMasked` | `false` | マスク後のリクエスト本文をログに出します。 |
+
+```json
+{
+  "redaction": {
+    "terms": ["林小明", "Denise Whitlock"],
+    "projectNames": ["Nimbus"]
+  }
+}
+```
+
+環境変数とすべてのオプションは[技術詳細 第 12 節](docs/DETAILS.md#12-完整設定)（繁体字中国語）を参照してください。ログはリクエストごとに 1 行で、件数と所要時間だけを記録し、元の値やヘッダーは一切含みません。
+
+</details>
+
+## マスクされるもの
+
+![プロキシを通した実際のリクエスト：ツールはホスト名・プライベート IP・ホームディレクトリのパス・API キー・メールアドレスを送り、クラウド LLM には ⟦HOST_1⟧ や ⟦KEY_1⟧ などのプレースホルダーが届き、応答では元の値に戻ります。](docs/media/before-after.png)
+
+| 種類 | 例 | クラウドに見えるもの |
+| --- | --- | --- |
+| メールアドレス | `lin@example.test` | `⟦EMAIL_1⟧` |
+| API キーと認証情報 | `sk-…`、`ghp_…`、`AKIA…`、JWT、`Bearer …`、`password=…` | `⟦KEY_1⟧` |
+| ホームディレクトリのパス（先頭部分のみ） | `/Users/lin/notes.md` | `⟦PATH_1⟧/notes.md` |
+| プライベート IP、内部ホスト名 | `192.168.1.20`、`nas.local` | `⟦IP_1⟧`、`⟦HOST_1⟧` |
+| カード番号（Luhn で検証） | 13〜19 桁 | `⟦CARD_1⟧` |
+| 台湾の身分証番号・携帯番号・統一編号 | `A123456789`、`0912-345-678` | `⟦TWID_1⟧`、`⟦PHONE_1⟧` |
+| ほか 10 の国・地域の ID、IBAN | マイナンバー、日本の携帯番号、米国 SSN、英国 NINO など | `⟦NATID_1⟧`、`⟦PHONE_1⟧`、`⟦IBAN_1⟧` |
+| 長いランダム文字列 | 32 文字以上の hex や base64 | `⟦ENTROPY_1⟧` |
+| 自分で指定した語句 | `terms`、`projectNames` | `⟦TERM_1⟧`、`⟦PROJECT_1⟧` |
+
+同じ値はリクエスト全体で同じプレースホルダーになります。マスク後のリクエストに検出済みの値がまだ残っていれば、漏らす代わりに送信を拒否します（422）。全角数字・`＠`・ゼロ幅文字は正規化してから照合します。マイナンバーは「マイナンバー」「個人番号」などのキーワードの後にある場合だけ検出します。全ルールは[技術詳細 第 3 節](docs/DETAILS.md#3-偵測規則)にあります。
+
+## オプションの人名モデル（実験的）
+
+既定ではオフです。ルールだけでは人名は見つかりません。小さなローカルモデル（[`Wismut/nym-pii-multilingual-small`](https://huggingface.co/Wismut/nym-pii-multilingual-small)、MIT ライセンス、108 MB）を有効にすると、**あなたが書いた文章**の中の人名・会社名・地名・住所もマスクします（`⟦NAME_1⟧`、`⟦ORG_1⟧`、`⟦LOC_1⟧`、`⟦ADDR_1⟧`）。
+
+```sh
+pnpm add -D onnxruntime-node@1.30.0 tokenizers@0.23.2   # 実行環境、約 350 MB
+node scripts/fetch-name-model.mjs ~/models/nym        # 約 125 MB、sha256 を検証
+REDACTION_PROXY_NAME_MODEL_DIR=$HOME/models/nym node lib/cli.js
+```
+
+見逃す人名もあり、人名でない語をマスクすることもあります。合成データでの実測値：
+
+| | 結果 |
+| --- | --- |
+| 文章中の人名：英語、日本語 | 再現率 1.00、1.00 |
+| 文章中の人名：繁体字中国語 | 再現率 **0.87**（8 人に 1 人ほど見逃す） |
+| 貼り付けたコード・ログ・JSON 中の人名 | 再現率 0.10〜0.30：コードは読まないので、こうした人名は `terms` に入れてください |
+| 適合率 | 0.94 |
+| コスト | メモリ約 +420 MB、中国語の文章 2 KB あたり p95 約 130 ms |
+
+日本語の名前の後の敬称や助詞（`さん`、`様`、`に` など）は範囲から外すので、`佐藤美咲さんに` は `⟦NAME_1⟧さんに` として送られます。読む範囲・全数値・オプションは[技術詳細 第 16 節](docs/DETAILS.md#16-人名模型實驗性)にあります。
+
+## 結果
+
+<!-- RESULTS:START -->
+**dev set (preliminary)：開発セット（暫定）。** 英語・繁体字中国語・簡体字中国語・日本語の合成プロンプト 1,200 件で、ルールの作者が作成したものです。ホールドアウトセットの結果はまだありません。
+
+![棒グラフ：種類ごとに完全にマスクされた割合。redaction-proxy のルールと Presidio の比較。](docs/media/results.svg)
+
+| dev set (preliminary) | redaction-proxy ルール | Presidio、cutoff 0 | Presidio、cutoff 0.4 |
+| --- | --- | --- | --- |
+| 完全にマスク、全言語（9 種類のマクロ平均） | **73.4%** | 56.6%* | 51.1%* |
+| 完全にマスク、英語のみ | 66.7% | 63.3% | 63.3% |
+| マスクした範囲が実際に機密値だった割合（全言語） | 96.0% | 60.1%* | 68.9%* |
+| バイト単位で元どおりに復元 | 100% | 対象外 | 対象外 |
+
+\* Presidio はすべてのプロンプトを英語として解析するため、英語以外の結果は参考値です。
+
+- 完全にマスク：認証情報、ホームディレクトリ、内部ホスト、プライベート IP、メールアドレス、カード番号。見逃し：人名（対応するルールがない）と、台湾以外の電話番号・ID。今回の計測はコアライブラリの既定ルールで行ったためで、プロキシが追加で有効にする国際ルールは計測していません。
+- 文脈のないコミットハッシュは誤ってマスクされます（46%）。
+- 別途、実際のキーを含まない 69.8 万行のソースコードでは、1,000 行あたり 0.76 か所が認証情報と誤検出されました。
+
+種類別の詳しい表：[bench/results/public-bench-dev.md](bench/results/public-bench-dev.md)。再現：`pnpm run bench:public`
+<!-- RESULTS:END -->
+
+## 守れないもの
+
+- **意味。** プレースホルダーの周りはすべてクラウドに読まれます。`⟦PATH_1⟧/clients/acme-layoffs.md` でも多くが伝わります。
+- **人名・住所・病状・給与**。`terms` に入れるか、人名モデルが見つけない限りそのまま送られます。
+- **画像、PDF、音声、`metadata`、ツール名、署名付きの thinking。** これらはそのまま転送されます。検出済みの値がこの中にあれば、リクエスト全体を 422 で拒否します。
+- **変則的な書き方。** 空白を挟んだ `name @ domain` や二重にパーセントエンコードした値など、分割やエンコードされた形の一部は検出できません。
+- **Cursor**、および自社サーバーからリクエストを送るツール。
+- **同じマシン上の他のプログラム。** `127.0.0.1` だけで待ち受けますが、認証はありません。
+
+ほかにも：モデルが `⟦EMAIL_1⟧` を `[EMAIL_1]` と書き換えるとそのまま表示されます。マスクした値そのものを扱うタスクは精度が落ちます。制御文字は見える文字に置き換わります。再起動すると Responses API の会話の続きを忘れます。全一覧は[技術詳細 第 17 節](docs/DETAILS.md#17-完整限制清單)、脅威モデルは[第 11 節](docs/DETAILS.md#11-威脅模型)にあります。
+
+## 詳しく
+
+[docs/DETAILS.md](docs/DETAILS.md)（繁体字中国語）に、アーキテクチャ、dsh-privacy-router との比較、コア API、全ルール、ストリーミングの復元、422 の拒否、脅威モデル、全設定、テスト、計測方法、FAQ、このページの画像と動画の再生成方法をまとめています。
+
+## ライセンス
+
+[Apache-2.0](LICENSE)。ルールとエンジンの一部は [LYiHub/pub-dsh-privacy-router](https://github.com/LYiHub/pub-dsh-privacy-router)（MIT）に由来します。[NOTICE](NOTICE) を参照してください。
