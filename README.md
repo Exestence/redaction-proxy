@@ -150,6 +150,7 @@ What it reads, and what it does not:
 
 - Only user messages: prose paragraphs of your own text. System prompts, assistant turns, tool results, code blocks, and code-, JSON-, YAML-, or log-shaped lines are not read, so a name inside pasted code or logs is not found there.
 - Every name, company, place, and address it finds is masked everywhere in the request with the same placeholder: system prompts, assistant turns, tool results, and tool-call arguments (`許雅雯` and `許 雅 雯` share one, and so do `Jordan` and `JORDAN`). Values in spaced scripts match whole words only (`Lee` is not masked inside `Leeds`); Chinese, Japanese, and Korean values match anywhere. A value of one character is masked only where found.
+- A full name masks only the full name elsewhere: after `Lee Morgan` is found, `Lee` or `Morgan` alone, or `Lee "Lefty" Morgan`, is sent as written. Encoded forms (`Lee%20Morgan` in a URL) and glued forms (`LeeMorgan`) are neither masked nor refused.
 - A word the model wrongly takes for a name is masked everywhere too. The allowlist is what stops that.
 - Rules win: a span that overlaps an email, key, or other rule detection is dropped.
 - Words such as `Kafka`, `Docker`, `Podman`, `Default`, `High`, and `Low` are on a default allowlist (`nameModel.allowlist`).
