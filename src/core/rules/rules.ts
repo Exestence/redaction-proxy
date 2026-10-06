@@ -130,7 +130,7 @@ const TERM_CJK = /[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}\p{Script
 export interface ConfiguredTerm {
   /** The literal text, matched case-insensitively on the NFKC projection. */
   value: string
-  /** Placeholder category, `TERM` or `PROJECT`. */
+  /** Placeholder category, such as `TERM` or `PROJECT`. */
   category: string
 }
 

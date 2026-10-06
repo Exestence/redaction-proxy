@@ -362,6 +362,19 @@ describe('refusals and screening', () => {
     expect(seen).toHaveLength(0)
   })
 
+  it('refuses a rules value glued into a longer token or URL, and a one-character term', async () => {
+    const glued = [
+      { metadata: { ref: `X${TWID}` }, messages: [{ role: 'user', content: `id ${TWID}` }] },
+      { messages: [{ role: 'user', content: `key ${KEY}` }, { role: 'user', content: [{ type: 'image_url', image_url: { url: `https://img.example.test/a?tok${KEY}` } }] }] },
+      { messages: [{ role: 'user', content: `id ${TWID}` }, { role: 'tool', tool_call_id: 't', content: `ref${TWID}` }] },
+    ]
+    for (const body of glued) expect((await post('/v1/chat/completions', { model: 'm', ...body })).status).toBe(422)
+    await start({ redaction: { terms: ['Q'] } })
+    const res = await post('/v1/chat/completions', { model: 'm', metadata: { tag: 'Q' }, messages: [{ role: 'user', content: 'project Q is late' }] })
+    expect(res.status).toBe(422)
+    expect(seen).toHaveLength(0)
+  })
+
   it('replaces control characters and stray delimiters by default, and refuses them on request', async () => {
     reply = () => ({ json: { choices: [] } })
     await post('/v1/chat/completions', { model: 'm', messages: [{ role: 'user', content: `\u001b[31mred\u001b[0m ⟦EMAIL_9⟧ ${EMAIL}` }] })

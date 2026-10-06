@@ -17,7 +17,10 @@
 import { createServer } from 'node:http'
 import type { IncomingMessage, Server, ServerResponse } from 'node:http'
 import { RedactionError, RulesDetector, createStreamRestorer, emptyRedactionIndex, mask, screenText } from '../core/index.ts'
-import type { RedactionRegistry, StreamRestorer } from '../core/index.ts'
+import type { RedactionDetector, RedactionRegistry, StreamRestorer } from '../core/index.ts'
+import { NameModelDetector, NameModelError, containsStandingAlone, isSearchedValue } from '../core/model/detector.ts'
+import type { NameModel } from '../core/model/name-model.ts'
+import { NAME_MODEL_CATEGORIES } from '../core/model/config.ts'
 import type { ProxyConfig } from './config.ts'
 
 /** Which wire API a route speaks. */
@@ -50,6 +53,18 @@ const JSON_TEXT = new Set(['arguments', 'partial_json'])
 /** Top-level request keys masked first, so the stable request head keeps its identities. */
 const HEAD_FIRST = ['tools', 'functions', 'system', 'instructions']
 
+/** Content-part types that carry user-written text: Chat and Messages `text`, Responses `input_text`. */
+const USER_TEXT_PARTS = new Set(['text', 'input_text'])
+
+/**
+ * A message's own text: `/messages/N/content` or one of its parts, `/messages/N/content/K/text` (or `/input/...`).
+ * Matches the JSON pointers {@link collectSlots} builds; change both together.
+ */
+const MESSAGE_TEXT_PATH = /^\/(messages|input)\/(\d+)\/content(?:\/(\d+)\/text)?$/
+
+/** Categories the name model binds; the leak scan matches their values as whole words. */
+const MODEL_CATEGORIES: ReadonlySet<string> = new Set(NAME_MODEL_CATEGORIES)
+
 /** Headers that describe one hop or the body encoding, never forwarded. */
 const HOP = new Set([
   'host', 'connection', 'keep-alive', 'proxy-authorization', 'proxy-connection', 'te', 'trailer', 'transfer-encoding',
@@ -74,6 +89,22 @@ interface Stats {
   masked: Record<string, number>
   restored: number
   unknown: number
+  nameModelFailed: boolean
+}
+
+/** Original texts of one request, kept for a Responses continuation. */
+interface RequestTexts {
+  texts: string[]
+  /** The texts the user wrote, which the name model reads. */
+  userTexts: Set<string>
+}
+
+/** A request body after masking; `texts` holds a continuation's earlier texts first. */
+interface MaskedRequest extends RequestTexts {
+  /** The masked body, serialized. */
+  outgoing: string
+  /** Bindings of the mask call. */
+  registry: RedactionRegistry
 }
 
 /** A request the proxy refuses before anything is forwarded. */
@@ -108,6 +139,60 @@ function collectSlots(value: unknown, path: string, out: Slot[]): void {
     if (typeof item === 'string') out.push({ parent: record, key, path: at })
     else collectSlots(item, at, out)
   }
+}
+
+/**
+ * Whether a request string is text the user wrote: a user message's string
+ * content or one of its text parts, or a Responses string `input`. Tool
+ * results, system prompts, and assistant turns are not.
+ * @param body - the parsed request body.
+ * @param path - JSON pointer of the string.
+ * @returns whether the name model reads it.
+ */
+function isUserText(body: Json, path: string): boolean {
+  if (path === '/input') return true
+  const match = MESSAGE_TEXT_PATH.exec(path)
+  if (match === null) return false
+  const [, list, message, part] = match
+  const item = (body[list as string] as Json[] | undefined)?.[Number(message)]
+  if (item?.role !== 'user') return false
+  return part === undefined || USER_TEXT_PARTS.has((item.content as Json[])[Number(part)]?.type)
+}
+
+/**
+ * Refuse a masked body that still holds a detected value: in a field the
+ * proxy does not rewrite (metadata, an image URL), or an occurrence masking
+ * could not cover. A name-model value is matched as its propagation matches
+ * it, as a whole word for spaced scripts (`Lee` inside `Leeds` is no leak),
+ * and only from two code points. Every other value counts anywhere, at any
+ * length, so a rules value glued to other characters (`tel0912345678`)
+ * still fails closed. Keys are checked too.
+ * @param body - the masked request body.
+ * @param registry - bindings of the mask call.
+ * @param modelValues - the originals the name model bound.
+ * @throws {Refusal} 422 naming the JSON pointers, never the value.
+ */
+function refuseLeaks(body: Json, registry: RedactionRegistry, modelValues: ReadonlySet<string>): void {
+  // A value inside a JSON-text string (`arguments`) is written JSON-escaped.
+  const forms = (original: string): string[] => [original, JSON.stringify(original).slice(1, -1)]
+  const words = [...modelValues].filter(isSearchedValue).flatMap(forms)
+  const substrings = registry.originals().filter(original => !modelValues.has(original)).flatMap(forms)
+  const where: string[] = []
+  const check = (text: string, path: string): void => {
+    if (substrings.some(form => text.includes(form)) || words.some(form => containsStandingAlone(text, form))) where.push(path)
+  }
+  const walk = (value: unknown, path: string): void => {
+    if (typeof value === 'string') check(value, path)
+    else if (value !== null && typeof value === 'object') {
+      for (const [key, item] of Object.entries(value)) {
+        const at = `${path}/${key}`
+        check(key, at)
+        walk(item, at)
+      }
+    }
+  }
+  walk(body, '')
+  if (where.length > 0) throw new Refusal(422, `a detected value is still unmasked at ${where.slice(0, 5).join(', ')}; the request was not forwarded`)
 }
 
 /**
@@ -329,76 +414,80 @@ function sseTransformer(api: Api, registry: RedactionRegistry, stats: Stats, onR
  * Create the proxy server. The caller listens on it; see {@link listen}.
  * @param config - validated configuration.
  * @param log - receives one line per request; never an original value or a header.
+ * @param nameModel - the loaded name model when `config.nameModel` is set; the caller releases it.
  * @returns the HTTP server.
  */
-export function createProxyServer(config: ProxyConfig, log: (line: string) => void = line => console.error(line)): Server {
-  const detector = new RulesDetector(config.redaction)
-  const continuations = new Map<string, string[]>()
+export function createProxyServer(
+  config: ProxyConfig,
+  log: (line: string) => void = line => console.error(line),
+  nameModel?: NameModel,
+): Server {
+  const rules = new RulesDetector(config.redaction)
+  const withModel = nameModel === undefined ? undefined : new NameModelDetector(rules, nameModel)
+  const detectorFor = (userTexts: ReadonlySet<string>, stats: Stats): RedactionDetector =>
+    withModel?.forRequest(userTexts, () => { stats.nameModelFailed = true }) ?? rules
+  const continuations = new Map<string, RequestTexts>()
+
+  /**
+   * Mask every text of one request body, a continuation's stored texts first.
+   * @param body - the raw request body.
+   * @param stats - counters; receives masked counts and a tolerated model failure.
+   * @returns the masked body and what its response needs.
+   * @throws {Refusal} on a body that is not JSON, an unscreenable text, a mask conflict, a required model's failure, or a leak.
+   */
+  const maskBody = async (body: Buffer | undefined, stats: Stats): Promise<MaskedRequest> => {
+    let parsed: Json
+    try {
+      parsed = JSON.parse(body?.toString('utf8') ?? '') as Json
+    } catch {
+      throw new Refusal(400, 'request body is not JSON')
+    }
+    const slots: Slot[] = []
+    collectSlots(parsed, '', slots)
+    const texts = slots.map(slot => {
+      const text = (slot.parent as Record<string | number, string>)[slot.key] as string
+      if (config.screen === 'replace') return replaceUnscreenable(text)
+      const refusal = screenText(text) ?? (text.includes('⟦') || text.includes('⟧') ? { reason: 'placeholder delimiter' } : undefined)
+      if (refusal !== undefined) throw new Refusal(422, `request text at ${slot.path} holds a ${refusal.reason} and cannot be masked (screen: "refuse")`)
+      return text
+    })
+    const prior = typeof parsed.previous_response_id === 'string' ? continuations.get(parsed.previous_response_id) : undefined
+    const priorTexts = prior?.texts ?? []
+    const all = [...priorTexts, ...texts]
+    const userTexts = new Set([...prior?.userTexts ?? [], ...texts.filter((_, i) => isUserText(parsed, (slots[i] as Slot).path))])
+    let result
+    try {
+      result = await mask(detectorFor(userTexts, stats), all.map((text, seq) => ({ seq, path: '', text })), emptyRedactionIndex())
+    } catch (error) {
+      // Screening above leaves only a conflict a continuation's stored texts can raise.
+      if (error instanceof RedactionError) throw new Refusal(422, `request text cannot be masked: ${error.code}`)
+      if (error instanceof NameModelError) throw new Refusal(503, 'the name model failed and nameModel.required is set')
+      throw error
+    }
+    result.masked.slice(priorTexts.length).forEach((masked, i) => {
+      // oxlint-disable-next-line typescript/no-non-null-assertion -- one masked string per slot.
+      const slot = slots[i]!
+      ;(slot.parent as Record<string | number, string>)[slot.key] = masked
+    })
+    const modelValues = new Set<string>()
+    for (const span of result.applied) {
+      const category = span.id.slice(0, span.id.lastIndexOf('_'))
+      if (MODEL_CATEGORIES.has(category)) modelValues.add((all[span.seq] as string).slice(span.start, span.end))
+      if (span.seq >= priorTexts.length) stats.masked[category] = (stats.masked[category] ?? 0) + 1
+    }
+    refuseLeaks(parsed, result.registry, modelValues)
+    return { outgoing: JSON.stringify(parsed), registry: result.registry, texts: all, userTexts }
+  }
 
   const forward = async (req: IncomingMessage, res: ServerResponse, path: string, api: Api | undefined, body: Buffer | undefined): Promise<void> => {
     const started = Date.now()
-    const stats: Stats = { masked: {}, restored: 0, unknown: 0 }
+    const stats: Stats = { masked: {}, restored: 0, unknown: 0, nameModelFailed: false }
     const anthropic = api === 'messages' || (api === undefined && (req.headers['x-api-key'] !== undefined || req.headers['anthropic-version'] !== undefined))
     const target = (anthropic ? config.anthropicUpstream : config.openaiUpstream) + (req.url ?? '/')
 
-    let outgoing: string | undefined
-    let registry: RedactionRegistry | undefined
-    let texts: string[] = []
-    if (api !== undefined) {
-      let parsed: Json
-      try {
-        parsed = JSON.parse(body?.toString('utf8') ?? '') as Json
-      } catch {
-        throw new Refusal(400, 'request body is not JSON')
-      }
-      const slots: Slot[] = []
-      collectSlots(parsed, '', slots)
-      texts = slots.map(slot => {
-        const text = (slot.parent as Record<string | number, string>)[slot.key] as string
-        if (config.screen === 'replace') return replaceUnscreenable(text)
-        const refusal = screenText(text) ?? (text.includes('⟦') || text.includes('⟧') ? { reason: 'placeholder delimiter' } : undefined)
-        if (refusal !== undefined) throw new Refusal(422, `request text at ${slot.path} holds a ${refusal.reason} and cannot be masked (screen: "refuse")`)
-        return text
-      })
-      const prior = typeof parsed.previous_response_id === 'string' ? continuations.get(parsed.previous_response_id) ?? [] : []
-      const all = [...prior, ...texts]
-      let result
-      try {
-        result = await mask(detector, all.map((text, seq) => ({ seq, path: '', text })), emptyRedactionIndex())
-      } catch (error) {
-        // Screening above leaves only a conflict a continuation's stored texts can raise.
-        if (error instanceof RedactionError) throw new Refusal(422, `request text cannot be masked: ${error.code}`)
-        throw error
-      }
-      result.masked.slice(prior.length).forEach((masked, i) => {
-        // oxlint-disable-next-line typescript/no-non-null-assertion -- one masked string per slot.
-        const slot = slots[i]!
-        ;(slot.parent as Record<string | number, string>)[slot.key] = masked
-      })
-      for (const span of result.applied) {
-        if (span.seq < prior.length) continue
-        const category = span.id.slice(0, span.id.lastIndexOf('_'))
-        stats.masked[category] = (stats.masked[category] ?? 0) + 1
-      }
-      registry = result.registry
-      texts = all
-      outgoing = JSON.stringify(parsed)
-      const leaked = registry.originals().filter(original =>
-        outgoing!.includes(original) || outgoing!.includes(JSON.stringify(original).slice(1, -1)))
-      if (leaked.length > 0) {
-        const where = new Set<string>()
-        const walk = (value: unknown, path: string): void => {
-          if (typeof value === 'string') {
-            if (leaked.some(original => value.includes(original))) where.add(path)
-          } else if (value !== null && typeof value === 'object') {
-            for (const [key, item] of Object.entries(value)) walk(item, `${path}/${key}`)
-          }
-        }
-        walk(parsed, '')
-        throw new Refusal(422, `masked request still contains ${leaked.length} detected value(s) in fields the proxy does not rewrite: ${[...where].slice(0, 5).join(', ')}`)
-      }
-      if (config.debugMasked) log(`masked ${path}: ${outgoing}`)
-    }
+    const masked = api === undefined ? undefined : await maskBody(body, stats)
+    const outgoing = masked?.outgoing
+    if (outgoing !== undefined && config.debugMasked) log(`masked ${path}: ${outgoing}`)
 
     const headers: Record<string, string> = { 'accept-encoding': 'identity' }
     for (const [name, value] of Object.entries(req.headers)) {
@@ -421,14 +510,16 @@ export function createProxyServer(config: ProxyConfig, log: (line: string) => vo
       if (!HOP.has(name)) out[name] = value
     })
     const remember = (id: string): void => {
-      continuations.set(id, texts)
+      if (masked === undefined) return
+      continuations.set(id, { texts: masked.texts, userTexts: masked.userTexts })
       if (continuations.size > CONTINUATIONS_MAX) continuations.delete(continuations.keys().next().value as string)
     }
     const done = (): void => {
-      const masked = Object.entries(stats.masked).map(([category, n]) => `${category} ${n}`).join(', ')
-      log(`${req.method} ${path} -> ${upstream.status} masked ${Object.values(stats.masked).reduce((a, b) => a + b, 0)}${masked === '' ? '' : ` (${masked})`} restored ${stats.restored} unknown ${stats.unknown} ${Date.now() - started}ms`)
+      const counts = Object.entries(stats.masked).map(([category, n]) => `${category} ${n}`).join(', ')
+      log(`${req.method} ${path} -> ${upstream.status} masked ${Object.values(stats.masked).reduce((a, b) => a + b, 0)}${counts === '' ? '' : ` (${counts})`} restored ${stats.restored} unknown ${stats.unknown}${stats.nameModelFailed ? ' nameModel failed' : ''} ${Date.now() - started}ms`)
     }
 
+    const registry = masked?.registry
     if (registry === undefined || upstream.body === null) {
       res.writeHead(upstream.status, out)
       res.end(Buffer.from(await upstream.arrayBuffer()))
@@ -535,4 +626,18 @@ export function listen(server: Server, port: number): Promise<number> {
       resolve(typeof address === 'object' && address !== null ? address.port : port)
     })
   })
+}
+
+/**
+ * Stop the proxy: stop accepting connections, end open ones, and release the
+ * name model once its running inferences finish. Exiting with the session
+ * still open aborted with `recursive_mutex lock failed` in 2 of 29 measured
+ * edge-int8 runs; releasing it first aborted in none of 24.
+ * @param server - the proxy server.
+ * @param nameModel - the name model passed to {@link createProxyServer}, if any.
+ */
+export async function closeProxy(server: Server, nameModel?: NameModel): Promise<void> {
+  const closed = new Promise<void>(resolve => server.close(() => resolve()))
+  server.closeAllConnections()
+  await Promise.all([closed, nameModel?.release()])
 }

@@ -1,0 +1,6 @@
+# onnxruntime-node's postinstall only downloads CUDA providers on linux/x64; the CPU runtime the name model uses ships in the package.
+allowBuilds:
+  onnxruntime-node: false
+
+# The name model's runtime packages are optional peers; never install them unasked (about 350 MB).
+autoInstallPeers: false
