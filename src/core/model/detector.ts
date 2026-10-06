@@ -54,15 +54,16 @@ const SPACED_WORD_CHAR = /^(?![\p{Script=Han}\p{Script=Hiragana}\p{Script=Kataka
  * @param end - exclusive UTF-16 end.
  * @returns whether neither end cuts a word.
  */
-export function standsAlone(text: string, start: number, end: number): boolean {
+function standsAlone(text: string, start: number, end: number): boolean {
   const cuts = (inside: string, outside: string): boolean => SPACED_WORD_CHAR.test(inside) && SPACED_WORD_CHAR.test(outside)
   return !cuts(text.charAt(start), text.charAt(start - 1)) && !cuts(text.charAt(end - 1), text.charAt(end))
 }
 
 /**
- * Whether a value is searched for in the rest of the request, and so by the
- * proxy's leak scan. One character (`王`, or `燕` from a partly found `王晓燕`)
- * would mask that character in every word holding it.
+ * Whether a value is long enough to search for: a shorter model value is not
+ * propagated, and the proxy's leak scan checks no shorter value of any
+ * category. One character (`王`, or `燕` from a partly found `王晓燕`) would
+ * mask that character in every word holding it.
  * @param value - a bound original.
  * @returns whether it has at least two code points.
  */
