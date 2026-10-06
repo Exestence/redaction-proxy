@@ -18,7 +18,7 @@ import { readFile } from 'node:fs/promises'
 import { join } from 'node:path'
 
 /** Files the runtime reads from the model directory. */
-export const NAME_MODEL_FILES = ['model_int8.onnx', 'config.json', 'vocab.json', 'merges.txt', 'added_tokens.json'] as const
+const NAME_MODEL_FILES = ['model_int8.onnx', 'config.json', 'vocab.json', 'merges.txt', 'added_tokens.json'] as const
 
 /** Token ids of one text with their UTF-16 ranges; special tokens carry `[0, 0]`. */
 export interface TokenEncoding {

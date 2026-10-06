@@ -201,7 +201,7 @@ export function dropAllowlisted(spans: readonly ModelSpan[], text: string, allow
  * @param b - another range.
  * @returns whether they share a code unit.
  */
-export function rangesOverlap(a: TextRange, b: TextRange): boolean {
+function rangesOverlap(a: TextRange, b: TextRange): boolean {
   return a.start < b.end && b.start < a.end
 }
 

@@ -46,7 +46,7 @@ export type NameModelFailureHandler = (error: unknown) => void
  * @param value - the name as found.
  * @returns whether to search for it elsewhere.
  */
-export function isPropagatableName(value: string): boolean {
+function isPropagatableName(value: string): boolean {
   const singleAsciiWord = /^[\x21-\x7e]+$/.test(value)
   return !singleAsciiWord && isPropagatableValue(value)
 }
