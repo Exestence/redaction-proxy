@@ -159,6 +159,7 @@ describe('national telephone formats', () => {
     ['Tél : (0)1 23 45 67 89', 'Tél : ⟦PHONE_1⟧'],
     ['電話 02 2345 6789', '電話 ⟦PHONE_1⟧'],
     ['WhatsApp +55 11 91234-5678', 'WhatsApp ⟦PHONE_1⟧'],
+    ['tel 02.123.45.67', 'tel ⟦PHONE_1⟧'],
   ])('masks %j', async (text, expected) => {
     expect(await maskWith(phoneRules, text)).toBe(expected)
   })

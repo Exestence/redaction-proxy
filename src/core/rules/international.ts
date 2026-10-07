@@ -222,7 +222,7 @@ const PHONE_KEYWORD_WORDS = [
  * is linear.
  */
 const PHONE_KEYWORD_VALUE = '(?<!\\d[ ./-])(?!(?:19|20)\\d{2}[-/. ]\\d{1,2}[-/. ]\\d{1,2}(?!\\d))'
-  + '(?!\\d{1,3}(?:\\.\\d{1,3}){3}(?!\\d))'
+  + '(?![1-9]\\d{0,2}(?:\\.\\d{1,3}){3}(?![\\d.]))'
   + '(?:\\+\\d{1,3}[ .-]?)?(?:\\(\\d{1,5}\\)[ .-]?)?\\d{1,12}(?:[ ./-]\\d{1,8}){0,5}(?![ ./-]?\\d)'
 /** Fewest and most digits a number after a telephone keyword is accepted with. */
 const PHONE_KEYWORD_DIGITS_MIN = 8
