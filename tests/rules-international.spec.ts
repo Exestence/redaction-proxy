@@ -211,8 +211,8 @@ describe('international rule configuration', () => {
     expect(() => resolveRulesConfig({ rules: ['br-cpf'] } as never)).toThrow('unknown rule "br-cpf"')
   })
 
-  it('enables every rule but e164-phone in the proxy unless the config file names its own', () => {
-    expect(loadConfig(undefined, {}).redaction.rules).toEqual(RULE_NAMES.filter(rule => rule !== 'e164-phone'))
+  it('enables every rule, with the strict card and entropy rules in place of the default ones, unless the config file names its own', () => {
+    expect(loadConfig(undefined, {}).redaction.rules).toEqual(RULE_NAMES.filter(rule => rule !== 'card' && rule !== 'entropy'))
     const dir = mkdtempSync(join(tmpdir(), 'proxy-config-'))
     const path = join(dir, 'config.json')
     writeFileSync(path, JSON.stringify({ redaction: { rules: ['e164-phone'] } }))
@@ -229,6 +229,6 @@ describe('international rule configuration', () => {
       expect(await maskWith(proxyDefault, line)).toBe(line)
       expect(await maskWith(everyRule, line)).toBe(line)
     }
-    expect(await maskWith(everyRule, '+ call +1 415 555 0132')).toBe('+ call ⟦PHONE_1⟧')
+    expect(await maskWith(proxyDefault, '+ call +1 415 555 0132')).toBe('+ call ⟦PHONE_1⟧')
   })
 })
