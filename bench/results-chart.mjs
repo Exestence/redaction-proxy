@@ -25,7 +25,7 @@ const SET_LABELS = {
 const SPLIT_LABELS = { english: 'English prompts', allLanguages: 'all languages' }
 const SYSTEM_NOTES = {
   'rules, core default': "rules, core default: the core library's default rules (no international rules, no terms, no name model).",
-  'rules, proxy default': 'rules, proxy default: every built-in rule except e164-phone, as the proxy enables them (no terms, no name model).',
+  'rules, proxy default': 'rules, proxy default: every built-in rule, card-strict and entropy-strict in place of card and entropy (no terms, no name model).',
   'rules + name model (experimental)': 'rules + name model: the proxy-default rules plus the experimental name model, which reads prose lines only.',
 }
 const COLORS = ['#2f81f7', '#bf8700', '#a475f9']

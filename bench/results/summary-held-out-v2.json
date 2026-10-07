@@ -1,0 +1,2238 @@
+{
+  "set": "held-out-v2",
+  "source": "Frozen file `heldout-v2.jsonl`, SHA-256 `e3d45536c00e47bca808419f12dcf280ba43046eea7ca288826c0c6479c0bb04`",
+  "english": [
+    {
+      "name": "rules, core default",
+      "byCategory": {
+        "PERSON": {
+          "fullyMasked": 0,
+          "partlyMasked": 0,
+          "untouched": 1
+        },
+        "EMAIL": {
+          "fullyMasked": 0.7764705882352941,
+          "partlyMasked": 0.00392156862745098,
+          "untouched": 0.2196078431372549
+        },
+        "PHONE": {
+          "fullyMasked": 0.012422360248447204,
+          "partlyMasked": 0,
+          "untouched": 0.9875776397515528
+        },
+        "NATIONAL_ID": {
+          "fullyMasked": 0,
+          "partlyMasked": 0,
+          "untouched": 1
+        },
+        "CARD": {
+          "fullyMasked": 0.4406779661016949,
+          "partlyMasked": 0,
+          "untouched": 0.559322033898305
+        },
+        "IBAN": {
+          "fullyMasked": 0,
+          "partlyMasked": 0.09836065573770492,
+          "untouched": 0.9016393442622951
+        },
+        "SECRET": {
+          "fullyMasked": 0.7566137566137566,
+          "partlyMasked": 0.07407407407407407,
+          "untouched": 0.1693121693121693
+        },
+        "PATH": {
+          "fullyMasked": 0.045871559633027525,
+          "partlyMasked": 0.8348623853211009,
+          "untouched": 0.11926605504587157
+        },
+        "HOST": {
+          "fullyMasked": 0.5537190082644629,
+          "partlyMasked": 0,
+          "untouched": 0.4462809917355372
+        },
+        "ADDRESS": {
+          "fullyMasked": 0,
+          "partlyMasked": 0,
+          "untouched": 1
+        }
+      },
+      "macroAverage": {
+        "fullyMasked": 0.2585775239096683,
+        "partlyMasked": 0.1011218683760331,
+        "untouched": 0.6403006077142985
+      },
+      "bySpelling": {
+        "PERSON": {
+          "standard": {
+            "fullyMasked": 0,
+            "partlyMasked": 0,
+            "untouched": 1
+          },
+          "nonStandard": {
+            "fullyMasked": 0,
+            "partlyMasked": 0,
+            "untouched": 1
+          }
+        },
+        "EMAIL": {
+          "standard": {
+            "fullyMasked": 1,
+            "partlyMasked": 0,
+            "untouched": 0
+          },
+          "nonStandard": {
+            "fullyMasked": 0.6148648648648649,
+            "partlyMasked": 0.006756756756756757,
+            "untouched": 0.3783783783783784
+          }
+        },
+        "PHONE": {
+          "standard": {
+            "fullyMasked": 0.037037037037037035,
+            "partlyMasked": 0,
+            "untouched": 0.9629629629629629
+          },
+          "nonStandard": {
+            "fullyMasked": 0,
+            "partlyMasked": 0,
+            "untouched": 1
+          }
+        },
+        "NATIONAL_ID": {
+          "standard": {
+            "fullyMasked": 0,
+            "partlyMasked": 0,
+            "untouched": 1
+          },
+          "nonStandard": {
+            "fullyMasked": 0,
+            "partlyMasked": 0,
+            "untouched": 1
+          }
+        },
+        "CARD": {
+          "standard": {
+            "fullyMasked": 0.9473684210526315,
+            "partlyMasked": 0,
+            "untouched": 0.05263157894736842
+          },
+          "nonStandard": {
+            "fullyMasked": 0.2,
+            "partlyMasked": 0,
+            "untouched": 0.8
+          }
+        },
+        "IBAN": {
+          "standard": {
+            "fullyMasked": 0,
+            "partlyMasked": 0.06666666666666667,
+            "untouched": 0.9333333333333333
+          },
+          "nonStandard": {
+            "fullyMasked": 0,
+            "partlyMasked": 0.10869565217391304,
+            "untouched": 0.8913043478260869
+          }
+        },
+        "SECRET": {
+          "standard": {
+            "fullyMasked": 0.8163265306122449,
+            "partlyMasked": 0.08163265306122448,
+            "untouched": 0.10204081632653061
+          },
+          "nonStandard": {
+            "fullyMasked": 0.7357142857142858,
+            "partlyMasked": 0.07142857142857142,
+            "untouched": 0.19285714285714287
+          }
+        },
+        "PATH": {
+          "standard": {
+            "fullyMasked": 0.0847457627118644,
+            "partlyMasked": 0.8135593220338984,
+            "untouched": 0.1016949152542373
+          },
+          "nonStandard": {
+            "fullyMasked": 0,
+            "partlyMasked": 0.86,
+            "untouched": 0.14
+          }
+        },
+        "HOST": {
+          "standard": {
+            "fullyMasked": 0.946236559139785,
+            "partlyMasked": 0,
+            "untouched": 0.053763440860215055
+          },
+          "nonStandard": {
+            "fullyMasked": 0.3087248322147651,
+            "partlyMasked": 0,
+            "untouched": 0.6912751677852349
+          }
+        },
+        "ADDRESS": {
+          "standard": {
+            "fullyMasked": 0,
+            "partlyMasked": 0,
+            "untouched": 1
+          },
+          "nonStandard": {
+            "fullyMasked": 0,
+            "partlyMasked": 0,
+            "untouched": 1
+          }
+        }
+      },
+      "regionPrecision": 0.9433962264150944,
+      "hardNegativesMasked": {
+        "version": 0,
+        "request_id": 0.09090909090909091,
+        "checksum": 0.34782608695652173,
+        "placeholder": 0.32,
+        "epoch_timestamp": 0,
+        "publishable_key": 0,
+        "order_number": 0.03333333333333333,
+        "commit_hash": 0.08333333333333333,
+        "memory_address": 0,
+        "ipv4_doc": 0,
+        "public_host": 0.07692307692307693,
+        "user_agent": 0.058823529411764705,
+        "package_spec": 0,
+        "image_digest": 0,
+        "masked_value": 0,
+        "date_time": 0,
+        "key_fingerprint": 0,
+        "isbn": 0,
+        "bot_email": 0,
+        "iban_invalid": 0.09090909090909091,
+        "uuid": 0,
+        "scp_remote": 0.5714285714285714,
+        "id_invalid": 0,
+        "phone_shaped_number": 0,
+        "public_ip": 0,
+        "queue_id": 0,
+        "resource_id": 0,
+        "tracking_number": 0,
+        "integrity_hash": 0,
+        "service_account": 1,
+        "luhn_invalid": 0,
+        "common_word": 0,
+        "cloud_account_id": 0,
+        "phone_shaped_arithmetic": 0
+      },
+      "latencyMs": {
+        "p50": 0.09600000000136788,
+        "p95": 0.20745800000076997
+      }
+    },
+    {
+      "name": "rules, proxy default",
+      "byCategory": {
+        "PERSON": {
+          "fullyMasked": 0,
+          "partlyMasked": 0,
+          "untouched": 1
+        },
+        "EMAIL": {
+          "fullyMasked": 0.7764705882352941,
+          "partlyMasked": 0.00392156862745098,
+          "untouched": 0.2196078431372549
+        },
+        "PHONE": {
+          "fullyMasked": 0.5093167701863354,
+          "partlyMasked": 0.11801242236024845,
+          "untouched": 0.37267080745341613
+        },
+        "NATIONAL_ID": {
+          "fullyMasked": 0.5714285714285714,
+          "partlyMasked": 0,
+          "untouched": 0.42857142857142855
+        },
+        "CARD": {
+          "fullyMasked": 0.3050847457627119,
+          "partlyMasked": 0,
+          "untouched": 0.6949152542372882
+        },
+        "IBAN": {
+          "fullyMasked": 0.2459016393442623,
+          "partlyMasked": 0,
+          "untouched": 0.7540983606557377
+        },
+        "SECRET": {
+          "fullyMasked": 0.8465608465608465,
+          "partlyMasked": 0.0582010582010582,
+          "untouched": 0.09523809523809523
+        },
+        "PATH": {
+          "fullyMasked": 0.045871559633027525,
+          "partlyMasked": 0.8807339449541285,
+          "untouched": 0.07339449541284404
+        },
+        "HOST": {
+          "fullyMasked": 0.6528925619834711,
+          "partlyMasked": 0,
+          "untouched": 0.34710743801652894
+        },
+        "ADDRESS": {
+          "fullyMasked": 0,
+          "partlyMasked": 0,
+          "untouched": 1
+        }
+      },
+      "macroAverage": {
+        "fullyMasked": 0.39535272831345203,
+        "partlyMasked": 0.10608689941428862,
+        "untouched": 0.4985603722722594
+      },
+      "bySpelling": {
+        "PERSON": {
+          "standard": {
+            "fullyMasked": 0,
+            "partlyMasked": 0,
+            "untouched": 1
+          },
+          "nonStandard": {
+            "fullyMasked": 0,
+            "partlyMasked": 0,
+            "untouched": 1
+          }
+        },
+        "EMAIL": {
+          "standard": {
+            "fullyMasked": 1,
+            "partlyMasked": 0,
+            "untouched": 0
+          },
+          "nonStandard": {
+            "fullyMasked": 0.6148648648648649,
+            "partlyMasked": 0.006756756756756757,
+            "untouched": 0.3783783783783784
+          }
+        },
+        "PHONE": {
+          "standard": {
+            "fullyMasked": 0.7037037037037037,
+            "partlyMasked": 0,
+            "untouched": 0.2962962962962963
+          },
+          "nonStandard": {
+            "fullyMasked": 0.411214953271028,
+            "partlyMasked": 0.17757009345794392,
+            "untouched": 0.411214953271028
+          }
+        },
+        "NATIONAL_ID": {
+          "standard": {
+            "fullyMasked": 0.8947368421052632,
+            "partlyMasked": 0,
+            "untouched": 0.10526315789473684
+          },
+          "nonStandard": {
+            "fullyMasked": 0.30434782608695654,
+            "partlyMasked": 0,
+            "untouched": 0.6956521739130435
+          }
+        },
+        "CARD": {
+          "standard": {
+            "fullyMasked": 0.9473684210526315,
+            "partlyMasked": 0,
+            "untouched": 0.05263157894736842
+          },
+          "nonStandard": {
+            "fullyMasked": 0,
+            "partlyMasked": 0,
+            "untouched": 1
+          }
+        },
+        "IBAN": {
+          "standard": {
+            "fullyMasked": 1,
+            "partlyMasked": 0,
+            "untouched": 0
+          },
+          "nonStandard": {
+            "fullyMasked": 0,
+            "partlyMasked": 0,
+            "untouched": 1
+          }
+        },
+        "SECRET": {
+          "standard": {
+            "fullyMasked": 0.9591836734693877,
+            "partlyMasked": 0.04081632653061224,
+            "untouched": 0
+          },
+          "nonStandard": {
+            "fullyMasked": 0.8071428571428572,
+            "partlyMasked": 0.06428571428571428,
+            "untouched": 0.12857142857142856
+          }
+        },
+        "PATH": {
+          "standard": {
+            "fullyMasked": 0.0847457627118644,
+            "partlyMasked": 0.8135593220338984,
+            "untouched": 0.1016949152542373
+          },
+          "nonStandard": {
+            "fullyMasked": 0,
+            "partlyMasked": 0.96,
+            "untouched": 0.04
+          }
+        },
+        "HOST": {
+          "standard": {
+            "fullyMasked": 1,
+            "partlyMasked": 0,
+            "untouched": 0
+          },
+          "nonStandard": {
+            "fullyMasked": 0.436241610738255,
+            "partlyMasked": 0,
+            "untouched": 0.5637583892617449
+          }
+        },
+        "ADDRESS": {
+          "standard": {
+            "fullyMasked": 0,
+            "partlyMasked": 0,
+            "untouched": 1
+          },
+          "nonStandard": {
+            "fullyMasked": 0,
+            "partlyMasked": 0,
+            "untouched": 1
+          }
+        }
+      },
+      "regionPrecision": 0.9576587795765878,
+      "hardNegativesMasked": {
+        "version": 0,
+        "request_id": 0.09090909090909091,
+        "checksum": 0.34782608695652173,
+        "placeholder": 0.32,
+        "epoch_timestamp": 0,
+        "publishable_key": 0,
+        "order_number": 0,
+        "commit_hash": 0.08333333333333333,
+        "memory_address": 0,
+        "ipv4_doc": 0,
+        "public_host": 0.07692307692307693,
+        "user_agent": 0.058823529411764705,
+        "package_spec": 0,
+        "image_digest": 0,
+        "masked_value": 0,
+        "date_time": 0,
+        "key_fingerprint": 0,
+        "isbn": 0,
+        "bot_email": 0,
+        "iban_invalid": 0,
+        "uuid": 0,
+        "scp_remote": 0.5714285714285714,
+        "id_invalid": 0,
+        "phone_shaped_number": 0,
+        "public_ip": 0,
+        "queue_id": 0,
+        "resource_id": 0,
+        "tracking_number": 0,
+        "integrity_hash": 0,
+        "service_account": 1,
+        "luhn_invalid": 0,
+        "common_word": 0,
+        "cloud_account_id": 0,
+        "phone_shaped_arithmetic": 0
+      },
+      "latencyMs": {
+        "p50": 0.11929199999940465,
+        "p95": 0.2424170000012964
+      }
+    },
+    {
+      "name": "rules + name model (experimental)",
+      "byCategory": {
+        "PERSON": {
+          "fullyMasked": 0.4887640449438202,
+          "partlyMasked": 0.0898876404494382,
+          "untouched": 0.42134831460674155
+        },
+        "EMAIL": {
+          "fullyMasked": 0.7764705882352941,
+          "partlyMasked": 0.03137254901960784,
+          "untouched": 0.19215686274509805
+        },
+        "PHONE": {
+          "fullyMasked": 0.5093167701863354,
+          "partlyMasked": 0.13043478260869565,
+          "untouched": 0.36024844720496896
+        },
+        "NATIONAL_ID": {
+          "fullyMasked": 0.5714285714285714,
+          "partlyMasked": 0,
+          "untouched": 0.42857142857142855
+        },
+        "CARD": {
+          "fullyMasked": 0.3050847457627119,
+          "partlyMasked": 0,
+          "untouched": 0.6949152542372882
+        },
+        "IBAN": {
+          "fullyMasked": 0.2459016393442623,
+          "partlyMasked": 0,
+          "untouched": 0.7540983606557377
+        },
+        "SECRET": {
+          "fullyMasked": 0.8465608465608465,
+          "partlyMasked": 0.0582010582010582,
+          "untouched": 0.09523809523809523
+        },
+        "PATH": {
+          "fullyMasked": 0.045871559633027525,
+          "partlyMasked": 0.8807339449541285,
+          "untouched": 0.07339449541284404
+        },
+        "HOST": {
+          "fullyMasked": 0.6528925619834711,
+          "partlyMasked": 0,
+          "untouched": 0.34710743801652894
+        },
+        "ADDRESS": {
+          "fullyMasked": 0.03773584905660377,
+          "partlyMasked": 0.7735849056603774,
+          "untouched": 0.18867924528301888
+        }
+      },
+      "macroAverage": {
+        "fullyMasked": 0.4480027177134945,
+        "partlyMasked": 0.19642148808933058,
+        "untouched": 0.355575794197175
+      },
+      "bySpelling": {
+        "PERSON": {
+          "standard": {
+            "fullyMasked": 0.6036585365853658,
+            "partlyMasked": 0.042682926829268296,
+            "untouched": 0.35365853658536583
+          },
+          "nonStandard": {
+            "fullyMasked": 0.390625,
+            "partlyMasked": 0.13020833333333334,
+            "untouched": 0.4791666666666667
+          }
+        },
+        "EMAIL": {
+          "standard": {
+            "fullyMasked": 1,
+            "partlyMasked": 0,
+            "untouched": 0
+          },
+          "nonStandard": {
+            "fullyMasked": 0.6148648648648649,
+            "partlyMasked": 0.05405405405405406,
+            "untouched": 0.3310810810810811
+          }
+        },
+        "PHONE": {
+          "standard": {
+            "fullyMasked": 0.7037037037037037,
+            "partlyMasked": 0,
+            "untouched": 0.2962962962962963
+          },
+          "nonStandard": {
+            "fullyMasked": 0.411214953271028,
+            "partlyMasked": 0.19626168224299065,
+            "untouched": 0.3925233644859813
+          }
+        },
+        "NATIONAL_ID": {
+          "standard": {
+            "fullyMasked": 0.8947368421052632,
+            "partlyMasked": 0,
+            "untouched": 0.10526315789473684
+          },
+          "nonStandard": {
+            "fullyMasked": 0.30434782608695654,
+            "partlyMasked": 0,
+            "untouched": 0.6956521739130435
+          }
+        },
+        "CARD": {
+          "standard": {
+            "fullyMasked": 0.9473684210526315,
+            "partlyMasked": 0,
+            "untouched": 0.05263157894736842
+          },
+          "nonStandard": {
+            "fullyMasked": 0,
+            "partlyMasked": 0,
+            "untouched": 1
+          }
+        },
+        "IBAN": {
+          "standard": {
+            "fullyMasked": 1,
+            "partlyMasked": 0,
+            "untouched": 0
+          },
+          "nonStandard": {
+            "fullyMasked": 0,
+            "partlyMasked": 0,
+            "untouched": 1
+          }
+        },
+        "SECRET": {
+          "standard": {
+            "fullyMasked": 0.9591836734693877,
+            "partlyMasked": 0.04081632653061224,
+            "untouched": 0
+          },
+          "nonStandard": {
+            "fullyMasked": 0.8071428571428572,
+            "partlyMasked": 0.06428571428571428,
+            "untouched": 0.12857142857142856
+          }
+        },
+        "PATH": {
+          "standard": {
+            "fullyMasked": 0.0847457627118644,
+            "partlyMasked": 0.8135593220338984,
+            "untouched": 0.1016949152542373
+          },
+          "nonStandard": {
+            "fullyMasked": 0,
+            "partlyMasked": 0.96,
+            "untouched": 0.04
+          }
+        },
+        "HOST": {
+          "standard": {
+            "fullyMasked": 1,
+            "partlyMasked": 0,
+            "untouched": 0
+          },
+          "nonStandard": {
+            "fullyMasked": 0.436241610738255,
+            "partlyMasked": 0,
+            "untouched": 0.5637583892617449
+          }
+        },
+        "ADDRESS": {
+          "standard": {
+            "fullyMasked": 0,
+            "partlyMasked": 0.6666666666666666,
+            "untouched": 0.3333333333333333
+          },
+          "nonStandard": {
+            "fullyMasked": 0.05263157894736842,
+            "partlyMasked": 0.8157894736842105,
+            "untouched": 0.13157894736842105
+          }
+        }
+      },
+      "regionPrecision": 0.9483454398708636,
+      "hardNegativesMasked": {
+        "version": 0,
+        "request_id": 0.09090909090909091,
+        "checksum": 0.34782608695652173,
+        "placeholder": 0.32,
+        "epoch_timestamp": 0,
+        "publishable_key": 0,
+        "order_number": 0,
+        "commit_hash": 0.08333333333333333,
+        "memory_address": 0,
+        "ipv4_doc": 0,
+        "public_host": 0.07692307692307693,
+        "user_agent": 0.11764705882352941,
+        "package_spec": 0,
+        "image_digest": 0,
+        "masked_value": 0,
+        "date_time": 0,
+        "key_fingerprint": 0,
+        "isbn": 0,
+        "bot_email": 0,
+        "iban_invalid": 0,
+        "uuid": 0,
+        "scp_remote": 0.5714285714285714,
+        "id_invalid": 0,
+        "phone_shaped_number": 0,
+        "public_ip": 0,
+        "queue_id": 0,
+        "resource_id": 0,
+        "tracking_number": 0,
+        "integrity_hash": 0,
+        "service_account": 1,
+        "luhn_invalid": 0,
+        "common_word": 0,
+        "cloud_account_id": 0,
+        "phone_shaped_arithmetic": 0
+      },
+      "latencyMs": {
+        "p50": 10.788959000001341,
+        "p95": 30.84666699999798
+      }
+    },
+    {
+      "name": "Presidio 2.2.364 (en_core_web_lg, cutoff 0)",
+      "byCategory": {
+        "PERSON": {
+          "fullyMasked": 0.4353932584269663,
+          "partlyMasked": 0.11797752808988764,
+          "untouched": 0.44662921348314605
+        },
+        "EMAIL": {
+          "fullyMasked": 0.4470588235294118,
+          "partlyMasked": 0.19215686274509805,
+          "untouched": 0.3607843137254902
+        },
+        "PHONE": {
+          "fullyMasked": 0.84472049689441,
+          "partlyMasked": 0.11180124223602485,
+          "untouched": 0.043478260869565216
+        },
+        "NATIONAL_ID": {
+          "fullyMasked": 0.8095238095238095,
+          "partlyMasked": 0.09523809523809523,
+          "untouched": 0.09523809523809523
+        },
+        "CARD": {
+          "fullyMasked": 0.3898305084745763,
+          "partlyMasked": 0.4745762711864407,
+          "untouched": 0.13559322033898305
+        },
+        "IBAN": {
+          "fullyMasked": 0.7704918032786885,
+          "partlyMasked": 0.16393442622950818,
+          "untouched": 0.06557377049180328
+        },
+        "SECRET": {
+          "fullyMasked": 0.07407407407407407,
+          "partlyMasked": 0.042328042328042326,
+          "untouched": 0.8835978835978836
+        },
+        "PATH": {
+          "fullyMasked": 0.009174311926605505,
+          "partlyMasked": 0.3486238532110092,
+          "untouched": 0.6422018348623854
+        },
+        "HOST": {
+          "fullyMasked": 0.256198347107438,
+          "partlyMasked": 0.5661157024793388,
+          "untouched": 0.17768595041322313
+        },
+        "ADDRESS": {
+          "fullyMasked": 0,
+          "partlyMasked": 0.9245283018867925,
+          "untouched": 0.07547169811320754
+        }
+      },
+      "macroAverage": {
+        "fullyMasked": 0.403646543323598,
+        "partlyMasked": 0.3037280325630237,
+        "untouched": 0.2926254241133783
+      },
+      "bySpelling": {
+        "PERSON": {
+          "standard": {
+            "fullyMasked": 0.4268292682926829,
+            "partlyMasked": 0.042682926829268296,
+            "untouched": 0.5304878048780488
+          },
+          "nonStandard": {
+            "fullyMasked": 0.4427083333333333,
+            "partlyMasked": 0.18229166666666666,
+            "untouched": 0.375
+          }
+        },
+        "EMAIL": {
+          "standard": {
+            "fullyMasked": 0.5794392523364486,
+            "partlyMasked": 0.037383177570093455,
+            "untouched": 0.38317757009345793
+          },
+          "nonStandard": {
+            "fullyMasked": 0.35135135135135137,
+            "partlyMasked": 0.30405405405405406,
+            "untouched": 0.34459459459459457
+          }
+        },
+        "PHONE": {
+          "standard": {
+            "fullyMasked": 0.8333333333333334,
+            "partlyMasked": 0.09259259259259259,
+            "untouched": 0.07407407407407407
+          },
+          "nonStandard": {
+            "fullyMasked": 0.8504672897196262,
+            "partlyMasked": 0.12149532710280374,
+            "untouched": 0.028037383177570093
+          }
+        },
+        "NATIONAL_ID": {
+          "standard": {
+            "fullyMasked": 0.8947368421052632,
+            "partlyMasked": 0.10526315789473684,
+            "untouched": 0
+          },
+          "nonStandard": {
+            "fullyMasked": 0.7391304347826086,
+            "partlyMasked": 0.08695652173913043,
+            "untouched": 0.17391304347826086
+          }
+        },
+        "CARD": {
+          "standard": {
+            "fullyMasked": 0.8947368421052632,
+            "partlyMasked": 0,
+            "untouched": 0.10526315789473684
+          },
+          "nonStandard": {
+            "fullyMasked": 0.15,
+            "partlyMasked": 0.7,
+            "untouched": 0.15
+          }
+        },
+        "IBAN": {
+          "standard": {
+            "fullyMasked": 1,
+            "partlyMasked": 0,
+            "untouched": 0
+          },
+          "nonStandard": {
+            "fullyMasked": 0.6956521739130435,
+            "partlyMasked": 0.21739130434782608,
+            "untouched": 0.08695652173913043
+          }
+        },
+        "SECRET": {
+          "standard": {
+            "fullyMasked": 0.12244897959183673,
+            "partlyMasked": 0.02040816326530612,
+            "untouched": 0.8571428571428571
+          },
+          "nonStandard": {
+            "fullyMasked": 0.05714285714285714,
+            "partlyMasked": 0.05,
+            "untouched": 0.8928571428571429
+          }
+        },
+        "PATH": {
+          "standard": {
+            "fullyMasked": 0,
+            "partlyMasked": 0.3050847457627119,
+            "untouched": 0.6949152542372882
+          },
+          "nonStandard": {
+            "fullyMasked": 0.02,
+            "partlyMasked": 0.4,
+            "untouched": 0.58
+          }
+        },
+        "HOST": {
+          "standard": {
+            "fullyMasked": 0.4731182795698925,
+            "partlyMasked": 0.43010752688172044,
+            "untouched": 0.0967741935483871
+          },
+          "nonStandard": {
+            "fullyMasked": 0.12080536912751678,
+            "partlyMasked": 0.6510067114093959,
+            "untouched": 0.22818791946308725
+          }
+        },
+        "ADDRESS": {
+          "standard": {
+            "fullyMasked": 0,
+            "partlyMasked": 1,
+            "untouched": 0
+          },
+          "nonStandard": {
+            "fullyMasked": 0,
+            "partlyMasked": 0.8947368421052632,
+            "untouched": 0.10526315789473684
+          }
+        }
+      },
+      "regionPrecision": 0.648989898989899,
+      "hardNegativesMasked": {
+        "version": 0.46153846153846156,
+        "request_id": 0,
+        "checksum": 0.08695652173913043,
+        "placeholder": 0.12,
+        "epoch_timestamp": 1,
+        "publishable_key": 0,
+        "order_number": 0.5666666666666667,
+        "commit_hash": 0.10416666666666667,
+        "memory_address": 0,
+        "ipv4_doc": 1,
+        "public_host": 1,
+        "user_agent": 0.23529411764705882,
+        "package_spec": 0,
+        "image_digest": 0,
+        "masked_value": 0.37037037037037035,
+        "date_time": 1,
+        "key_fingerprint": 0,
+        "isbn": 0.6,
+        "bot_email": 1,
+        "iban_invalid": 0.45454545454545453,
+        "uuid": 0.35294117647058826,
+        "scp_remote": 1,
+        "id_invalid": 0.7777777777777778,
+        "phone_shaped_number": 1,
+        "public_ip": 1,
+        "queue_id": 0,
+        "resource_id": 0.06666666666666667,
+        "tracking_number": 0.4,
+        "integrity_hash": 0,
+        "service_account": 1,
+        "luhn_invalid": 0.6666666666666666,
+        "common_word": 0,
+        "cloud_account_id": 1,
+        "phone_shaped_arithmetic": 0
+      },
+      "latencyMs": {
+        "p50": 11.365749989636242,
+        "p95": 18.733792006969452
+      }
+    },
+    {
+      "name": "Presidio 2.2.364 (en_core_web_lg, cutoff 0.4)",
+      "byCategory": {
+        "PERSON": {
+          "fullyMasked": 0.4353932584269663,
+          "partlyMasked": 0.11797752808988764,
+          "untouched": 0.44662921348314605
+        },
+        "EMAIL": {
+          "fullyMasked": 0.4470588235294118,
+          "partlyMasked": 0.19215686274509805,
+          "untouched": 0.3607843137254902
+        },
+        "PHONE": {
+          "fullyMasked": 0.84472049689441,
+          "partlyMasked": 0.08695652173913043,
+          "untouched": 0.06832298136645963
+        },
+        "NATIONAL_ID": {
+          "fullyMasked": 0.5714285714285714,
+          "partlyMasked": 0.023809523809523808,
+          "untouched": 0.40476190476190477
+        },
+        "CARD": {
+          "fullyMasked": 0.3728813559322034,
+          "partlyMasked": 0.288135593220339,
+          "untouched": 0.3389830508474576
+        },
+        "IBAN": {
+          "fullyMasked": 0.7704918032786885,
+          "partlyMasked": 0.16393442622950818,
+          "untouched": 0.06557377049180328
+        },
+        "SECRET": {
+          "fullyMasked": 0.07407407407407407,
+          "partlyMasked": 0.037037037037037035,
+          "untouched": 0.8888888888888888
+        },
+        "PATH": {
+          "fullyMasked": 0.009174311926605505,
+          "partlyMasked": 0.3211009174311927,
+          "untouched": 0.6697247706422018
+        },
+        "HOST": {
+          "fullyMasked": 0.256198347107438,
+          "partlyMasked": 0.5619834710743802,
+          "untouched": 0.18181818181818182
+        },
+        "ADDRESS": {
+          "fullyMasked": 0,
+          "partlyMasked": 0.9245283018867925,
+          "untouched": 0.07547169811320754
+        }
+      },
+      "macroAverage": {
+        "fullyMasked": 0.37814210425983685,
+        "partlyMasked": 0.27176201832628893,
+        "untouched": 0.35009587741387416
+      },
+      "bySpelling": {
+        "PERSON": {
+          "standard": {
+            "fullyMasked": 0.4268292682926829,
+            "partlyMasked": 0.042682926829268296,
+            "untouched": 0.5304878048780488
+          },
+          "nonStandard": {
+            "fullyMasked": 0.4427083333333333,
+            "partlyMasked": 0.18229166666666666,
+            "untouched": 0.375
+          }
+        },
+        "EMAIL": {
+          "standard": {
+            "fullyMasked": 0.5794392523364486,
+            "partlyMasked": 0.037383177570093455,
+            "untouched": 0.38317757009345793
+          },
+          "nonStandard": {
+            "fullyMasked": 0.35135135135135137,
+            "partlyMasked": 0.30405405405405406,
+            "untouched": 0.34459459459459457
+          }
+        },
+        "PHONE": {
+          "standard": {
+            "fullyMasked": 0.8333333333333334,
+            "partlyMasked": 0.05555555555555555,
+            "untouched": 0.1111111111111111
+          },
+          "nonStandard": {
+            "fullyMasked": 0.8504672897196262,
+            "partlyMasked": 0.102803738317757,
+            "untouched": 0.04672897196261682
+          }
+        },
+        "NATIONAL_ID": {
+          "standard": {
+            "fullyMasked": 0.6842105263157895,
+            "partlyMasked": 0.05263157894736842,
+            "untouched": 0.2631578947368421
+          },
+          "nonStandard": {
+            "fullyMasked": 0.4782608695652174,
+            "partlyMasked": 0,
+            "untouched": 0.5217391304347826
+          }
+        },
+        "CARD": {
+          "standard": {
+            "fullyMasked": 0.8421052631578947,
+            "partlyMasked": 0,
+            "untouched": 0.15789473684210525
+          },
+          "nonStandard": {
+            "fullyMasked": 0.15,
+            "partlyMasked": 0.425,
+            "untouched": 0.425
+          }
+        },
+        "IBAN": {
+          "standard": {
+            "fullyMasked": 1,
+            "partlyMasked": 0,
+            "untouched": 0
+          },
+          "nonStandard": {
+            "fullyMasked": 0.6956521739130435,
+            "partlyMasked": 0.21739130434782608,
+            "untouched": 0.08695652173913043
+          }
+        },
+        "SECRET": {
+          "standard": {
+            "fullyMasked": 0.12244897959183673,
+            "partlyMasked": 0,
+            "untouched": 0.8775510204081632
+          },
+          "nonStandard": {
+            "fullyMasked": 0.05714285714285714,
+            "partlyMasked": 0.05,
+            "untouched": 0.8928571428571429
+          }
+        },
+        "PATH": {
+          "standard": {
+            "fullyMasked": 0,
+            "partlyMasked": 0.3050847457627119,
+            "untouched": 0.6949152542372882
+          },
+          "nonStandard": {
+            "fullyMasked": 0.02,
+            "partlyMasked": 0.34,
+            "untouched": 0.64
+          }
+        },
+        "HOST": {
+          "standard": {
+            "fullyMasked": 0.4731182795698925,
+            "partlyMasked": 0.41935483870967744,
+            "untouched": 0.10752688172043011
+          },
+          "nonStandard": {
+            "fullyMasked": 0.12080536912751678,
+            "partlyMasked": 0.6510067114093959,
+            "untouched": 0.22818791946308725
+          }
+        },
+        "ADDRESS": {
+          "standard": {
+            "fullyMasked": 0,
+            "partlyMasked": 1,
+            "untouched": 0
+          },
+          "nonStandard": {
+            "fullyMasked": 0,
+            "partlyMasked": 0.8947368421052632,
+            "untouched": 0.10526315789473684
+          }
+        }
+      },
+      "regionPrecision": 0.6801393728222996,
+      "hardNegativesMasked": {
+        "version": 0.3076923076923077,
+        "request_id": 0,
+        "checksum": 0.08695652173913043,
+        "placeholder": 0.08,
+        "epoch_timestamp": 0.75,
+        "publishable_key": 0,
+        "order_number": 0.2,
+        "commit_hash": 0.10416666666666667,
+        "memory_address": 0,
+        "ipv4_doc": 1,
+        "public_host": 1,
+        "user_agent": 0.23529411764705882,
+        "package_spec": 0,
+        "image_digest": 0,
+        "masked_value": 0.37037037037037035,
+        "date_time": 1,
+        "key_fingerprint": 0,
+        "isbn": 0.4,
+        "bot_email": 1,
+        "iban_invalid": 0.45454545454545453,
+        "uuid": 0.058823529411764705,
+        "scp_remote": 1,
+        "id_invalid": 0.2222222222222222,
+        "phone_shaped_number": 1,
+        "public_ip": 1,
+        "queue_id": 0,
+        "resource_id": 0.06666666666666667,
+        "tracking_number": 0.4,
+        "integrity_hash": 0,
+        "service_account": 1,
+        "luhn_invalid": 0.3333333333333333,
+        "common_word": 0,
+        "cloud_account_id": 1,
+        "phone_shaped_arithmetic": 0
+      },
+      "latencyMs": {
+        "p50": 11.216499959118664,
+        "p95": 18.804249993991107
+      }
+    }
+  ],
+  "allLanguages": [
+    {
+      "name": "rules, core default",
+      "byCategory": {
+        "PERSON": {
+          "fullyMasked": 0,
+          "partlyMasked": 0,
+          "untouched": 1
+        },
+        "EMAIL": {
+          "fullyMasked": 0.7860548271752086,
+          "partlyMasked": 0.004767580452920143,
+          "untouched": 0.20917759237187128
+        },
+        "PHONE": {
+          "fullyMasked": 0.07884615384615384,
+          "partlyMasked": 0.02403846153846154,
+          "untouched": 0.8971153846153846
+        },
+        "NATIONAL_ID": {
+          "fullyMasked": 0.0975609756097561,
+          "partlyMasked": 0.027874564459930314,
+          "untouched": 0.8745644599303136
+        },
+        "CARD": {
+          "fullyMasked": 0.43832020997375326,
+          "partlyMasked": 0.0026246719160104987,
+          "untouched": 0.5590551181102362
+        },
+        "IBAN": {
+          "fullyMasked": 0,
+          "partlyMasked": 0.05241090146750524,
+          "untouched": 0.9475890985324947
+        },
+        "SECRET": {
+          "fullyMasked": 0.728492501973165,
+          "partlyMasked": 0.0734017363851618,
+          "untouched": 0.19810576164167323
+        },
+        "PATH": {
+          "fullyMasked": 0.05825242718446602,
+          "partlyMasked": 0.840499306518724,
+          "untouched": 0.10124826629680998
+        },
+        "HOST": {
+          "fullyMasked": 0.540621266427718,
+          "partlyMasked": 0,
+          "untouched": 0.459378733572282
+        },
+        "ADDRESS": {
+          "fullyMasked": 0,
+          "partlyMasked": 0,
+          "untouched": 1
+        }
+      },
+      "macroAverage": {
+        "fullyMasked": 0.272814836219022,
+        "partlyMasked": 0.10256172227387135,
+        "untouched": 0.6246234415071066
+      },
+      "bySpelling": {
+        "PERSON": {
+          "standard": {
+            "fullyMasked": 0,
+            "partlyMasked": 0,
+            "untouched": 1
+          },
+          "nonStandard": {
+            "fullyMasked": 0,
+            "partlyMasked": 0,
+            "untouched": 1
+          }
+        },
+        "EMAIL": {
+          "standard": {
+            "fullyMasked": 1,
+            "partlyMasked": 0,
+            "untouched": 0
+          },
+          "nonStandard": {
+            "fullyMasked": 0.6438492063492064,
+            "partlyMasked": 0.007936507936507936,
+            "untouched": 0.3482142857142857
+          }
+        },
+        "PHONE": {
+          "standard": {
+            "fullyMasked": 0.17563739376770537,
+            "partlyMasked": 0,
+            "untouched": 0.8243626062322946
+          },
+          "nonStandard": {
+            "fullyMasked": 0.02911208151382824,
+            "partlyMasked": 0.036390101892285295,
+            "untouched": 0.9344978165938864
+          }
+        },
+        "NATIONAL_ID": {
+          "standard": {
+            "fullyMasked": 0.11428571428571428,
+            "partlyMasked": 0.009523809523809525,
+            "untouched": 0.8761904761904762
+          },
+          "nonStandard": {
+            "fullyMasked": 0.08791208791208792,
+            "partlyMasked": 0.038461538461538464,
+            "untouched": 0.8736263736263736
+          }
+        },
+        "CARD": {
+          "standard": {
+            "fullyMasked": 0.9181818181818182,
+            "partlyMasked": 0.00909090909090909,
+            "untouched": 0.07272727272727272
+          },
+          "nonStandard": {
+            "fullyMasked": 0.24354243542435425,
+            "partlyMasked": 0,
+            "untouched": 0.7564575645756457
+          }
+        },
+        "IBAN": {
+          "standard": {
+            "fullyMasked": 0,
+            "partlyMasked": 0.043795620437956206,
+            "untouched": 0.9562043795620438
+          },
+          "nonStandard": {
+            "fullyMasked": 0,
+            "partlyMasked": 0.05588235294117647,
+            "untouched": 0.9441176470588235
+          }
+        },
+        "SECRET": {
+          "standard": {
+            "fullyMasked": 0.7720797720797721,
+            "partlyMasked": 0.08547008547008547,
+            "untouched": 0.14245014245014245
+          },
+          "nonStandard": {
+            "fullyMasked": 0.7117903930131004,
+            "partlyMasked": 0.06877729257641921,
+            "untouched": 0.21943231441048036
+          }
+        },
+        "PATH": {
+          "standard": {
+            "fullyMasked": 0.10071942446043165,
+            "partlyMasked": 0.8465227817745803,
+            "untouched": 0.05275779376498801
+          },
+          "nonStandard": {
+            "fullyMasked": 0,
+            "partlyMasked": 0.8322368421052632,
+            "untouched": 0.16776315789473684
+          }
+        },
+        "HOST": {
+          "standard": {
+            "fullyMasked": 0.9040697674418605,
+            "partlyMasked": 0,
+            "untouched": 0.09593023255813954
+          },
+          "nonStandard": {
+            "fullyMasked": 0.2870182555780933,
+            "partlyMasked": 0,
+            "untouched": 0.7129817444219066
+          }
+        },
+        "ADDRESS": {
+          "standard": {
+            "fullyMasked": 0,
+            "partlyMasked": 0,
+            "untouched": 1
+          },
+          "nonStandard": {
+            "fullyMasked": 0,
+            "partlyMasked": 0,
+            "untouched": 1
+          }
+        }
+      },
+      "regionPrecision": 0.9369185386884502,
+      "hardNegativesMasked": {
+        "date_time": 0,
+        "package_spec": 0,
+        "version": 0,
+        "request_id": 0.0989010989010989,
+        "masked_value": 0,
+        "order_number": 0.03260869565217391,
+        "commit_hash": 0.08902077151335312,
+        "uuid": 0,
+        "key_fingerprint": 0,
+        "ipv4_doc": 0,
+        "luhn_invalid": 0.05714285714285714,
+        "public_host": 0.06832298136645963,
+        "placeholder": 0.30177514792899407,
+        "checksum": 0.49032258064516127,
+        "tracking_number": 0.018867924528301886,
+        "epoch_timestamp": 0,
+        "user_agent": 0.049586776859504134,
+        "isbn": 0,
+        "publishable_key": 0,
+        "resource_id": 0,
+        "service_account": 1,
+        "queue_id": 0,
+        "bot_email": 0,
+        "iban_invalid": 0.10465116279069768,
+        "memory_address": 0,
+        "id_invalid": 0,
+        "phone_shaped_number": 0,
+        "scp_remote": 0.7058823529411765,
+        "image_digest": 0,
+        "phone_shaped_arithmetic": 0,
+        "public_ip": 0,
+        "integrity_hash": 0,
+        "cloud_account_id": 0,
+        "common_word": 0
+      },
+      "latencyMs": {
+        "p50": 0.0915419999982987,
+        "p95": 0.24770899999930407
+      }
+    },
+    {
+      "name": "rules, proxy default",
+      "byCategory": {
+        "PERSON": {
+          "fullyMasked": 0,
+          "partlyMasked": 0,
+          "untouched": 1
+        },
+        "EMAIL": {
+          "fullyMasked": 0.7860548271752086,
+          "partlyMasked": 0.004767580452920143,
+          "untouched": 0.20917759237187128
+        },
+        "PHONE": {
+          "fullyMasked": 0.5144230769230769,
+          "partlyMasked": 0.11442307692307692,
+          "untouched": 0.37115384615384617
+        },
+        "NATIONAL_ID": {
+          "fullyMasked": 0.3623693379790941,
+          "partlyMasked": 0.003484320557491289,
+          "untouched": 0.6341463414634146
+        },
+        "CARD": {
+          "fullyMasked": 0.2782152230971129,
+          "partlyMasked": 0.0026246719160104987,
+          "untouched": 0.7191601049868767
+        },
+        "IBAN": {
+          "fullyMasked": 0.2893081761006289,
+          "partlyMasked": 0.0020964360587002098,
+          "untouched": 0.7085953878406709
+        },
+        "SECRET": {
+          "fullyMasked": 0.8326756116811366,
+          "partlyMasked": 0.05998421468034728,
+          "untouched": 0.10734017363851618
+        },
+        "PATH": {
+          "fullyMasked": 0.05825242718446602,
+          "partlyMasked": 0.8862690707350902,
+          "untouched": 0.05547850208044383
+        },
+        "HOST": {
+          "fullyMasked": 0.6714456391875747,
+          "partlyMasked": 0,
+          "untouched": 0.32855436081242534
+        },
+        "ADDRESS": {
+          "fullyMasked": 0,
+          "partlyMasked": 0,
+          "untouched": 1
+        }
+      },
+      "macroAverage": {
+        "fullyMasked": 0.3792744319328299,
+        "partlyMasked": 0.10736493713236366,
+        "untouched": 0.5133606309348064
+      },
+      "bySpelling": {
+        "PERSON": {
+          "standard": {
+            "fullyMasked": 0,
+            "partlyMasked": 0,
+            "untouched": 1
+          },
+          "nonStandard": {
+            "fullyMasked": 0,
+            "partlyMasked": 0,
+            "untouched": 1
+          }
+        },
+        "EMAIL": {
+          "standard": {
+            "fullyMasked": 1,
+            "partlyMasked": 0,
+            "untouched": 0
+          },
+          "nonStandard": {
+            "fullyMasked": 0.6438492063492064,
+            "partlyMasked": 0.007936507936507936,
+            "untouched": 0.3482142857142857
+          }
+        },
+        "PHONE": {
+          "standard": {
+            "fullyMasked": 0.7563739376770539,
+            "partlyMasked": 0,
+            "untouched": 0.24362606232294617
+          },
+          "nonStandard": {
+            "fullyMasked": 0.3901018922852984,
+            "partlyMasked": 0.17321688500727803,
+            "untouched": 0.4366812227074236
+          }
+        },
+        "NATIONAL_ID": {
+          "standard": {
+            "fullyMasked": 0.7238095238095238,
+            "partlyMasked": 0,
+            "untouched": 0.2761904761904762
+          },
+          "nonStandard": {
+            "fullyMasked": 0.15384615384615385,
+            "partlyMasked": 0.005494505494505495,
+            "untouched": 0.8406593406593407
+          }
+        },
+        "CARD": {
+          "standard": {
+            "fullyMasked": 0.9181818181818182,
+            "partlyMasked": 0.00909090909090909,
+            "untouched": 0.07272727272727272
+          },
+          "nonStandard": {
+            "fullyMasked": 0.01845018450184502,
+            "partlyMasked": 0,
+            "untouched": 0.981549815498155
+          }
+        },
+        "IBAN": {
+          "standard": {
+            "fullyMasked": 1,
+            "partlyMasked": 0,
+            "untouched": 0
+          },
+          "nonStandard": {
+            "fullyMasked": 0.0029411764705882353,
+            "partlyMasked": 0.0029411764705882353,
+            "untouched": 0.9941176470588236
+          }
+        },
+        "SECRET": {
+          "standard": {
+            "fullyMasked": 0.9515669515669516,
+            "partlyMasked": 0.039886039886039885,
+            "untouched": 0.008547008547008548
+          },
+          "nonStandard": {
+            "fullyMasked": 0.787117903930131,
+            "partlyMasked": 0.06768558951965066,
+            "untouched": 0.14519650655021835
+          }
+        },
+        "PATH": {
+          "standard": {
+            "fullyMasked": 0.10071942446043165,
+            "partlyMasked": 0.8465227817745803,
+            "untouched": 0.05275779376498801
+          },
+          "nonStandard": {
+            "fullyMasked": 0,
+            "partlyMasked": 0.9407894736842105,
+            "untouched": 0.05921052631578947
+          }
+        },
+        "HOST": {
+          "standard": {
+            "fullyMasked": 1,
+            "partlyMasked": 0,
+            "untouched": 0
+          },
+          "nonStandard": {
+            "fullyMasked": 0.4421906693711968,
+            "partlyMasked": 0,
+            "untouched": 0.5578093306288032
+          }
+        },
+        "ADDRESS": {
+          "standard": {
+            "fullyMasked": 0,
+            "partlyMasked": 0,
+            "untouched": 1
+          },
+          "nonStandard": {
+            "fullyMasked": 0,
+            "partlyMasked": 0,
+            "untouched": 1
+          }
+        }
+      },
+      "regionPrecision": 0.9511209114296214,
+      "hardNegativesMasked": {
+        "date_time": 0.004975124378109453,
+        "package_spec": 0,
+        "version": 0,
+        "request_id": 0.0989010989010989,
+        "masked_value": 0,
+        "order_number": 0.010869565217391304,
+        "commit_hash": 0.08902077151335312,
+        "uuid": 0,
+        "key_fingerprint": 0,
+        "ipv4_doc": 0,
+        "luhn_invalid": 0,
+        "public_host": 0.06832298136645963,
+        "placeholder": 0.3136094674556213,
+        "checksum": 0.49032258064516127,
+        "tracking_number": 0,
+        "epoch_timestamp": 0,
+        "user_agent": 0.049586776859504134,
+        "isbn": 0,
+        "publishable_key": 0,
+        "resource_id": 0,
+        "service_account": 1,
+        "queue_id": 0,
+        "bot_email": 0,
+        "iban_invalid": 0,
+        "memory_address": 0,
+        "id_invalid": 0,
+        "phone_shaped_number": 0,
+        "scp_remote": 0.7058823529411765,
+        "image_digest": 0,
+        "phone_shaped_arithmetic": 0.25,
+        "public_ip": 0,
+        "integrity_hash": 0,
+        "cloud_account_id": 0,
+        "common_word": 0
+      },
+      "latencyMs": {
+        "p50": 0.11750000000029104,
+        "p95": 0.25395799999751034
+      }
+    },
+    {
+      "name": "rules + name model (experimental)",
+      "byCategory": {
+        "PERSON": {
+          "fullyMasked": 0.5204507512520868,
+          "partlyMasked": 0.09223706176961603,
+          "untouched": 0.38731218697829717
+        },
+        "EMAIL": {
+          "fullyMasked": 0.7872467222884386,
+          "partlyMasked": 0.03873659117997616,
+          "untouched": 0.17401668653158522
+        },
+        "PHONE": {
+          "fullyMasked": 0.5163461538461539,
+          "partlyMasked": 0.13365384615384615,
+          "untouched": 0.35
+        },
+        "NATIONAL_ID": {
+          "fullyMasked": 0.3623693379790941,
+          "partlyMasked": 0.003484320557491289,
+          "untouched": 0.6341463414634146
+        },
+        "CARD": {
+          "fullyMasked": 0.2782152230971129,
+          "partlyMasked": 0.0026246719160104987,
+          "untouched": 0.7191601049868767
+        },
+        "IBAN": {
+          "fullyMasked": 0.2893081761006289,
+          "partlyMasked": 0.0020964360587002098,
+          "untouched": 0.7085953878406709
+        },
+        "SECRET": {
+          "fullyMasked": 0.8334648776637726,
+          "partlyMasked": 0.05998421468034728,
+          "untouched": 0.10655090765588003
+        },
+        "PATH": {
+          "fullyMasked": 0.05825242718446602,
+          "partlyMasked": 0.8862690707350902,
+          "untouched": 0.05547850208044383
+        },
+        "HOST": {
+          "fullyMasked": 0.6720430107526881,
+          "partlyMasked": 0,
+          "untouched": 0.3279569892473118
+        },
+        "ADDRESS": {
+          "fullyMasked": 0.12680115273775217,
+          "partlyMasked": 0.7146974063400576,
+          "untouched": 0.1585014409221902
+        }
+      },
+      "macroAverage": {
+        "fullyMasked": 0.44444978329021934,
+        "partlyMasked": 0.19337836193911354,
+        "untouched": 0.36217185477066705
+      },
+      "bySpelling": {
+        "PERSON": {
+          "standard": {
+            "fullyMasked": 0.680672268907563,
+            "partlyMasked": 0.02415966386554622,
+            "untouched": 0.29516806722689076
+          },
+          "nonStandard": {
+            "fullyMasked": 0.41481994459833793,
+            "partlyMasked": 0.1371191135734072,
+            "untouched": 0.44806094182825484
+          }
+        },
+        "EMAIL": {
+          "standard": {
+            "fullyMasked": 1,
+            "partlyMasked": 0,
+            "untouched": 0
+          },
+          "nonStandard": {
+            "fullyMasked": 0.6458333333333334,
+            "partlyMasked": 0.06448412698412699,
+            "untouched": 0.2896825396825397
+          }
+        },
+        "PHONE": {
+          "standard": {
+            "fullyMasked": 0.7563739376770539,
+            "partlyMasked": 0,
+            "untouched": 0.24362606232294617
+          },
+          "nonStandard": {
+            "fullyMasked": 0.3930131004366812,
+            "partlyMasked": 0.20232896652110627,
+            "untouched": 0.40465793304221254
+          }
+        },
+        "NATIONAL_ID": {
+          "standard": {
+            "fullyMasked": 0.7238095238095238,
+            "partlyMasked": 0,
+            "untouched": 0.2761904761904762
+          },
+          "nonStandard": {
+            "fullyMasked": 0.15384615384615385,
+            "partlyMasked": 0.005494505494505495,
+            "untouched": 0.8406593406593407
+          }
+        },
+        "CARD": {
+          "standard": {
+            "fullyMasked": 0.9181818181818182,
+            "partlyMasked": 0.00909090909090909,
+            "untouched": 0.07272727272727272
+          },
+          "nonStandard": {
+            "fullyMasked": 0.01845018450184502,
+            "partlyMasked": 0,
+            "untouched": 0.981549815498155
+          }
+        },
+        "IBAN": {
+          "standard": {
+            "fullyMasked": 1,
+            "partlyMasked": 0,
+            "untouched": 0
+          },
+          "nonStandard": {
+            "fullyMasked": 0.0029411764705882353,
+            "partlyMasked": 0.0029411764705882353,
+            "untouched": 0.9941176470588236
+          }
+        },
+        "SECRET": {
+          "standard": {
+            "fullyMasked": 0.9515669515669516,
+            "partlyMasked": 0.039886039886039885,
+            "untouched": 0.008547008547008548
+          },
+          "nonStandard": {
+            "fullyMasked": 0.7882096069868996,
+            "partlyMasked": 0.06768558951965066,
+            "untouched": 0.14410480349344978
+          }
+        },
+        "PATH": {
+          "standard": {
+            "fullyMasked": 0.10071942446043165,
+            "partlyMasked": 0.8465227817745803,
+            "untouched": 0.05275779376498801
+          },
+          "nonStandard": {
+            "fullyMasked": 0,
+            "partlyMasked": 0.9407894736842105,
+            "untouched": 0.05921052631578947
+          }
+        },
+        "HOST": {
+          "standard": {
+            "fullyMasked": 1,
+            "partlyMasked": 0,
+            "untouched": 0
+          },
+          "nonStandard": {
+            "fullyMasked": 0.4432048681541582,
+            "partlyMasked": 0,
+            "untouched": 0.5567951318458418
+          }
+        },
+        "ADDRESS": {
+          "standard": {
+            "fullyMasked": 0.22522522522522523,
+            "partlyMasked": 0.5585585585585585,
+            "untouched": 0.21621621621621623
+          },
+          "nonStandard": {
+            "fullyMasked": 0.08050847457627118,
+            "partlyMasked": 0.788135593220339,
+            "untouched": 0.13135593220338984
+          }
+        }
+      },
+      "regionPrecision": 0.9441636582430806,
+      "hardNegativesMasked": {
+        "date_time": 0.009950248756218905,
+        "package_spec": 0,
+        "version": 0.01048951048951049,
+        "request_id": 0.0989010989010989,
+        "masked_value": 0.041916167664670656,
+        "order_number": 0.010869565217391304,
+        "commit_hash": 0.10385756676557864,
+        "uuid": 0,
+        "key_fingerprint": 0,
+        "ipv4_doc": 0,
+        "luhn_invalid": 0,
+        "public_host": 0.06832298136645963,
+        "placeholder": 0.3136094674556213,
+        "checksum": 0.49032258064516127,
+        "tracking_number": 0,
+        "epoch_timestamp": 0,
+        "user_agent": 0.09090909090909091,
+        "isbn": 0,
+        "publishable_key": 0,
+        "resource_id": 0,
+        "service_account": 1,
+        "queue_id": 0,
+        "bot_email": 0,
+        "iban_invalid": 0,
+        "memory_address": 0,
+        "id_invalid": 0,
+        "phone_shaped_number": 0,
+        "scp_remote": 0.7058823529411765,
+        "image_digest": 0,
+        "phone_shaped_arithmetic": 0.25,
+        "public_ip": 0,
+        "integrity_hash": 0,
+        "cloud_account_id": 0,
+        "common_word": 0
+      },
+      "latencyMs": {
+        "p50": 11.949790999999095,
+        "p95": 30.84666699999798
+      }
+    },
+    {
+      "name": "Presidio 2.2.364 (en_core_web_lg, cutoff 0)",
+      "byCategory": {
+        "PERSON": {
+          "fullyMasked": 0.3013355592654424,
+          "partlyMasked": 0.10475792988313856,
+          "untouched": 0.593906510851419
+        },
+        "EMAIL": {
+          "fullyMasked": 0.4445768772348033,
+          "partlyMasked": 0.16924910607866508,
+          "untouched": 0.38617401668653156
+        },
+        "PHONE": {
+          "fullyMasked": 0.7759615384615385,
+          "partlyMasked": 0.14903846153846154,
+          "untouched": 0.075
+        },
+        "NATIONAL_ID": {
+          "fullyMasked": 0.4808362369337979,
+          "partlyMasked": 0.2264808362369338,
+          "untouched": 0.2926829268292683
+        },
+        "CARD": {
+          "fullyMasked": 0.3963254593175853,
+          "partlyMasked": 0.4671916010498688,
+          "untouched": 0.13648293963254593
+        },
+        "IBAN": {
+          "fullyMasked": 0.70020964360587,
+          "partlyMasked": 0.23060796645702306,
+          "untouched": 0.06918238993710692
+        },
+        "SECRET": {
+          "fullyMasked": 0.056827150749802685,
+          "partlyMasked": 0.07103393843725335,
+          "untouched": 0.8721389108129439
+        },
+        "PATH": {
+          "fullyMasked": 0.004160887656033287,
+          "partlyMasked": 0.39389736477115117,
+          "untouched": 0.6019417475728155
+        },
+        "HOST": {
+          "fullyMasked": 0.2849462365591398,
+          "partlyMasked": 0.5412186379928315,
+          "untouched": 0.17383512544802868
+        },
+        "ADDRESS": {
+          "fullyMasked": 0.008645533141210375,
+          "partlyMasked": 0.547550432276657,
+          "untouched": 0.4438040345821326
+        }
+      },
+      "macroAverage": {
+        "fullyMasked": 0.34538251229252237,
+        "partlyMasked": 0.2901026274721984,
+        "untouched": 0.36451486023527924
+      },
+      "bySpelling": {
+        "PERSON": {
+          "standard": {
+            "fullyMasked": 0.2815126050420168,
+            "partlyMasked": 0.03046218487394958,
+            "untouched": 0.6880252100840336
+          },
+          "nonStandard": {
+            "fullyMasked": 0.314404432132964,
+            "partlyMasked": 0.15373961218836565,
+            "untouched": 0.5318559556786704
+          }
+        },
+        "EMAIL": {
+          "standard": {
+            "fullyMasked": 0.6119402985074627,
+            "partlyMasked": 0.0626865671641791,
+            "untouched": 0.3253731343283582
+          },
+          "nonStandard": {
+            "fullyMasked": 0.3333333333333333,
+            "partlyMasked": 0.2400793650793651,
+            "untouched": 0.42658730158730157
+          }
+        },
+        "PHONE": {
+          "standard": {
+            "fullyMasked": 0.8753541076487252,
+            "partlyMasked": 0.06232294617563739,
+            "untouched": 0.06232294617563739
+          },
+          "nonStandard": {
+            "fullyMasked": 0.7248908296943232,
+            "partlyMasked": 0.19359534206695778,
+            "untouched": 0.08151382823871907
+          }
+        },
+        "NATIONAL_ID": {
+          "standard": {
+            "fullyMasked": 0.6857142857142857,
+            "partlyMasked": 0.10476190476190476,
+            "untouched": 0.20952380952380953
+          },
+          "nonStandard": {
+            "fullyMasked": 0.3626373626373626,
+            "partlyMasked": 0.2967032967032967,
+            "untouched": 0.34065934065934067
+          }
+        },
+        "CARD": {
+          "standard": {
+            "fullyMasked": 0.8181818181818182,
+            "partlyMasked": 0.06363636363636363,
+            "untouched": 0.11818181818181818
+          },
+          "nonStandard": {
+            "fullyMasked": 0.22509225092250923,
+            "partlyMasked": 0.6309963099630996,
+            "untouched": 0.14391143911439114
+          }
+        },
+        "IBAN": {
+          "standard": {
+            "fullyMasked": 1,
+            "partlyMasked": 0,
+            "untouched": 0
+          },
+          "nonStandard": {
+            "fullyMasked": 0.5794117647058824,
+            "partlyMasked": 0.3235294117647059,
+            "untouched": 0.09705882352941177
+          }
+        },
+        "SECRET": {
+          "standard": {
+            "fullyMasked": 0.09116809116809117,
+            "partlyMasked": 0.06552706552706553,
+            "untouched": 0.8433048433048433
+          },
+          "nonStandard": {
+            "fullyMasked": 0.043668122270742356,
+            "partlyMasked": 0.07314410480349345,
+            "untouched": 0.8831877729257642
+          }
+        },
+        "PATH": {
+          "standard": {
+            "fullyMasked": 0.002398081534772182,
+            "partlyMasked": 0.3261390887290168,
+            "untouched": 0.6714628297362111
+          },
+          "nonStandard": {
+            "fullyMasked": 0.006578947368421052,
+            "partlyMasked": 0.4868421052631579,
+            "untouched": 0.506578947368421
+          }
+        },
+        "HOST": {
+          "standard": {
+            "fullyMasked": 0.5058139534883721,
+            "partlyMasked": 0.4069767441860465,
+            "untouched": 0.0872093023255814
+          },
+          "nonStandard": {
+            "fullyMasked": 0.1308316430020284,
+            "partlyMasked": 0.6348884381338742,
+            "untouched": 0.23427991886409735
+          }
+        },
+        "ADDRESS": {
+          "standard": {
+            "fullyMasked": 0.018018018018018018,
+            "partlyMasked": 0.4954954954954955,
+            "untouched": 0.4864864864864865
+          },
+          "nonStandard": {
+            "fullyMasked": 0.00423728813559322,
+            "partlyMasked": 0.5720338983050848,
+            "untouched": 0.423728813559322
+          }
+        }
+      },
+      "regionPrecision": 0.6024142556045219,
+      "hardNegativesMasked": {
+        "date_time": 1,
+        "package_spec": 0.1323529411764706,
+        "version": 0.3776223776223776,
+        "request_id": 0.10989010989010989,
+        "masked_value": 0.24550898203592814,
+        "order_number": 0.7336956521739131,
+        "commit_hash": 0.10979228486646884,
+        "uuid": 0.3025210084033613,
+        "key_fingerprint": 0.07692307692307693,
+        "ipv4_doc": 1,
+        "luhn_invalid": 0.6142857142857143,
+        "public_host": 1,
+        "placeholder": 0.11834319526627218,
+        "checksum": 0.05161290322580645,
+        "tracking_number": 0.18867924528301888,
+        "epoch_timestamp": 1,
+        "user_agent": 0.32231404958677684,
+        "isbn": 0.6181818181818182,
+        "publishable_key": 0,
+        "resource_id": 0.034482758620689655,
+        "service_account": 1,
+        "queue_id": 0.06666666666666667,
+        "bot_email": 1,
+        "iban_invalid": 0.5,
+        "memory_address": 0.025974025974025976,
+        "id_invalid": 0.864406779661017,
+        "phone_shaped_number": 1,
+        "scp_remote": 1,
+        "image_digest": 0.05,
+        "phone_shaped_arithmetic": 0.5,
+        "public_ip": 1,
+        "integrity_hash": 0.05,
+        "cloud_account_id": 1,
+        "common_word": 0
+      },
+      "latencyMs": {
+        "p50": 10.397457983344793,
+        "p95": 18.246957974042743
+      }
+    },
+    {
+      "name": "Presidio 2.2.364 (en_core_web_lg, cutoff 0.4)",
+      "byCategory": {
+        "PERSON": {
+          "fullyMasked": 0.3013355592654424,
+          "partlyMasked": 0.10475792988313856,
+          "untouched": 0.593906510851419
+        },
+        "EMAIL": {
+          "fullyMasked": 0.4445768772348033,
+          "partlyMasked": 0.16924910607866508,
+          "untouched": 0.38617401668653156
+        },
+        "PHONE": {
+          "fullyMasked": 0.7644230769230769,
+          "partlyMasked": 0.1346153846153846,
+          "untouched": 0.10096153846153846
+        },
+        "NATIONAL_ID": {
+          "fullyMasked": 0.32752613240418116,
+          "partlyMasked": 0.059233449477351915,
+          "untouched": 0.6132404181184669
+        },
+        "CARD": {
+          "fullyMasked": 0.3937007874015748,
+          "partlyMasked": 0.3359580052493438,
+          "untouched": 0.27034120734908135
+        },
+        "IBAN": {
+          "fullyMasked": 0.70020964360587,
+          "partlyMasked": 0.16981132075471697,
+          "untouched": 0.129979035639413
+        },
+        "SECRET": {
+          "fullyMasked": 0.056827150749802685,
+          "partlyMasked": 0.043409629044988164,
+          "untouched": 0.8997632202052092
+        },
+        "PATH": {
+          "fullyMasked": 0.004160887656033287,
+          "partlyMasked": 0.37031900138696255,
+          "untouched": 0.6255201109570042
+        },
+        "HOST": {
+          "fullyMasked": 0.28255675029868577,
+          "partlyMasked": 0.5394265232974911,
+          "untouched": 0.17801672640382318
+        },
+        "ADDRESS": {
+          "fullyMasked": 0.008645533141210375,
+          "partlyMasked": 0.547550432276657,
+          "untouched": 0.4438040345821326
+        }
+      },
+      "macroAverage": {
+        "fullyMasked": 0.3283962398680681,
+        "partlyMasked": 0.24743307820646998,
+        "untouched": 0.4241706819254619
+      },
+      "bySpelling": {
+        "PERSON": {
+          "standard": {
+            "fullyMasked": 0.2815126050420168,
+            "partlyMasked": 0.03046218487394958,
+            "untouched": 0.6880252100840336
+          },
+          "nonStandard": {
+            "fullyMasked": 0.314404432132964,
+            "partlyMasked": 0.15373961218836565,
+            "untouched": 0.5318559556786704
+          }
+        },
+        "EMAIL": {
+          "standard": {
+            "fullyMasked": 0.6119402985074627,
+            "partlyMasked": 0.0626865671641791,
+            "untouched": 0.3253731343283582
+          },
+          "nonStandard": {
+            "fullyMasked": 0.3333333333333333,
+            "partlyMasked": 0.2400793650793651,
+            "untouched": 0.42658730158730157
+          }
+        },
+        "PHONE": {
+          "standard": {
+            "fullyMasked": 0.8413597733711048,
+            "partlyMasked": 0.04815864022662889,
+            "untouched": 0.11048158640226628
+          },
+          "nonStandard": {
+            "fullyMasked": 0.7248908296943232,
+            "partlyMasked": 0.17903930131004367,
+            "untouched": 0.09606986899563319
+          }
+        },
+        "NATIONAL_ID": {
+          "standard": {
+            "fullyMasked": 0.44761904761904764,
+            "partlyMasked": 0.02857142857142857,
+            "untouched": 0.5238095238095238
+          },
+          "nonStandard": {
+            "fullyMasked": 0.25824175824175827,
+            "partlyMasked": 0.07692307692307693,
+            "untouched": 0.6648351648351648
+          }
+        },
+        "CARD": {
+          "standard": {
+            "fullyMasked": 0.8090909090909091,
+            "partlyMasked": 0.06363636363636363,
+            "untouched": 0.12727272727272726
+          },
+          "nonStandard": {
+            "fullyMasked": 0.22509225092250923,
+            "partlyMasked": 0.44649446494464945,
+            "untouched": 0.3284132841328413
+          }
+        },
+        "IBAN": {
+          "standard": {
+            "fullyMasked": 1,
+            "partlyMasked": 0,
+            "untouched": 0
+          },
+          "nonStandard": {
+            "fullyMasked": 0.5794117647058824,
+            "partlyMasked": 0.23823529411764705,
+            "untouched": 0.18235294117647058
+          }
+        },
+        "SECRET": {
+          "standard": {
+            "fullyMasked": 0.09116809116809117,
+            "partlyMasked": 0.019943019943019943,
+            "untouched": 0.8888888888888888
+          },
+          "nonStandard": {
+            "fullyMasked": 0.043668122270742356,
+            "partlyMasked": 0.05240174672489083,
+            "untouched": 0.9039301310043668
+          }
+        },
+        "PATH": {
+          "standard": {
+            "fullyMasked": 0.002398081534772182,
+            "partlyMasked": 0.3261390887290168,
+            "untouched": 0.6714628297362111
+          },
+          "nonStandard": {
+            "fullyMasked": 0.006578947368421052,
+            "partlyMasked": 0.4309210526315789,
+            "untouched": 0.5625
+          }
+        },
+        "HOST": {
+          "standard": {
+            "fullyMasked": 0.5058139534883721,
+            "partlyMasked": 0.4055232558139535,
+            "untouched": 0.08866279069767442
+          },
+          "nonStandard": {
+            "fullyMasked": 0.12677484787018256,
+            "partlyMasked": 0.6328600405679513,
+            "untouched": 0.24036511156186613
+          }
+        },
+        "ADDRESS": {
+          "standard": {
+            "fullyMasked": 0.018018018018018018,
+            "partlyMasked": 0.4954954954954955,
+            "untouched": 0.4864864864864865
+          },
+          "nonStandard": {
+            "fullyMasked": 0.00423728813559322,
+            "partlyMasked": 0.5720338983050848,
+            "untouched": 0.423728813559322
+          }
+        }
+      },
+      "regionPrecision": 0.6295135135135135,
+      "hardNegativesMasked": {
+        "date_time": 1,
+        "package_spec": 0.058823529411764705,
+        "version": 0.24825174825174826,
+        "request_id": 0.04395604395604396,
+        "masked_value": 0.24550898203592814,
+        "order_number": 0.31521739130434784,
+        "commit_hash": 0.09198813056379822,
+        "uuid": 0.06722689075630252,
+        "key_fingerprint": 0.07692307692307693,
+        "ipv4_doc": 1,
+        "luhn_invalid": 0.2714285714285714,
+        "public_host": 1,
+        "placeholder": 0.08875739644970414,
+        "checksum": 0.05161290322580645,
+        "tracking_number": 0.18867924528301888,
+        "epoch_timestamp": 0.8076923076923077,
+        "user_agent": 0.2727272727272727,
+        "isbn": 0.4,
+        "publishable_key": 0,
+        "resource_id": 0.034482758620689655,
+        "service_account": 1,
+        "queue_id": 0,
+        "bot_email": 1,
+        "iban_invalid": 0.46511627906976744,
+        "memory_address": 0.025974025974025976,
+        "id_invalid": 0.2542372881355932,
+        "phone_shaped_number": 0.7,
+        "scp_remote": 1,
+        "image_digest": 0.05,
+        "phone_shaped_arithmetic": 0.5,
+        "public_ip": 1,
+        "integrity_hash": 0,
+        "cloud_account_id": 1,
+        "common_word": 0
+      },
+      "latencyMs": {
+        "p50": 10.30154200270772,
+        "p95": 18.309834005776793
+      }
+    }
+  ]
+}
