@@ -200,7 +200,7 @@ Where it is weak (English, proxy default):
 
 Restore, a self-check rather than a score: with rules only, restoring the masked text gave the original byte for byte in all 1,617 prompts; with the name model on, in 1,587 of 1,617 (30 were not exact).
 
-Two fixes came after this run and are not in these numbers: `card-strict` now reads regrouped, dotted, mixed-separator, and line-wrapped card numbers (the proxy default masked 30.5% of English cards here against 44.1% for the core default), and a fix for the name model's restore errors is in progress.
+Two fixes came after this run and are not in these numbers: `card-strict` now reads regrouped, dotted, mixed-separator, and line-wrapped card numbers (the proxy default masked 30.5% of English cards here against 44.1% for the core default), and the name model's restore errors are fixed: different spellings of one name (`Jordan`, `JORDAN`) now get separate placeholders, and a 2,908-prompt synthetic round-trip check went from 754 altered prompts to 0.
 
 Full tables: [held-out v2 results](bench/results/public-bench-held-out-v2.md). The earlier [held-out v1 run](bench/results/public-bench-held-out.md) (1,518 prompts, older rules `rules-6+intl-1`, standard spellings only) is kept for history. Method and other measurements: [technical details §18](docs/DETAILS.md#18-實測數字).
 <!-- RESULTS:END -->
