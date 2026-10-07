@@ -150,7 +150,7 @@ It misses some names and masks some words that are not names. Measured on synthe
 | | Result |
 | --- | --- |
 | Names in prose: English, Japanese | 1.00, 1.00 recall |
-| Names in pasted code, logs, config | not read by the model; on the held-out set it fully masks 65–70% of all names |
+| Names in pasted code, logs, config | not read by the model; on held-out v2 it fully masks 52% of all names (49% in English) |
 | Names in prose: Traditional Chinese | **0.87** recall (about 1 name in 8 missed) |
 | Names in pasted code, logs, JSON | 0.10–0.30 recall: code is not read; list such names in `terms` |
 | Precision | 0.94 |
@@ -161,36 +161,48 @@ What it reads, every number, and the options: [technical details §16](docs/DETA
 ## Results
 
 <!-- RESULTS:START -->
-**held-out set v1 (written blind, run once).** 1,518 synthetic prompts in 7 languages (English, Traditional and Simplified Chinese, Japanese, Korean, German, French), written by someone who never saw the rules, frozen with a SHA-256 checksum, and scored once. Nothing was changed after the results were seen.
+**held-out set v2 (written blind, run once).** 1,617 synthetic prompts in 7 languages (English, Traditional and Simplified Chinese, Japanese, Korean, German, French) with 10,268 sensitive values and 2,997 hard negatives. The author never read the rules or the benchmark code; about 60% of the values use non-standard spellings (dotted cards, lower-case IBANs, `name at example dot com`, phone extensions). The set was frozen with a SHA-256 checksum and scored once, on commit `01489cd`.
 
-![Bar chart: share of sensitive values fully masked per category on the English held-out prompts, proxy-default rules and rules plus name model against Presidio at cutoff 0.4.](docs/media/results.svg)
+![Bar chart: share of sensitive values fully masked per category on the English held-out v2 prompts, proxy-default rules and rules plus name model against Presidio at cutoff 0.4.](docs/media/results.svg)
 
-| held-out, English prompts (330) | core default rules | proxy default rules | + name model (experimental) | Presidio, cutoff 0 | Presidio, cutoff 0.4 |
+| held-out v2, English prompts (1,527 values) | core default rules | proxy default rules | + name model (experimental) | Presidio, cutoff 0 | Presidio, cutoff 0.4 |
 | --- | --- | --- | --- | --- | --- |
-| Fully masked (macro average of 10 categories) | 34.6% | 54.1% | **61.1%** | 52.2% | 50.7% |
-| Masked regions that were sensitive | 95.2% | **95.7%** | 92.5% | 64.7% | 69.0% |
-| Median time per prompt | 0.06 ms | 0.07 ms | 7.4 ms | 8.6 ms | 8.6 ms |
-| Fully masked, all 7 languages | 38.8% | 56.0% | 64.3% | 46.6%* | 43.0%* |
+| Fully masked (macro average of 10 categories) | 25.9% | 39.5% | **44.8%** | 40.4% | 37.8% |
+| Left untouched (macro average) | 64.0% | 49.9% | 35.6% | **29.3%** | 35.0% |
+| Masked regions that were sensitive | 94.3% | **95.8%** | 94.8% | 64.9% | 68.0% |
+| Median time per prompt | 0.10 ms | 0.12 ms | 10.8 ms | 11.4 ms | 11.2 ms |
+| Fully masked, all 7 languages | 27.3% | 37.9% | 44.4% | 34.5%* | 32.8%* |
 
 \* Presidio analyzes every prompt as English, so its all-language results are for reference only.
 
-**About the 100% cells.** Email, card and IBAN reach 100% because every value of those kinds in this set is written the standard way: no obfuscated emails (`name at example.com`, `name [at] example.com`), no lower-case IBANs, IBANs from only 7 countries, and cards only in common groupings. Those other spellings are known misses (see [Limitations](#what-it-does-not-protect)). The samples are also small (107 cards, 127 IBANs), so 100% here means roughly 97% or better. The next held-out version will include these spellings.
+Standard against non-standard spellings, English, fully masked (n = values):
 
-Self-check, not a score: in every prompt, restoring the masked text gave the original byte for byte. This tests the proxy against itself; no language model was involved.
+| Category | proxy default, standard | proxy default, non-standard | Presidio 0.4, standard | Presidio 0.4, non-standard |
+| --- | --- | --- | --- | --- |
+| Email | 100% (n=107) | 61.5% (n=148) | 57.9% | 35.1% |
+| Phone | 70.4% (n=54) | 41.1% (n=107) | 83.3% | 85.0% |
+| National ID | 89.5% (n=19) | 30.4% (n=23) | 68.4% | 47.8% |
+| Card | 94.7% (n=19) | 0.0% (n=40) | 84.2% | 15.0% |
+| IBAN | 100% (n=15) | 0.0% (n=46) | 100% | 69.6% |
+| Secret | 95.9% (n=49) | 80.7% (n=140) | 12.2% | 5.7% |
+| Host | 100% (n=93) | 43.6% (n=149) | 47.3% | 12.1% |
+| Name (with name model) | 60.4% (n=164) | 39.1% (n=192) | 42.7% | 44.3% |
 
-Where it is weak:
+The 100% cells are standard spellings only, which the rules are written for, and the samples are small: with n=15 a perfect score means only that none of 15 was missed.
 
-- **Phone numbers.** 95% of English phone numbers are left untouched with the proxy default (measured while `e164-phone` was opt-in); Presidio fully masks 82–85%.
-- **Paths** are mostly only partly masked: the user name is masked, the rest of the path is kept.
-- **Hosts and secrets.** About 30% of hosts and 26–28% of secrets are left untouched.
-- **Addresses.** There is no address rule.
-- **The name model** fully masks 65–70% of names, and it also masks user-agent strings.
+Where it is weak (English, proxy default):
 
-These held-out v1 numbers were measured on the older proxy default (`rules-6+intl-1`), before the phone, host, and credential rules and the strict card and entropy rules (`intl-2`, `ext-1`) that target these weaknesses; a held-out v2 run will replace them.
+- **Non-standard spellings** of IBANs, cards, and national IDs are mostly missed (0%, 0%, 30% fully masked), and 38% of non-standard emails (`name at example dot com`, internationalized domains, spaced) are left untouched.
+- **Paths** are mostly only partly masked (88%): the user name is masked, the rest of the path is kept.
+- **Addresses.** There is no address rule: 0% fully masked (the name model partly masks 77%).
+- **Names** need the name model, which fully masks 49% (52% in all languages).
+- **Phones** are fully masked 51% (Presidio 85%); none with an extension (`x204`) is fully masked.
 
-On the dev set the current proxy default (`rules-6+intl-2+ext-1`) fully masks 88.9% (English macro average; phone 100%, was 0%) with 96.3% region precision. The dev set was written alongside the rules, so it is kept only as a development check.
+Restore, a self-check rather than a score: with rules only, restoring the masked text gave the original byte for byte in all 1,617 prompts; with the name model on, in 1,587 of 1,617 (30 were not exact).
 
-Full tables: [held-out results](bench/results/public-bench-held-out.md), [dev results](bench/results/public-bench-dev.md). Method and other measurements: [technical details §18](docs/DETAILS.md#18-實測數字).
+Two fixes came after this run and are not in these numbers: `card-strict` now reads regrouped, dotted, mixed-separator, and line-wrapped card numbers (the proxy default masked 30.5% of English cards here against 44.1% for the core default), and a fix for the name model's restore errors is in progress.
+
+Full tables: [held-out v2 results](bench/results/public-bench-held-out-v2.md). The earlier [held-out v1 run](bench/results/public-bench-held-out.md) (1,518 prompts, older rules `rules-6+intl-1`, standard spellings only) is kept for history. Method and other measurements: [technical details §18](docs/DETAILS.md#18-實測數字).
 <!-- RESULTS:END -->
 
 ## What it does not protect

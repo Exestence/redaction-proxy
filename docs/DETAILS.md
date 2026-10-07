@@ -394,7 +394,7 @@ POST /v1/messages tool arguments: restored PATH_1 in read at /path
 
 ## 13. 測試
 
-`pnpm test`（vitest）執行 29 個檔案、1,247 個測試（7 個需要真模型，預設略過）：
+`pnpm test`（vitest）執行 29 個檔案、1,259 個測試（7 個需要真模型，預設略過）：
 
 | 檔案 | 內容 |
 | --- | --- |
@@ -522,11 +522,11 @@ node scripts/fetch-name-model.mjs ~/models/nym       # 從 Hugging Face 下載�
 
 | 項目 | 結果 | 代表什麼 |
 | --- | --- | --- |
-| 測試 | 1,240 個通過、7 個需要真模型而略過（共 1,247 個） | 規則、引擎、對抗輸入、對假上游的三種 API 串流與非串流、Host／Origin／權杖檢查。 |
+| 測試 | 1,252 個通過、7 個需要真模型而略過（共 1,259 個） | 規則、引擎、對抗輸入、對假上游的三種 API 串流與非串流、Host／Origin／權杖檢查。 |
 | 憑證誤遮 | 每千行程式碼 **0.76** 處 | 在不含真實金鑰的 DeepSeek Harness 原始碼上量測（69.8 萬行程式碼），平均約 1,300 行有一處被誤當成金鑰而遮掉。 |
 | 還原失敗 | 0 | 遮罩成功的檔案全部都能逐位元組還原。 |
 | 速度 | 約 85 萬行 / 5 秒 | Apple M5 Max。 |
-| 合成多語提示，保留集第 1 版（盲寫、只跑一次） | 英文 330 筆、10 類宏平均完全遮蔽：核心預設 34.6%、代理預設 54.1%、加人名模型 61.1%；Presidio cutoff 0 為 52.2%、cutoff 0.4 為 50.7%。遮掉的範圍確實是敏感值：規則 95.2–95.7%、加人名模型 92.5%、Presidio 64.7–69.0%。中位數耗時：規則 0.06–0.07 ms、加人名模型 7.4 ms、Presidio 8.6 ms。全部 7 種語言的宏平均：核心預設 38.8%、代理預設 56.0%、加人名模型 64.3%（Presidio 46.6%、43.0%，只當英文分析，僅供參考）。還原 100% | `heldout-v1.jsonl`（SHA-256 `be2ebb95…3e553`）：英、繁中、簡中、日、韓、德、法共 1,518 筆、6,453 個敏感值、2,215 個困難反例，由從未看過規則的人撰寫，凍結後只評分一次，看到結果後沒有修改；檔案不在本倉庫。弱點（英文、代理預設）：電話 95% 完全沒遮（`e164-phone` 需自行開啟），Presidio 完全遮蔽 82–85%；路徑 87% 只遮掉一部分（使用者名稱被遮，其餘保留）；主機 30%、金鑰 28% 完全沒遮；沒有地址規則；人名模型完全遮蔽 70% 的人名（全部語言 65%），且會遮掉 user-agent 字串。這些數字量測的是 `rules-6+intl-1`；之後針對這些弱點加入的電話、主機、金鑰規則與嚴格版卡號、高熵規則（`intl-2`、`ext-1`，第 3 節）沒有在這份保留集上重跑，要等下一版保留集量測。完整結果：[bench/results/public-bench-held-out.md](../bench/results/public-bench-held-out.md)。 |
+| 合成多語提示，保留集第 2 版（盲寫、只跑一次） | 英文 1,527 個值、10 類宏平均完全遮蔽：核心預設 25.9%、代理預設 39.5%、加人名模型 44.8%；Presidio cutoff 0 為 40.4%、cutoff 0.4 為 37.8%。完全沒遮：核心預設 64.0%、代理預設 49.9%、加人名模型 35.6%、Presidio 29.3–35.0%。遮掉的範圍確實是敏感值：規則 94.3–95.8%、加人名模型 94.8%、Presidio 64.9–68.0%。中位數耗時：規則 0.10–0.12 ms、加人名模型 10.8 ms、Presidio 11.2–11.4 ms。全部 7 種語言的宏平均：核心預設 27.3%、代理預設 37.9%、加人名模型 44.4%（Presidio 34.5%、32.8%，只當英文分析，僅供參考）。還原：只用規則時 1,617 筆全部逐位元組還原，開啟人名模型時 1,587 筆（30 筆不一致） | `heldout-v2.jsonl`（SHA-256 `e3d45536…0bb04`）：英、繁中、簡中、日、韓、德、法共 1,617 筆、10,268 個敏感值、2,997 個困難反例，撰寫者沒看過規則與評測程式，約 60% 的值是非標準寫法；凍結後只評分一次，量測的是 commit `01489cd`（`rules-6+intl-2+ext-1`）。標準寫法與非標準寫法（英文、代理預設、完全遮蔽）：email 100%（n=107）／61.5%（n=148）、電話 70.4%／41.1%、身分證號 89.5%／30.4%、卡號 94.7%／0.0%（n=40）、IBAN 100%（n=15）／0.0%（n=46）、金鑰 95.9%／80.7%、主機 100%（n=93）／43.6%；100% 只出現在標準寫法，且樣本小。弱點（英文、代理預設）：非標準的 IBAN、卡號、身分證號大多抓不到，38% 的非標準 email 完全沒遮；路徑 88% 只遮掉一部分；沒有地址規則（0%）；人名要靠人名模型，完全遮蔽 49%（全部語言 52%）；電話完全遮蔽 51%（Presidio 85%），帶分機的 30 個沒有一個被完全遮蔽。量測之後的兩項修正不在這些數字中：`card-strict` 改認重新分組、點分隔、混用分隔符與換行斷開的卡號（這次代理預設的英文卡號完全遮蔽 30.5%，低於核心預設的 44.1%）；人名模型的還原錯誤另外修正中。完整結果：[bench/results/public-bench-held-out-v2.md](../bench/results/public-bench-held-out-v2.md)。第 1 版（1,518 筆、較舊的 `rules-6+intl-1`、只有標準寫法）留作紀錄：[bench/results/public-bench-held-out.md](../bench/results/public-bench-held-out.md)。 |
 | 合成多語提示，開發集（初步） | 代理預設（`rules-6+intl-2+ext-1`）、9 類宏平均完全遮蔽：英文 88.9%、全部語言 86.1% | 1,200 筆固定種子的提示（英、繁中、簡中、日），由規則作者撰寫、和規則一起調整，所以分數比保留集高得多；只當開發時的檢查：[bench/results/public-bench-dev.md](../bench/results/public-bench-dev.md)。 |
 
 誤遮的代價是模型看到一個不必要的佔位符，回覆時會被換回原值。語料是英文程式碼，中文散文的誤遮率尚未量測。以 `pnpm test`、`pnpm bench` 與 `pnpm run bench:public` 重現；加上 `--heldout <set.jsonl>` 可另外評分凍結的保留集（格式與 MANIFEST 檢查見 `bench/public/heldout.ts`）。
@@ -552,7 +552,7 @@ README 的圖片與影片都放在 `docs/media/`，可重新產生：
 | 檔案 | 來源 | 重新產生 |
 | --- | --- | --- |
 | `hero.svg` | 手繪 SVG | 直接編輯 |
-| `results.svg` | 評測結果 JSON | `node bench/results-chart.mjs`；預設讀 `bench/results/public-bench-held-out.json` 的英文提示，畫代理預設、加人名模型與 Presidio cutoff 0.4 三個系統；`--split allLanguages`、`--systems "名稱;名稱"`、`--input`、`--out`、`--label` 可改（見腳本開頭） |
+| `results.svg` | 評測結果 JSON | `node bench/results-chart.mjs`；預設讀 `bench/results/public-bench-held-out-v2.json` 的英文提示，畫代理預設、加人名模型與 Presidio cutoff 0.4 三個系統；`--split allLanguages`、`--systems "名稱;名稱"`、`--input`、`--out`、`--label` 可改（見腳本開頭） |
 | `src/captured.json` | 真實代理輸出：`lib/cli.js --demo`，以及另一個經代理送往本機假上游的串流請求 | `pnpm build && node docs/media/src/capture.mjs` |
 | `before-after.png`、`intro.mp4`、`intro.gif` | `src/before-after.html`、`src/intro.html` 讀 `captured.json` | `PLAYWRIGHT=… FFMPEG=… node docs/media/src/render.mjs`（Playwright 與 ffmpeg 都不是倉庫依賴，取得方式見腳本開頭） |
 
