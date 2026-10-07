@@ -47,7 +47,8 @@ describe('card-strict', () => {
     'pay 41 1111 111 1111 111 now',
     'pay 41111-11111-111111 now',
     'pay 4111.1111.1111.1111 now',
-    'pay 4111 1111-1111.1111 now',
+    'pay 4111 1111-1111 1111 now',
+    'pay 41.1111.111.1111.111 now',
     'pay 4111 - 1111 - 1111 - 1111 now',
     'pay 4111 1111\n    1111 1111 now',
     'pay 41111111\n11111111 now',
@@ -74,6 +75,14 @@ describe('card-strict', () => {
     ['a decimal number with a card prefix', '{"x":4432.1234567890129}'],
     ['a version with a one-digit part', 'release 4.1.11111111111111'],
     ['a column of numbers over more than one line break', '4111\n1111\n1111\n1111'],
+    // Each run below is Luhn-valid as one number with a card prefix.
+    ['a latitude and longitude pair', 'at 45.123456 -18.636239 now'],
+    ['two IPv4 addresses', 'from 55.51.129.143 62.43.181.28'],
+    ['money with space thousands and cents', 'total 54 477 295 848.94'],
+    ['a dotted date range', 'vom 43.10.2026 - 27.10.2022'],
+    ['dotted groups mixed with another separator', 'pay 4111 1111-1111.1111 now'],
+    ['a hexdump row of more than six groups', '00000010  43 41 42 43 44 45 46 42'],
+    ['a card regrouped into more than six groups', 'pay 41 11 11 11 11 11 11 11 now'],
   ])('leaves %s alone', async (_name, text) => {
     expect(await maskWith(['card-strict'], text)).toBe(text)
   })
