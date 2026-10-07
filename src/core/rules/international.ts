@@ -74,6 +74,8 @@ export function isInternationalRule(rule: string): rule is InternationalRuleName
 /**
  * Version of the international rules, appended to the detector version while
  * any of them is enabled; changes whenever one of their matches changes.
+ * Unreleased: changes before the first release keep this version; after it,
+ * every change to a match bumps it.
  */
 export const INTERNATIONAL_RULES_VERSION = 'intl-2'
 

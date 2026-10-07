@@ -30,6 +30,8 @@ export const EXTENDED_RULE_NAMES: readonly ExtendedRuleName[] = [
 /**
  * Version of the extended rules, appended to the detector version while any of
  * them is enabled; changes whenever one of their matches changes.
+ * Unreleased: changes before the first release keep this version; after it,
+ * every change to a match bumps it.
  */
 export const EXTENDED_RULES_VERSION = 'ext-1'
 

@@ -123,12 +123,12 @@ flowchart TD
 
 ### 國際規則
 
-以下 23 條規則偵測臺灣以外核發的識別碼與電話號碼。核心函式庫預設**不啟用**（`DEFAULT_RULE_NAMES` 只有上表 10 條），代理預設全部啟用（第 12 節）。有檢查碼的都驗證；沒有檢查碼、或裸數字看起來和任何日誌 id 一樣的，只在分組寫法或關鍵詞後面才遮。
+以下 24 條規則偵測臺灣以外核發的識別碼與電話號碼。核心函式庫預設**不啟用**（`DEFAULT_RULE_NAMES` 只有上表 10 條），代理預設全部啟用（第 12 節）。有檢查碼的都驗證；沒有檢查碼、或裸數字看起來和任何日誌 id 一樣的，只在分組寫法或關鍵詞後面才遮。
 
 | 規則 | 類別 | 驗證與條件 |
 | --- | --- | --- |
 | `iban` | `IBAN` | ISO 13616 mod-97，且長度符合 SWIFT 登錄表中該國的長度。連續寫法或每 4 字元一個空格；只認大寫。 |
-| `e164-phone` | `PHONE` | `+`、已分配的 ITU 國碼、含國碼共 10–15 位數；數字間可有一個空格、點或連字號，區碼可加括號（`+1 (415) 555-0132`）。前面是英數字、`+`、`)`、`]`、`.` 時不算（`1e+10`、`f(x)+12345678901`）。在行首不算：diff 的 `+` 新增行標記會讓以數字或時間戳開頭的新增行（`+2026-02-27 17:06`、`+1792055696732,…`）看起來像國際電話；代價是單獨寫在行首的國際電話不遮。`+` 後接日期（`+2026-10-05 12`）也不算。沒有檢查碼。 |
+| `e164-phone` | `PHONE` | `+`、已分配的 ITU 國碼、含國碼共 10–15 位數；數字間可有一個空格、點或連字號，區碼可加括號（`+1 (415) 555-0132`）。前面是英數字、`+`、`)`、`]`、`.` 時不算（`1e+10`、`f(x)+12345678901`）。在行首只認分組寫法：國碼後以空格或連字號分組、第一組之後每組至少 2 碼（`+44 20 7946 0958`、`+33 1 23 45 67 89`、`+44 (0)20 7946 0958`）；diff 的 `+` 新增行標記會讓以數字或時間戳開頭的新增行（`+2026-02-27 17:06`、`+1792055696732,…`）看起來像國際電話，所以行首的連寫數字與點分隔不算。代價：diff 中以 `12 34 56 78 90` 這類空格分組數字開頭的新增行會被遮。`+` 後接日期（`+2026-10-05 12`）也不算。沒有檢查碼。 |
 | `eu-vat` | `TAXID` | `AT`、`BE`、`DE`、`ES`、`FR`、`IT`、`NL`、`PL` 前綴，各國檢查碼（DE 為 ISO 7064 MOD 11,10，FR 為 SIREN 金鑰，IT 為 Luhn，NL 為十一檢驗或 mod-97，BE 為 mod-97，PL 為加權 mod 11，AT 為 UID 檢查碼，ES 為 DNI/NIE 字母）。 |
 | `us-ssn` | `NATID` | `123-45-6789` 或 `123 45 6789`（同一種分隔符），或 `SSN`、`social security` 等關鍵詞後的 9 碼。排除 000、666、900–999 區號，00 組號、0000 序號。沒有檢查碼。 |
 | `us-itin` | `NATID` | 同上的寫法，區號 9xx 且組號在 50–65、70–88、90–92、94–99。 |
@@ -143,13 +143,14 @@ flowchart TD
 | `jp-my-number` | `NATID` | 只在「マイナンバー」、「個人番号」、`my number` 後。12 碼，可 4-4-4 分組，檢查碼驗證。 |
 | `jp-mobile` | `PHONE` | `090-1234-5678`（同一種分隔符）、`+81 90-1234-5678`，或「携帯」、tel 等關鍵詞後的 11 碼。 |
 | `kr-rrn` | `NATID` | `YYMMDD-NNNNNNN`：性別與世紀碼 1–8、真實出生日期、加權 mod 11 檢查碼。**2020 年 10 月以後核發**的號碼末段是隨機數字、沒有檢查碼，偵測不到。 |
-| `us-phone` | `PHONE` | 北美號碼：`(415) 555-0132`，或同一種分隔符的 `415-555-0132`、`415.555.0132`，可加 `+1`、`1` 前綴；區碼與局碼以 2–9 開頭。空格分隔與連寫 10 碼看起來像表格列與訂單號，只由 `phone-keyword` 在關鍵詞後遮。沒有檢查碼：任何區碼與局碼以 2–9 開頭的 `NNN-NNN-NNNN` 都會被遮。 |
-| `uk-phone` | `PHONE` | 英國國內寫法：`020 7946 0958`、`0161 496 0000`、`01632 960123`、`07700 900123`、`07700 900 123`。 |
+| `us-phone` | `PHONE` | 北美號碼：`(415) 555-0132`、`(415)-555-0132`，或同一種分隔符的 `415-555-0132`、`415.555.0132`，可加 `+1`、`1` 前綴；連字號也可以是 en dash（U+2013）或減號（U+2212）。區碼與局碼以 2–9 開頭。空格分隔與連寫 10 碼看起來像表格列與訂單號，只由 `phone-keyword` 在關鍵詞後遮。沒有檢查碼：任何區碼與局碼以 2–9 開頭的 `NNN-NNN-NNNN` 都會被遮。 |
+| `uk-phone` | `PHONE` | 英國國內寫法：`020 7946 0958`、`0161 496 0000`、`01632 960123`、`07700 900123`、`07700 900 123`，以及常見的倫敦寫法 `0207 946 0958`。 |
 | `fr-phone` | `PHONE` | 法國五組兩碼、同一種分隔符：`01 23 45 67 89`、`06.12.34.56.78`、`06-12-34-56-78`。更長的兩碼數列（十六進位傾印）不算。 |
-| `jp-phone` | `PHONE` | 日本市話：三組以連字號分隔、共 10 碼、區碼不以 0 開頭（`03-1234-5678`、`045-123-4567`、`0120-123-456`）。韓國與臺灣的市話也是這個形狀，同樣報為 `PHONE`。 |
+| `jp-phone` | `PHONE` | 日本市話：三組以同一種連字號（含 en dash、減號）分隔、共 10 碼、區碼不以 0 開頭（`03-1234-5678`、`045-123-4567`、`0120-123-456`），或括號區碼（`(03) 1234-5678`）。10 碼的韓國與臺灣市話也是這個形狀，同樣報為 `PHONE`。 |
 | `kr-mobile` | `PHONE` | `010-1234-5678`（同一種分隔符）、`+82 10-1234-5678`，或「전화」、tel 等關鍵詞後的 11 碼。 |
-| `br-phone` | `PHONE` | 括號區碼：`(11) 91234-5678`、`(21) 3456-7890`。 |
-| `phone-keyword` | `PHONE` | 英、德、法、西、葡、中、日、韓的電話關鍵詞（`phone`、`tel`、`mobile`、`call me at`、`Telefon`、`Handy`、`téléphone`、`celular`、`電話`、`携帯`、`전화` 等）後 8 字元內的號碼：可有 `+` 國碼、括號區碼，數字組之間各一個空格、點、斜線或連字號，共 8–15 碼；日期（含空格分隔的 `2026 10 07`）與 IPv4 位址（`SIP phone 10.20.30.40`）不算，也不從被跳過的數字組中間開始讀。字眼前後緊貼英數字或 `_` 時不算字眼（`cell_id`、`tel_ext`），`phone_number`、`mobile_no` 例外。涵蓋沒有獨特寫法的德國、印度等號碼與連寫號碼。 |
+| `kr-phone` | `PHONE` | 韓國市話：首爾 `02` 或地區區碼 `031`–`064`，再接 3 或 4 碼與 4 碼，同一種連字號：`02-123-4567`、`031-1234-5678`。沒有檢查碼。 |
+| `br-phone` | `PHONE` | 括號區碼：`(11) 91234-5678`、`(11) 9 1234-5678`、`(21) 3456-7890`。 |
+| `phone-keyword` | `PHONE` | 英、德、法、西、葡、丹麥與挪威、俄、中、日、韓的電話關鍵詞（`phone`、`Ph`、`tel`、`mobile`、`mob`、`cel`、`call me at`、`Telefon`、`Handy`、`téléphone`、`Tlf`、`телефон`、`celular`、`電話`、`携帯`、`전화` 等）後的號碼。字眼與號碼之間最多 8 個標點、空白或非 ASCII 字元（`電話番号は`），可再加一個 `is`、`at` 或 `on`；中間有其他英文字時不算（`phone count 12345678`）。號碼可有 `+` 國碼、括號區碼，數字組之間各一個空格、點、斜線或連字號，共 8–15 碼；日期（含空格分隔的 `2026 10 07`）與 IPv4 位址（`SIP phone 10.20.30.40`）不算，也不從被跳過的數字組中間開始讀。字眼前後緊貼英數字或 `_` 時不算字眼（`cell_id`、`tel_ext`），`phone_number`、`mobile_no` 例外。涵蓋沒有獨特寫法的德國、印度等號碼與連寫號碼。 |
 
 - **一個類別給所有外國身分證號。** 臺灣以外的國民身分證號、稅籍號碼都用 `NATID`；模型不需要知道是哪一國，類別越少，外洩的資訊越少。IBAN 用新類別 `IBAN`，國際電話與手機沿用 `PHONE`，VAT 沿用 `TAXID`。
 - **不做 SWIFT/BIC。** BIC 沒有檢查碼，形式是 8 或 11 個大寫英數字，和常數名稱（`ABSTRACT`、`FUNCTION`）無法區分；它識別的是銀行，不是個人。
@@ -165,10 +166,10 @@ flowchart TD
 | 規則 | 類別 | 細節 |
 | --- | --- | --- |
 | `card-strict` | `CARD` | 只認卡號的印刷寫法：一整組 13–19 碼（只有一組時可去掉一個開頭的 `0`），或以同一種分隔符連接、符合卡號分組（4-4-4-4、4-4-4-4-3、4-4-4-3、Amex 4-6-5、Diners 4-6-4）且前後沒有同一分隔符的更多組。遮罩不會結束在數字組中間。緊貼英文字母或 `_`、在 `..` 版本範圍之後、或是小數的小數部分（`1432.4982166290283`）的數字不讀。`card` 會把 `ports 8000 5259-6589 0921-9030` 遮成 `ports 8000 ⟦CARD_1⟧30`、把純數字 UUID 的後兩組與 commit 訊息裡的 `abc12..4931245 1234567` 片段遮成卡號，`card-strict` 都不遮。代價：`4111 1111 1111 1111 1234`（卡號後緊接一組同分隔符的數字）不遮。 |
-| `entropy-strict` | `ENTROPY`、`KEY` | 同 `entropy`，另外把以檔名為鍵的 40 或 64 碼十六進位值（`README.md: <sha>`，翻譯目錄記錄來源雜湊的寫法，含 diff 的 `+`、`-` 標記）視為雜湊放過。緊鄰憑證字眼時仍報為 `KEY`。 |
+| `entropy-strict` | `ENTROPY`、`KEY` | 同 `entropy`，另外把以檔名為鍵的 40 或 64 碼十六進位值（`README.md: <sha>`，翻譯目錄記錄來源雜湊的寫法，含 diff 的 `+`、`-` 標記），以及緊接在 `@` 之後的 40 碼 commit id（`actions/checkout@<sha>`）視為雜湊放過。緊鄰憑證字眼時仍報為 `KEY`。 |
 | `private-host` | `HOST` | `.corp`、`.intra`、`.intranet`、`.localdomain`、`.home.arpa`（RFC 8375）主機名，含後綴之後的標籤（`jenkins.corp.example.com` 整段遮）。只認小寫：`Contoso.Corp.Billing` 是命名空間。反向網域的套件名（`com.acme.intra.Billing`）、檔名（`settings.corp.yaml`）、程式成員（`this.corp`）與呼叫不算。`.home`、`.private` 不列入：`user.home`、`this.private` 是程式碼。 |
-| `token-format` | `KEY` | `api-key` 沒列的廠商格式：GitLab `glpat-`、Stripe `sk_`/`rk_`（`live`、`test`；公開的 `pk_` 不算）與 `whsec_`、SendGrid `SG.`、Hugging Face `hf_`、npm `npm_`、Slack `xapp-`、Shopify `shpat_` 等、DigitalOcean `dop_v1_` 等、Atlassian `ATATT3`、Telegram bot token、payload 很短或沒有簽章（`alg: none`）的 JWT，以及 Azure 的 `AccountKey=`、`SharedAccessKey=`、SAS `sig=` 的值。 |
-| `credential-phrase` | `KEY` | 散文中的憑證字眼（`api key`、`access token`、`token`、`secret`、`key`、`password`、`pw` 等）、可選的 `is`、`was` 或 `:`，以及其後的值，可加引號：`the secret is X`、`here is my key: X`、`use token 'X'`。密碼類字眼後只要是含數字或符號的可列印 ASCII 值即可（6 字元以上，純數字的通行碼也算；其後接中文等其他文字時不算）；一般字眼後須 16 字元以上、Shannon 熵至少 3.5、大小寫與數字混合或含數字的十六進位。網址、路徑、`$VAR`、`0x` 位址、成員鏈（`process.env.X`）、程式碼不算；`$PWD`、`this.key`、`--password` 不算字眼；`key = X` 指派留給 `api-key`。 |
+| `token-format` | `KEY` | `api-key` 沒列的廠商格式：GitLab `glpat-`、Stripe `sk_`/`rk_`（`live`、`test`；公開的 `pk_` 不算）與 `whsec_`、SendGrid `SG.`、Hugging Face `hf_`、npm `npm_`、Slack `xapp-`、Shopify `shpat_` 等、DigitalOcean `dop_v1_` 等、Atlassian `ATATT3`、Twilio `SK`、Square `EAAA`/`sq0atp-`、Grafana `glsa_`/`glc_`、Databricks `dapi`（這四家依 gitleaks 公開的格式）、Telegram bot token、payload 很短或沒有簽章（`alg: none`）的 JWT，以及 Azure 的 `AccountKey=`、`SharedAccessKey=`、SAS `sig=` 的值。 |
+| `credential-phrase` | `KEY` | 散文中的憑證字眼（`api key`、`access token`、`token`、`secret`、`key`、`password`、`pw` 等，以及密碼的德、法、西、葡、中、日、韓說法 `Passwort`、`mot de passe`、`contraseña`、`senha`、`密碼`、`密码`、`パスワード`、`비밀번호`）、可選的 `is`、`was`、`:` 或該語言的對應詞（`ist`、`est`、`es`、`é`、`是`、`は`、`는`），以及其後的值，可加引號：`the secret is X`、`here is my key: X`、`use token 'X'`、`密码是 X`。密碼類字眼後只要是含字母與數字或符號的可列印 ASCII 值即可（6 字元以上；結尾的 `?`、`!` 是句讀，不算符號；沒有字母時須是純數字的通行碼，日期與版本號不算；其後接中文等其他文字時不算）；一般字眼後須 16 字元以上、Shannon 熵至少 3.5、大小寫與數字混合或含數字的十六進位。網址、路徑、`$VAR`、`0x` 位址、成員鏈（`process.env.X`）、程式碼不算；`$PWD`、`this.key`、`--password` 不算字眼；`key = X` 指派留給 `api-key`。 |
 
 **路徑不整段遮。** `user-path` 只遮家目錄前綴（使用者名稱），其餘保留，所以公開評測把多數路徑算成「部分遮蔽」。整段遮會讓模型看不到檔案結構與副檔名，讀 stack trace、建議改哪個檔案都會變差；使用者名稱是路徑中唯一必然指向個人的部分，保留集上 97% 的路徑完整遮到它。路徑中的專案或客戶名稱用 `projectNames`、`terms` 遮，這兩者在路徑中也會比對。因此不提供整段遮的選項；有需要再加。
 
@@ -333,7 +334,7 @@ POST /v1/chat/completions -> 200 masked 3 (EMAIL 1, TWID 1, PATH 1) restored 3 u
     "terms": ["林小明", "Denise Whitlock"],
     "projectNames": ["Nimbus"],
     "allowlist": ["git@github.com", "noreply@github.com"],
-    "rules": ["email", "user-path", "api-key", "tw-national-id", "phone", "tax-id", "ip", "host", "iban", "e164-phone", "eu-vat", "us-ssn", "us-itin", "uk-nino", "de-tax-id", "fr-nir", "es-dni", "it-fiscal-code", "cn-resident-id", "cn-mobile", "hk-id", "jp-my-number", "jp-mobile", "kr-rrn", "us-phone", "uk-phone", "fr-phone", "jp-phone", "kr-mobile", "br-phone", "phone-keyword", "card-strict", "entropy-strict", "private-host", "token-format", "credential-phrase"]
+    "rules": ["email", "user-path", "api-key", "tw-national-id", "phone", "tax-id", "ip", "host", "iban", "e164-phone", "eu-vat", "us-ssn", "us-itin", "uk-nino", "de-tax-id", "fr-nir", "es-dni", "it-fiscal-code", "cn-resident-id", "cn-mobile", "hk-id", "jp-my-number", "jp-mobile", "kr-rrn", "us-phone", "uk-phone", "fr-phone", "jp-phone", "kr-mobile", "kr-phone", "br-phone", "phone-keyword", "card-strict", "entropy-strict", "private-host", "token-format", "credential-phrase"]
   }
 }
 ```
@@ -345,7 +346,7 @@ POST /v1/chat/completions -> 200 masked 3 (EMAIL 1, TWID 1, PATH 1) restored 3 u
 | `anthropicUpstream` | `REDACTION_PROXY_ANTHROPIC_UPSTREAM` | `https://api.anthropic.com` | Messages 與 Anthropic 型 GET 的上游 base。 |
 | `screen` | `REDACTION_PROXY_SCREEN` | `replace` | `replace` 或 `refuse`，見第 9 節。 |
 | `debugMasked` | `REDACTION_PROXY_DEBUG_MASKED=1` | `false` | 記錄遮罩後的請求本文。 |
-| `redaction.rules` | — | `card`、`entropy` 以外全部 | 啟用的內建規則；空陣列停用所有內建偵測。代理預設啟用 36 條：全部規則，但以 `card-strict`、`entropy-strict` 取代 `card`、`entropy`（上例即代理預設）。直接使用核心的宿主（`new RulesDetector()`）預設只有臺灣與通用的 10 條（`DEFAULT_RULE_NAMES`），見下方說明。 |
+| `redaction.rules` | — | `card`、`entropy` 以外全部 | 啟用的內建規則；空陣列停用所有內建偵測。代理預設啟用 37 條：全部規則，但以 `card-strict`、`entropy-strict` 取代 `card`、`entropy`（上例即代理預設）。直接使用核心的宿主（`new RulesDetector()`）預設只有臺灣與通用的 10 條（`DEFAULT_RULE_NAMES`），見下方說明。 |
 | `redaction.terms` | — | 無 | 以 `TERM` 遮罩的字面值，例如人名。 |
 | `redaction.projectNames` | — | 無 | 以 `PROJECT` 遮罩的字面值，例如代號。 |
 | `redaction.allowlist` | — | `git@github.com`、`noreply@github.com` | 內建規則一律放過的字面值。 |
@@ -353,7 +354,7 @@ POST /v1/chat/completions -> 200 masked 3 (EMAIL 1, TWID 1, PATH 1) restored 3 u
 | — | `REDACTION_PROXY_OPENAI_API_KEY` | 無 | OpenAI 型用戶端沒送 `authorization` 時才以 `Bearer` 補上。只存記憶體。 |
 | — | `REDACTION_PROXY_ANTHROPIC_API_KEY` | 無 | Anthropic 型用戶端沒送 `x-api-key` 與 `authorization` 時才補上。只存記憶體。 |
 
-**國際規則、延伸規則與政策摘要。** 偵測器的 `policyDigest` 是偵測器版本與啟用規則清單的雜湊，持久化 span 索引的宿主（DeepSeek Harness 的隱私路由）用它判斷先前記錄的遮罩是否仍適用；摘要不同時，`mask` 以 `policy` 拒絕。核心預設不含國際規則與延伸規則，且預設 10 條規則的結果不變，所以未設定 `rules` 的宿主在這個版本下得到與先前完全相同的偵測器版本（`rules-6`）、摘要（`sha256:49cba7ce…2239ff`）與遮罩結果，已記錄的 session 照常遮罩。在這類宿主啟用任一國際規則，偵測器版本變成 `rules-6+intl-2`；啟用任一延伸規則再加上 `+ext-1`；摘要隨之改變，之前記錄的 session 會遇到 `policy` 拒絕（隱私路由會改在本機回答）。國際規則的結果改變時只遞增 `INTERNATIONAL_RULES_VERSION`，延伸規則只遞增 `EXTENDED_RULES_VERSION`，都不影響未啟用它們的宿主。`intl-2` 加入 7 條電話規則，並讓 `e164-phone` 略過行首與日期。代理不保存索引，每個請求都用空索引，所以摘要對代理沒有影響，代理因此預設啟用全部規則（嚴格版取代 `card`、`entropy`）。
+**國際規則、延伸規則與政策摘要。** 偵測器的 `policyDigest` 是偵測器版本與啟用規則清單的雜湊，持久化 span 索引的宿主（DeepSeek Harness 的隱私路由）用它判斷先前記錄的遮罩是否仍適用；摘要不同時，`mask` 以 `policy` 拒絕。核心預設不含國際規則與延伸規則，且預設 10 條規則的結果不變，所以未設定 `rules` 的宿主在這個版本下得到與先前完全相同的偵測器版本（`rules-6`）、摘要（`sha256:49cba7ce…2239ff`）與遮罩結果，已記錄的 session 照常遮罩。在這類宿主啟用任一國際規則，偵測器版本變成 `rules-6+intl-2`；啟用任一延伸規則再加上 `+ext-1`；摘要隨之改變，之前記錄的 session 會遇到 `policy` 拒絕（隱私路由會改在本機回答）。國際規則的結果改變時只遞增 `INTERNATIONAL_RULES_VERSION`，延伸規則只遞增 `EXTENDED_RULES_VERSION`，都不影響未啟用它們的宿主。`intl-2` 加入 8 條電話規則，並讓 `e164-phone` 在行首只認分組寫法、略過日期。`intl-2` 與 `ext-1` 尚未發布，所以發布前的修改沿用這兩個版本；發布之後，任何改變其結果的修改都必須遞增版本。代理不保存索引，每個請求都用空索引，所以摘要對代理沒有影響，代理因此預設啟用全部規則（嚴格版取代 `card`、`entropy`）。
 
 上游 base 要設成讓 `<base>/v1/chat/completions`（或 `<base>/v1/messages`）是真正的端點，例如 `https://api.deepseek.com`。結尾斜線會被去掉。
 
@@ -397,7 +398,7 @@ POST /v1/chat/completions -> 200 masked 3 (EMAIL 1, TWID 1, PATH 1) restored 3 u
 
 29 個檔案因含 `⟦`/`⟧` 被拒絕（`unsupported`），還原失敗 0。
 
-以 `BENCH_RULES=proxy pnpm bench` 量測代理預設（36 條規則，`rules-6+intl-2+ext-1`）：`ENTROPY` 從 873 降為 19（翻譯目錄 `*.i18n.yaml` 以檔名為鍵的來源雜湊不再遮），`CARD` 從 3 降為 0，其他每一類的數量與上表完全相同，新規則在這份語料上新增 0 個遮罩，耗時約 9 秒。`BENCH_RULES=all` 同時啟用預設與嚴格版，結果是兩者的聯集。英文程式碼語料幾乎不含這類識別碼形狀，所以這個數字只說明它們不會誤遮一般程式碼；隨機日誌 id 上的誤遮率由 `rules-synthetic-corpus` 的上限測試把關。與識別碼格式完全相同的值本來就會被遮：任何 `123-45-6789` 形式的數字（SSN 沒有檢查碼）、`+` 後接 10–15 位數且國碼已分配的數字（例如寫成 `+12345678901` 的帶號整數），以及約 1/10 到 1/97 通過檢查碼的同格式隨機值。語料是英文程式碼；以中文為主的散文語料尚未量測。
+以 `BENCH_RULES=proxy pnpm bench` 量測代理預設（37 條規則，`rules-6+intl-2+ext-1`）：`ENTROPY` 從 873 降為 18（翻譯目錄 `*.i18n.yaml` 以檔名為鍵的來源雜湊與 `@` 後的 commit id 不再遮），`CARD` 從 3 降為 0，其他每一類的數量與上表完全相同，新規則在這份語料上新增 0 個遮罩，耗時約 9 秒。`BENCH_RULES=all` 同時啟用預設與嚴格版，結果是兩者的聯集。英文程式碼語料幾乎不含這類識別碼形狀，所以這個數字只說明它們不會誤遮一般程式碼；隨機日誌 id 上的誤遮率由 `rules-synthetic-corpus` 的上限測試把關。與識別碼格式完全相同的值本來就會被遮：任何 `123-45-6789` 形式的數字（SSN 沒有檢查碼）、`+` 後接 10–15 位數且國碼已分配的數字（例如寫成 `+12345678901` 的帶號整數），以及約 1/10 到 1/97 通過檢查碼的同格式隨機值。語料是英文程式碼；以中文為主的散文語料尚未量測。
 
 ## 15. 公開前尚待完成
 
