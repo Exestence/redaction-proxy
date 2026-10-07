@@ -42,7 +42,7 @@ export interface ProxyConfig {
   openaiApiKey?: string
   /** Key sent upstream as `x-api-key` only when an Anthropic-style client sends none. */
   anthropicApiKey?: string
-  /** Rules detector configuration; `rules` defaults to every built-in rule except `e164-phone`. */
+  /** Rules detector configuration; `rules` defaults to {@link PROXY_DEFAULT_RULES}. */
   redaction: RulesRedactionConfig
   /** Optional name model; absent means rules only. */
   nameModel?: ResolvedNameModelConfig
@@ -57,14 +57,15 @@ export interface ProxyConfig {
 }
 
 /**
- * The proxy enables every built-in rule except `e164-phone` unless the file
- * names its own. The core's narrower default exists to keep the policy digest
- * that hosts persist with their span index; the proxy keeps no index, so its
- * digest is never compared. `e164-phone` stays opt-in because it has no check
- * digit and a diff's `+` marker makes every added numeric or timestamp line
- * read as an international number.
+ * The proxy enables every built-in rule unless the file names its own, with
+ * `card-strict` and `entropy-strict` in place of `card` and `entropy`. The
+ * core's narrower default exists to keep the policy digest that hosts persist
+ * with their span index; the proxy keeps no index, so its digest is never
+ * compared. The strict variants leave no mask ending inside a digit group and
+ * skip content digests keyed by a file name, which the default rules mask in
+ * real diffs.
  */
-export const PROXY_DEFAULT_RULES = RULE_NAMES.filter(rule => rule !== 'e164-phone')
+export const PROXY_DEFAULT_RULES = RULE_NAMES.filter(rule => rule !== 'card' && rule !== 'entropy')
 
 const FILE_KEYS = new Set([
   'port', 'host', 'authToken', 'allowedOrigins', 'openaiUpstream', 'anthropicUpstream', 'allowInsecureUpstream',

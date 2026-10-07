@@ -2,10 +2,12 @@
  * Opt-in rules for identifiers issued outside Taiwan: IBANs, international
  * telephone numbers, EU VAT numbers, and national identification numbers of
  * the United States, the United Kingdom, Germany, France, Spain, Italy,
- * mainland China, Hong Kong, Japan, and Korea, plus Chinese and Japanese
- * mobile numbers. Every rule with a check digit verifies it. A value with no
- * check digit, or one whose bare digits read like any log identifier, is
- * matched only in its grouped spelling or right after a keyword.
+ * mainland China, Hong Kong, Japan, and Korea, plus telephone numbers in the
+ * national formats of the United States, the United Kingdom, France, Japan,
+ * Korea, Brazil, and mainland China, and any number after a telephone keyword.
+ * Every rule with a check digit verifies it. A value with no check digit, or
+ * one whose bare digits read like any log identifier, is matched only in its
+ * grouped spelling or right after a keyword.
  *
  * @module redaction-proxy/core/rules/international
  */
@@ -44,11 +46,20 @@ export type InternationalRuleName =
   | 'jp-my-number'
   | 'jp-mobile'
   | 'kr-rrn'
+  | 'us-phone'
+  | 'uk-phone'
+  | 'fr-phone'
+  | 'jp-phone'
+  | 'kr-mobile'
+  | 'kr-phone'
+  | 'br-phone'
+  | 'phone-keyword'
 
 /** Every international rule name, in declaration order. */
 export const INTERNATIONAL_RULE_NAMES: readonly InternationalRuleName[] = [
   'iban', 'e164-phone', 'eu-vat', 'us-ssn', 'us-itin', 'uk-nino', 'de-tax-id', 'fr-nir', 'es-dni',
   'it-fiscal-code', 'cn-resident-id', 'cn-mobile', 'hk-id', 'jp-my-number', 'jp-mobile', 'kr-rrn',
+  'us-phone', 'uk-phone', 'fr-phone', 'jp-phone', 'kr-mobile', 'kr-phone', 'br-phone', 'phone-keyword',
 ]
 
 /**
@@ -63,8 +74,10 @@ export function isInternationalRule(rule: string): rule is InternationalRuleName
 /**
  * Version of the international rules, appended to the detector version while
  * any of them is enabled; changes whenever one of their matches changes.
+ * Unreleased: changes before the first release keep this version; after it,
+ * every change to a match bumps it.
  */
-export const INTERNATIONAL_RULES_VERSION = 'intl-1'
+export const INTERNATIONAL_RULES_VERSION = 'intl-2'
 
 /** Placeholder category of national identification numbers outside Taiwan. */
 const NATIONAL_ID = 'NATID'
@@ -87,6 +100,14 @@ export const INTERNATIONAL_RULE_CATEGORIES: Readonly<Record<InternationalRuleNam
   'jp-my-number': NATIONAL_ID,
   'jp-mobile': 'PHONE',
   'kr-rrn': NATIONAL_ID,
+  'us-phone': 'PHONE',
+  'uk-phone': 'PHONE',
+  'fr-phone': 'PHONE',
+  'jp-phone': 'PHONE',
+  'kr-mobile': 'PHONE',
+  'kr-phone': 'PHONE',
+  'br-phone': 'PHONE',
+  'phone-keyword': 'PHONE',
 }
 
 /** No ASCII letter or digit right before a value, so it is not the tail of a longer token. */
@@ -101,7 +122,7 @@ const RIGHT_EDGE = '(?![A-Za-z0-9])'
  */
 const GROUPED_LEFT_EDGE = '(?<![A-Za-z0-9-])(?!(?<=\\d )\\d+ )'
 /** Separators removed from a matched value before its check runs. */
-const VALUE_SEPARATORS = /[\s().-]/g
+const VALUE_SEPARATORS = /[\s().\u2013\u2212-]/g
 
 /** Length of the ISO 3166 country code that opens an IBAN, a VAT number, and each registry entry. */
 const COUNTRY_CODE_LENGTH = 2
@@ -141,9 +162,102 @@ const E164_THREE_DIGIT_ZONES = new Set([
  * between them, where a bracketed area code (`(415)`, `(0)`) counts as one
  * step. Not after a letter, digit, `+`, `)`, `]`, or `.`, so `1e+10` and
  * `f(x)+12345678` are arithmetic, not a number; `offset=+86400000` has too
- * few digits to be one.
+ * few digits to be one. At the start of a line, where `+` may be a diff's
+ * added-line marker (`+2026-02-27 17:06`, `+1792055696732,…`), only a number
+ * whose groups after the country code are joined by spaces or hyphens and,
+ * after the first, have two or more digits counts (`+44 20 7946 0958`,
+ * `+33 1 23 45 67 89`, `+44 (0)20 7946 0958`). Never a date (`+2026-10-05 12`).
  */
-const E164 = /(?<![A-Za-z0-9+)\].])\+[1-9](?:[ .-]?(?:\(\d{1,4}\)|\d)){6,16}(?![A-Za-z0-9]|[.-]\d)/g
+const E164 = /(?:(?<=[^\n])|(?=\+[1-9]\d{0,2}(?:[ -]| ?\(\d{1,4}\) ?)\d+(?:[ -]\d{2,})+(?!\d)))(?<![A-Za-z0-9+)\].])\+(?!(?:19|20)\d\d[-/. ]\d\d[-/. ]\d\d)[1-9](?:[ .-]?(?:\(\d{1,4}\)|\d)){6,16}(?![A-Za-z0-9]|[.-]\d)/g
+
+/** En dash and minus sign, which word processors put between the groups of a telephone number in place of `-`. */
+const DASHES = '\\u2013\\u2212'
+/** A hyphen between the groups of a telephone number, or one of {@link DASHES}. */
+const PHONE_HYPHEN = `[${DASHES}-]`
+/**
+ * Left edge of a national telephone format: {@link GROUPED_LEFT_EDGE}, and not
+ * after `.` or `+`, so the groups of a dotted version or an international
+ * number are not read as one.
+ */
+const PHONE_LEFT_EDGE = `(?<![A-Za-z0-9.+${DASHES}-])(?!(?<=\\d )\\d+ )`
+/** No letter or digit after a value, and no further group joined by a separator. */
+const PHONE_RIGHT_EDGE = `(?![A-Za-z0-9]|[ .${DASHES}-]\\d)`
+/**
+ * North American numbers: `(415) 555-0132`, `(415)-555-0132`, or
+ * `415-555-0132` and `415.555.0132` with one consistent separator, optionally
+ * after `+1` or `1`; a hyphen may be an en dash or a minus sign.
+ * Area code and exchange start with 2 to 9. Space-separated and bare ten-digit
+ * spellings read like table rows and order numbers, so only `phone-keyword` reads them.
+ */
+const US_PHONE = new RegExp(
+  `${PHONE_LEFT_EDGE}(?:\\+?1[ -]?)?(?:\\([2-9]\\d{2}\\)[ -]?[2-9]\\d{2}(?:[. ]|${PHONE_HYPHEN})|[2-9]\\d{2}([.${DASHES}-])[2-9]\\d{2}\\1)\\d{4}${PHONE_RIGHT_EDGE}`,
+  'g',
+)
+/**
+ * United Kingdom numbers in their national spacing: `020 7946 0958`,
+ * `0161 496 0000`, `01632 960123`, `07700 900123`, `07700 900 123`, and the
+ * common London split `0207 946 0958`.
+ */
+const UK_PHONE = new RegExp(
+  `${PHONE_LEFT_EDGE}0(?:2\\d \\d{4} \\d{4}|2\\d{2} \\d{3} \\d{4}|[1389]\\d{2} \\d{3} \\d{4}|1\\d{3} \\d{5,6}|7\\d{3} \\d{6}|7\\d{3} \\d{3} \\d{3})${PHONE_RIGHT_EDGE}`,
+  'g',
+)
+/** French numbers: five pairs with one consistent separator, `01 23 45 67 89`, `06.12.34.56.78`. */
+const FR_PHONE = new RegExp(`${PHONE_LEFT_EDGE}0[1-9]([ .-])\\d{2}(?:\\1\\d{2}){3}${PHONE_RIGHT_EDGE}`, 'g')
+/**
+ * Japanese landlines in three hyphenated groups that total ten digits, with
+ * an area code that does not start with 0: `03-1234-5678`, `045-123-4567`,
+ * `0120-123-456`, or a bracketed area code, `(03) 1234-5678`. Ten-digit Korean
+ * and Taiwanese landlines share the shape; `kr-phone` reads the other Korean ones.
+ */
+const JP_PHONE = new RegExp(
+  `${PHONE_LEFT_EDGE}(?:0[1-9]\\d{0,3}(${PHONE_HYPHEN})\\d{1,4}\\1|\\(0[1-9]\\d{0,3}\\) ?\\d{1,4}${PHONE_HYPHEN})\\d{3,4}${PHONE_RIGHT_EDGE}`,
+  'g',
+)
+/** Digits of a Japanese landline, area code included. */
+const JP_PHONE_DIGITS = 10
+/**
+ * Korean landlines: Seoul (`02`) or a provincial area code (`031` to `064`),
+ * then three or four digits and four, with one consistent hyphen:
+ * `02-123-4567`, `031-1234-5678`.
+ */
+const KR_PHONE = new RegExp(`${PHONE_LEFT_EDGE}0(?:2|[3-6][1-5])(${PHONE_HYPHEN})\\d{3,4}\\1\\d{4}${PHONE_RIGHT_EDGE}`, 'g')
+/** Brazilian numbers with a bracketed area code: `(11) 91234-5678`, `(11) 9 1234-5678`, `(21) 3456-7890`. */
+const BR_PHONE = new RegExp(`${LEFT_EDGE}\\([1-9]\\d\\) ?(?:9 ?)?\\d{4}-\\d{4}${RIGHT_EDGE}`, 'g')
+/**
+ * Words that introduce a telephone number in English, German, French,
+ * Spanish, Portuguese, Danish and Norwegian (`tlf`), Russian, Chinese,
+ * Japanese, and Korean, for `phone-keyword`.
+ */
+const PHONE_KEYWORD_WORDS = [
+  'phone(?:[ _-]?(?:number|no))?', 'ph', 'telephone', 'tel', 'mobile(?:[ _-]?(?:number|no))?', 'mob', 'cell(?:phone)?', 'cel',
+  'fax', 'whatsapp',
+  'contact[ _-]?number',
+  'call me(?: at| on)?', 'text me(?: at| on)?', 'telefon(?:nummer)?', 'handy', 'mobil', 'rufnummer', 'festnetz',
+  'téléphone', 'tél', 'portable', 'teléfono', 'telefono', 'telefone', 'celular', 'móvil', 'movil', 'tlf', '[тТ]елефон',
+  '電話', '电话', '手機', '手机', '携帯', 'ケータイ', '전화', '휴대폰', '핸드폰', '연락처',
+]
+/**
+ * A telephone number in any national format: an optional `+` and country
+ * code, an optional bracketed area code, then digit groups joined by one
+ * space, dot, slash, or hyphen each, ending where no further group follows.
+ * Not a date, an IPv4 address, or the later groups of either (the keyword gap
+ * may skip characters). Separators are required between groups, so the match
+ * is linear.
+ */
+const PHONE_KEYWORD_VALUE = '(?<!\\d[ ./-])(?!(?:19|20)\\d{2}[-/. ]\\d{1,2}[-/. ]\\d{1,2}(?!\\d))'
+  + '(?![1-9]\\d{0,2}(?:\\.\\d{1,3}){3}(?![\\d.]))'
+  + '(?:\\+\\d{1,3}[ .-]?)?(?:\\(\\d{1,5}\\)[ .-]?)?\\d{1,12}(?:[ ./-]\\d{1,8}){0,5}(?![ ./-]?\\d)'
+/**
+ * Characters between a telephone keyword and its number: punctuation, spaces,
+ * and characters outside ASCII (`番号は`), with at most one `is`, `at`, `on`,
+ * `no`, or `nr` (`Tel. No. `, `Tel.-Nr.: `). Any other ASCII word means the
+ * number is not the telephone's (`phone count 12345678`, `Tel (office) …`).
+ */
+const PHONE_KEYWORD_GAP = `[^\\n\\w]{0,8}?(?:(?:${anyCase('is|at|on|no|nr')})[^\\n\\w]{1,4}?)?`
+/** Fewest and most digits a number after a telephone keyword is accepted with. */
+const PHONE_KEYWORD_DIGITS_MIN = 8
+const PHONE_KEYWORD_DIGITS_MAX = 15
 
 /** United States SSN or ITIN with its usual separators: `123-45-6789`, `123 45 6789`. */
 const US_TAXPAYER_GROUPED = new RegExp(`${GROUPED_LEFT_EDGE}\\d{3}([- ])\\d{2}\\1\\d{4}(?![A-Za-z0-9]|\\1\\d)`, 'g')
@@ -256,6 +370,8 @@ interface MobileNumberFormat {
 const CHINA_MOBILE: MobileNumberFormat = { countryCode: '86', domesticPrefix: '1[3-9]\\d', internationalPrefix: '1[3-9]\\d' }
 /** Japanese mobile numbers: `090-1234-5678`, `+81 90-1234-5678`. */
 const JAPAN_MOBILE: MobileNumberFormat = { countryCode: '81', domesticPrefix: '0[789]0', internationalPrefix: '[789]0' }
+/** Korean mobile numbers: `010-1234-5678`, `+82 10-1234-5678`. */
+const KOREA_MOBILE: MobileNumberFormat = { countryCode: '82', domesticPrefix: '01[016-9]', internationalPrefix: '1[016-9]' }
 
 /** How one rule finds and checks its values. */
 interface ValidatedRule {
@@ -288,11 +404,13 @@ function anyCase(keyword: string): string {
  * its keywords, for values whose bare digits read like any log identifier.
  * @param keywords - lower-case keyword patterns, matched in any case as whole words.
  * @param value - the value's pattern, captured as the `value` group.
+ * @param wordCharacters - character class body of what may not touch a keyword.
+ * @param gap - pattern of what may stand between a keyword and its value.
  * @returns a global pattern with match indices.
  */
-function valueAfterKeyword(keywords: readonly string[], value: string): RegExp {
-  const keyword = `(?<![A-Za-z])(?:${keywords.map(anyCase).join('|')})(?![A-Za-z])`
-  return new RegExp(`${keyword}${KEYWORD_GAP}${LEFT_EDGE}(?<value>${value})${RIGHT_EDGE}`, 'gd')
+function valueAfterKeyword(keywords: readonly string[], value: string, wordCharacters = 'A-Za-z', gap = KEYWORD_GAP): RegExp {
+  const keyword = `(?<![${wordCharacters}])(?:${keywords.map(anyCase).join('|')})(?![${wordCharacters}])`
+  return new RegExp(`${keyword}${gap}${LEFT_EDGE}(?<value>${value})${RIGHT_EDGE}`, 'gd')
 }
 
 /**
@@ -345,6 +463,16 @@ function isInternationalPhoneNumber(compact: string): boolean {
   return E164_ONE_DIGIT_CODES.has(digits.charAt(0))
     || E164_TWO_DIGIT_CODES.has(leadingPair)
     || E164_THREE_DIGIT_ZONES.has(leadingPair)
+}
+
+/**
+ * Whether a number after a telephone keyword has as many digits as a telephone number.
+ * @param compact - the number without spaces, dots, hyphens, and brackets.
+ * @returns whether it holds 8 to 15 digits.
+ */
+function hasPhoneNumberLength(compact: string): boolean {
+  const digits = compact.replaceAll(/\D/g, '').length
+  return digits >= PHONE_KEYWORD_DIGITS_MIN && digits <= PHONE_KEYWORD_DIGITS_MAX
 }
 
 /**
@@ -444,6 +572,18 @@ const INTERNATIONAL_RULES: Readonly<Record<InternationalRuleName, ValidatedRule>
   'jp-my-number': { patterns: [valueAfterKeyword(MY_NUMBER_KEYWORDS, MY_NUMBER_VALUE)], isValid: hasMyNumberCheckDigit },
   'jp-mobile': { patterns: mobilePatterns(JAPAN_MOBILE), isValid: acceptsEveryMatch },
   'kr-rrn': { patterns: [KOREA_RRN], isValid: isKoreaResidentNumber },
+  'us-phone': { patterns: [US_PHONE], isValid: acceptsEveryMatch },
+  'uk-phone': { patterns: [UK_PHONE], isValid: acceptsEveryMatch },
+  'fr-phone': { patterns: [FR_PHONE], isValid: acceptsEveryMatch },
+  'jp-phone': { patterns: [JP_PHONE], isValid: compact => compact.length === JP_PHONE_DIGITS },
+  'kr-mobile': { patterns: mobilePatterns(KOREA_MOBILE), isValid: acceptsEveryMatch },
+  'kr-phone': { patterns: [KR_PHONE], isValid: acceptsEveryMatch },
+  'br-phone': { patterns: [BR_PHONE], isValid: acceptsEveryMatch },
+  'phone-keyword': {
+    // `_` and digits also bound a word here, so a field such as `cell_id` or `tel_ext` is not a telephone keyword.
+    patterns: [valueAfterKeyword(PHONE_KEYWORD_WORDS, PHONE_KEYWORD_VALUE, 'A-Za-z0-9_', PHONE_KEYWORD_GAP)],
+    isValid: hasPhoneNumberLength,
+  },
 }
 
 /** The pass of every international rule, keyed by rule name. */

@@ -37,11 +37,13 @@ export {
 } from './rules/index.ts'
 export type {
   DefaultRuleName,
+  ExtendedRuleName,
   InternationalRuleName,
   RedactionRuleName,
   ResolvedRulesConfig,
   RulesRedactionConfig,
 } from './rules/index.ts'
 export { INTERNATIONAL_RULE_NAMES, INTERNATIONAL_RULES_VERSION } from './rules/international.ts'
+export { EXTENDED_RULE_NAMES, EXTENDED_RULES_VERSION } from './rules/extended.ts'
 export { screenText } from './rules/screen.ts'
 export type { ScreenFailure } from './rules/screen.ts'

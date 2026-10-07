@@ -119,6 +119,9 @@ describe('pathological inputs to the international rules', () => {
     '123 45 ', 'ssn ', 'ssn 1', 'AB 12 34 ', 'AB123456', 'Steuer-ID ', 'tin 1', '1 85 05 ', 'sécurité sociale 1',
     '12345678', 'X1234567', 'RSSMRA', '11010519491231002', '138-1234-', '手机 138', 'A123456(', 'HKID A',
     'マイナンバー 1234 ', '090-1234-', '900101-', '1 ',
+    '(415) ', '415-555-', '415.555.', '1-', '0', '020 7946 ', '07700 ', '01 23 ', '01.', '03-1234-', '0120-',
+    '010-1234-', '(11) 9', 'phone ', 'tel 1', 'phone +1 ', 'phone (0', 'phone 1 2 3 ', 'phone 1-', 'phone 2026-10-',
+    '電話 0', 'call me at ',
   ])('masks 200KB of %j within 2s of CPU time', async unit => {
     const text = unit.repeat(Math.ceil(SIZE / unit.length)).slice(0, SIZE)
     const started = process.cpuUsage()

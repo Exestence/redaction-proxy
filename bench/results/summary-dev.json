@@ -68,8 +68,8 @@
         "tracking-number": 0
       },
       "latencyMs": {
-        "p50": 0.052833000000021,
-        "p95": 0.12433300000003555
+        "p50": 0.06920800000000327,
+        "p95": 0.1566249999999627
       }
     },
     {
@@ -86,9 +86,9 @@
           "untouched": 0
         },
         "PHONE": {
-          "fullyMasked": 0,
+          "fullyMasked": 1,
           "partlyMasked": 0,
-          "untouched": 1
+          "untouched": 0
         },
         "NATIONAL_ID": {
           "fullyMasked": 1,
@@ -122,11 +122,11 @@
         }
       },
       "macroAverage": {
-        "fullyMasked": 0.7777777777777778,
+        "fullyMasked": 0.8888888888888888,
         "partlyMasked": 0,
-        "untouched": 0.2222222222222222
+        "untouched": 0.1111111111111111
       },
-      "regionPrecision": 0.9602446483180428,
+      "regionPrecision": 0.9629629629629629,
       "hardNegativesMasked": {
         "order-number": 0,
         "uuid": 0,
@@ -138,8 +138,8 @@
         "tracking-number": 0
       },
       "latencyMs": {
-        "p50": 0.04329100000001063,
-        "p95": 0.07883299999997462
+        "p50": 0.04908299999999599,
+        "p95": 0.091083000000026
       }
     },
     {
@@ -156,9 +156,9 @@
           "untouched": 0
         },
         "PHONE": {
-          "fullyMasked": 0,
+          "fullyMasked": 1,
           "partlyMasked": 0,
-          "untouched": 1
+          "untouched": 0
         },
         "NATIONAL_ID": {
           "fullyMasked": 1,
@@ -192,11 +192,11 @@
         }
       },
       "macroAverage": {
-        "fullyMasked": 0.8608187134502924,
+        "fullyMasked": 0.9719298245614034,
         "partlyMasked": 0,
-        "untouched": 0.1391812865497076
+        "untouched": 0.028070175438596492
       },
-      "regionPrecision": 0.9641379310344828,
+      "regionPrecision": 0.9663648124191462,
       "hardNegativesMasked": {
         "order-number": 0,
         "uuid": 0,
@@ -208,8 +208,8 @@
         "tracking-number": 0
       },
       "latencyMs": {
-        "p50": 5.843166999999994,
-        "p95": 12.91579200000001
+        "p50": 5.686208000000079,
+        "p95": 12.89108299999998
       }
     },
     {
@@ -278,8 +278,8 @@
         "tracking-number": 1
       },
       "latencyMs": {
-        "p50": 5.941583949606866,
-        "p95": 7.663875003345311
+        "p50": 6.130333000328392,
+        "p95": 8.436958014499396
       }
     },
     {
@@ -348,8 +348,8 @@
         "tracking-number": 0
       },
       "latencyMs": {
-        "p50": 5.858541000634432,
-        "p95": 7.50291597796604
+        "p50": 5.9071669820696115,
+        "p95": 7.598292024340481
       }
     }
   ],
@@ -420,8 +420,8 @@
         "tracking-number": 0
       },
       "latencyMs": {
-        "p50": 0.05012499999997999,
-        "p95": 0.09383300000001782
+        "p50": 0.058708000000024185,
+        "p95": 0.11541599999998198
       }
     },
     {
@@ -438,9 +438,9 @@
           "untouched": 0
         },
         "PHONE": {
-          "fullyMasked": 0.6062176165803109,
+          "fullyMasked": 0.8549222797927462,
           "partlyMasked": 0,
-          "untouched": 0.39378238341968913
+          "untouched": 0.14507772020725387
         },
         "NATIONAL_ID": {
           "fullyMasked": 0.8985507246376812,
@@ -474,11 +474,11 @@
         }
       },
       "macroAverage": {
-        "fullyMasked": 0.8338631490242213,
+        "fullyMasked": 0.8614970004922697,
         "partlyMasked": 0,
-        "untouched": 0.16613685097577868
+        "untouched": 0.13850299950773032
       },
-      "regionPrecision": 0.962381300219138,
+      "regionPrecision": 0.963375224416517,
       "hardNegativesMasked": {
         "order-number": 0,
         "uuid": 0,
@@ -486,12 +486,12 @@
         "version": 0,
         "commit-hash": 0.46153846153846156,
         "epoch-millis": 0,
-        "sha256": 0.005,
+        "sha256": 0,
         "tracking-number": 0
       },
       "latencyMs": {
-        "p50": 0.04795799999999417,
-        "p95": 0.08825000000001637
+        "p50": 0.06062499999995907,
+        "p95": 0.12079099999994014
       }
     },
     {
@@ -508,9 +508,9 @@
           "untouched": 0
         },
         "PHONE": {
-          "fullyMasked": 0.6062176165803109,
+          "fullyMasked": 0.8549222797927462,
           "partlyMasked": 0,
-          "untouched": 0.39378238341968913
+          "untouched": 0.14507772020725387
         },
         "NATIONAL_ID": {
           "fullyMasked": 0.8985507246376812,
@@ -544,11 +544,11 @@
         }
       },
       "macroAverage": {
-        "fullyMasked": 0.9073674225284949,
+        "fullyMasked": 0.9350012739965431,
         "partlyMasked": 0.009686609686609686,
-        "untouched": 0.08294596778489548
+        "untouched": 0.055312116316847106
       },
-      "regionPrecision": 0.966006600660066,
+      "regionPrecision": 0.9668508287292817,
       "hardNegativesMasked": {
         "order-number": 0,
         "uuid": 0,
@@ -556,12 +556,12 @@
         "version": 0,
         "commit-hash": 0.46153846153846156,
         "epoch-millis": 0,
-        "sha256": 0.005,
+        "sha256": 0,
         "tracking-number": 0
       },
       "latencyMs": {
-        "p50": 5.844250000000102,
-        "p95": 13.627583999999842
+        "p50": 5.9513749999996435,
+        "p95": 13.478916999999456
       }
     },
     {
@@ -630,8 +630,8 @@
         "tracking-number": 1
       },
       "latencyMs": {
-        "p50": 5.228166002780199,
-        "p95": 7.297417032532394
+        "p50": 5.391207989305258,
+        "p95": 7.5577080133371055
       }
     },
     {
@@ -700,8 +700,8 @@
         "tracking-number": 0.15841584158415842
       },
       "latencyMs": {
-        "p50": 5.182666995096952,
-        "p95": 7.2732080006971955
+        "p50": 5.2767080487683415,
+        "p95": 7.413042010739446
       }
     }
   ]

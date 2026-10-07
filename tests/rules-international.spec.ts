@@ -8,6 +8,7 @@ import { describe, expect, it } from 'vitest'
 import {
   DEFAULT_RULE_NAMES,
   DETECTOR_VERSION,
+  EXTENDED_RULE_NAMES,
   INTERNATIONAL_RULE_NAMES,
   RULE_NAMES,
   RulesDetector,
@@ -136,6 +137,74 @@ describe('international rules', () => {
   })
 })
 
+// Numbers in the 555-01xx range, Ofcom drama ranges, and sequential digits: none is assigned to anyone.
+describe('national telephone formats', () => {
+  const phoneRules = new RulesDetector({
+    rules: ['e164-phone', 'us-phone', 'uk-phone', 'fr-phone', 'jp-phone', 'kr-mobile', 'kr-phone', 'br-phone', 'phone-keyword'],
+  })
+
+  it.each([
+    ['Call me at (415) 555-0132 tomorrow.', 'Call me at ⟦PHONE_1⟧ tomorrow.'],
+    ['office 415-555-0132, lab 415.555.0199', 'office ⟦PHONE_1⟧, lab ⟦PHONE_2⟧'],
+    ['toll free 1-800-555-0199', 'toll free ⟦PHONE_1⟧'],
+    ['London 020 7946 0958, Leeds 0113 496 0000', 'London ⟦PHONE_1⟧, Leeds ⟦PHONE_2⟧'],
+    ['mobile 07700 900123 or 07700 900 123', 'mobile ⟦PHONE_1⟧ or ⟦PHONE_2⟧'],
+    ['appelez le 01 23 45 67 89 ou 06.12.34.56.78', 'appelez le ⟦PHONE_1⟧ ou ⟦PHONE_2⟧'],
+    ['本社 03-1234-5678、横浜 045-123-4567、0120-123-456', '本社 ⟦PHONE_1⟧、横浜 ⟦PHONE_2⟧、⟦PHONE_3⟧'],
+    ['연락 010-1234-5678', '연락 ⟦PHONE_1⟧'],
+    ['celular (11) 91234-5678, fixo (21) 3456-7890', 'celular ⟦PHONE_1⟧, fixo ⟦PHONE_2⟧'],
+    ['Telefon: 030 12345678, Handy 0151/23456789', 'Telefon: ⟦PHONE_1⟧, Handy ⟦PHONE_2⟧'],
+    ['phone 98765 43210', 'phone ⟦PHONE_1⟧'],
+    ['tel 4155550132, phone_number: 4155550199', 'tel ⟦PHONE_1⟧, phone_number: ⟦PHONE_2⟧'],
+    ['Tél : (0)1 23 45 67 89', 'Tél : ⟦PHONE_1⟧'],
+    ['電話 02 2345 6789', '電話 ⟦PHONE_1⟧'],
+    ['WhatsApp +55 11 91234-5678', 'WhatsApp ⟦PHONE_1⟧'],
+    ['tel 02.123.45.67', 'tel ⟦PHONE_1⟧'],
+    ['reach (415)-555-0132 or 415\u2013555\u20130199', 'reach ⟦PHONE_1⟧ or ⟦PHONE_2⟧'],
+    ['office 0207 946 0958', 'office ⟦PHONE_1⟧'],
+    ['東京 (03) 1234-5678、03\u22121234\u22125678', '東京 ⟦PHONE_1⟧、⟦PHONE_2⟧'],
+    ['서울 02-123-4567, 경기 031-1234-5678', '서울 ⟦PHONE_1⟧, 경기 ⟦PHONE_2⟧'],
+    ['ligue (11) 9 1234-5678', 'ligue ⟦PHONE_1⟧'],
+    ['Ph: 0412 345 678, mob 0412 345 679, cel: 55 1234 5678', 'Ph: ⟦PHONE_1⟧, mob ⟦PHONE_2⟧, cel: ⟦PHONE_3⟧'],
+    ['Tlf. 22 33 44 55, телефон 8 912 345-67-89', 'Tlf. ⟦PHONE_1⟧, телефон ⟦PHONE_2⟧'],
+    ['Contact:\n+44 20 7946 0958\n+44 (0)20 7946 0959\n+33 1 23 45 67 89', 'Contact:\n⟦PHONE_1⟧\n⟦PHONE_2⟧\n⟦PHONE_3⟧'],
+    ['Tel. No. 030 12345678, Tel.-Nr.: 0151 23456789, Fax No. 030 12345679', 'Tel. No. ⟦PHONE_1⟧, Tel.-Nr.: ⟦PHONE_2⟧, Fax No. ⟦PHONE_3⟧'],
+    ['phone number is 9876543210, call me at 4155550132', 'phone number is ⟦PHONE_1⟧, call me at ⟦PHONE_2⟧'],
+  ])('masks %j', async (text, expected) => {
+    expect(await maskWith(phoneRules, text)).toBe(expected)
+  })
+
+  it.each([
+    ['a number after a keyword that is too short', 'Phone: 3 retries, tel 1234567'],
+    ['a number after a field that starts with a keyword', 'cell_id 123456789 tel_ext 12345678 mobile2 12345678'],
+    ['a date after a keyword', 'phone: 2026-10-07 and mobile 2026/10/07, Tel. 2026 10 07'],
+    ['an IPv4 address after a keyword', 'SIP phone 10.20.30.40, cell 192.168.100.200'],
+    ['a number after a keyword and another word', 'phone count 12345678, whatsapp group 12345678, Tel (office) 030 12345678'],
+    ['a Korean shape with an unassigned area code', '07-123-4567 and 09-123-4567'],
+    ['bare ten digits', 'order 4155550132'],
+    ['space-separated groups without a keyword', 'row 415 555 0132'],
+    ['a North American shape with a 0 or 1 area code', '015-555-0132 115-555-0132'],
+    ['mixed separators', '415-555.0132'],
+    ['a dotted version', 'version 1.415.555.0132'],
+    ['a group of a longer hyphenated run', 'id 123-415-555-0132 and 415-555-0132-77'],
+    ['arithmetic with spaced operators', 'x = 415 - 555 - 0132'],
+    ['a timestamp', '2026-10-07 12:34:56.789'],
+    ['an ISBN', 'ISBN 978-3-16-148410-0'],
+    ['an SSN', 'id 123-45-6789'],
+    ['an IPv4 address', 'host 10.20.30.40'],
+    ['a digit table row', '| 415 | 555 | 0132 |'],
+    ['a hex dump', '00 01 02 03 04 05 06 07 08'],
+    ['two-digit pairs in a longer run', '01 23 45 67 89 10'],
+    ['a zero-led date', '0001-01-2026'],
+    ['a Japanese shape with too many digits', '03-1234-56789'],
+    ['a UUID', '123e4567-e89b-12d3-a456-426614174000'],
+    ['a CSV row', '2026,415,555,0132'],
+    ['an ungrouped number at the start of a line, behind a diff marker', '+1792055696732,1\n+2026-02-27 17:06:23\n+1 2 3 4 5 6 7 8\n+10.20.30.40.50'],
+  ])('leaves %s alone', async (_name, text) => {
+    expect(await maskWith(phoneRules, text)).toBe(text)
+  })
+})
+
 describe('international rule configuration', () => {
   it('keeps the default rules, detector version, and policy digest of detectors built before the international rules', () => {
     const detector = new RulesDetector()
@@ -146,19 +215,19 @@ describe('international rule configuration', () => {
 
   it('versions and digests a detector with any international rule apart from the default', () => {
     const withIban = new RulesDetector({ rules: [...DEFAULT_RULE_NAMES, 'iban'] })
-    expect(withIban.detectorVersion).toBe(`${DETECTOR_VERSION}+intl-1`)
+    expect(withIban.detectorVersion).toBe(`${DETECTOR_VERSION}+intl-2`)
     expect(withIban.policyDigest).not.toBe(LEGACY_DEFAULT_DIGEST)
     expect(withIban.categories).toContain('IBAN')
   })
 
   it('lists every international rule after the default rules and refuses an unknown one', () => {
-    expect(RULE_NAMES).toEqual([...DEFAULT_RULE_NAMES, ...INTERNATIONAL_RULE_NAMES])
+    expect(RULE_NAMES).toEqual([...DEFAULT_RULE_NAMES, ...INTERNATIONAL_RULE_NAMES, ...EXTENDED_RULE_NAMES])
     expect(new RulesDetector({ rules: [...INTERNATIONAL_RULE_NAMES] }).categories).toEqual(['IBAN', 'PHONE', 'TAXID', 'NATID'])
     expect(() => resolveRulesConfig({ rules: ['br-cpf'] } as never)).toThrow('unknown rule "br-cpf"')
   })
 
-  it('enables every rule but e164-phone in the proxy unless the config file names its own', () => {
-    expect(loadConfig(undefined, {}).redaction.rules).toEqual(RULE_NAMES.filter(rule => rule !== 'e164-phone'))
+  it('enables every rule, with the strict card and entropy rules in place of the default ones, unless the config file names its own', () => {
+    expect(loadConfig(undefined, {}).redaction.rules).toEqual(RULE_NAMES.filter(rule => rule !== 'card' && rule !== 'entropy'))
     const dir = mkdtempSync(join(tmpdir(), 'proxy-config-'))
     const path = join(dir, 'config.json')
     writeFileSync(path, JSON.stringify({ redaction: { rules: ['e164-phone'] } }))
@@ -169,10 +238,12 @@ describe('international rule configuration', () => {
     }
   })
 
-  it('leaves a diff line that starts with a timestamp alone under the proxy default', async () => {
+  it('leaves a diff line that starts with a timestamp or a number alone, and a dated `+` mid-line too', async () => {
     const proxyDefault = new RulesDetector(loadConfig(undefined, {}).redaction)
-    const line = '+2026-02-27 17:06:23 INFO started\n+1792055696732,7623,ok'
-    expect(await maskWith(proxyDefault, line)).toBe(line)
-    expect(await maskWith(everyRule, line)).not.toBe(line)
+    for (const line of ['+2026-02-27 17:06:23 INFO started\n+1792055696732,7623,ok', 'at +2026-10-05 12:00 UTC']) {
+      expect(await maskWith(proxyDefault, line)).toBe(line)
+      expect(await maskWith(everyRule, line)).toBe(line)
+    }
+    expect(await maskWith(proxyDefault, '+ call +1 415 555 0132')).toBe('+ call ⟦PHONE_1⟧')
   })
 })

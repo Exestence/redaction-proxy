@@ -107,12 +107,34 @@ const CARD_RUN_AFTER_ESCAPE = afterHighEscape(CARD_RUN, '(?<!\\d)')
 const PHONE_MOBILE_SPLIT_AFTER_ESCAPE = afterHighEscape(PHONE_MOBILE_SPLIT, '(?<![A-Za-z0-9-])')
 const PHONE_KEYWORD_AFTER_ESCAPE = afterHighEscape(PHONE_KEYWORD, '(?<!\\d)')
 const PRIVATE_IP_AFTER_ESCAPE = afterHighEscape(PRIVATE_IP, '(?<![\\d.])')
+/**
+ * Group lengths of a printed card number, joined by commas: fours with an
+ * optional short last group, or the 4-6-5 and 4-6-4 groupings of American
+ * Express and Diners Club.
+ */
+const CARD_GROUPING = /^4(?:,4){2,3}(?:,[34])?$|^4,6,[45]$/
+/** A character that glues a digit run to a longer token: a letter or `_`. */
+const TOKEN_CHAR = /[A-Za-z_]/
+/** The two characters before a digit run that opens a revision range (`a1b2..`) or is the fraction of a decimal number. */
+const RANGE_OR_DECIMAL_POINT = /^[.\d]\.$/
 const HOST_SUFFIX = /\.(?:local|lan|internal)(?![a-z0-9-])/gi
 const HOST_CHAR = /[A-Za-z0-9.-]/
 const HOST_FIRST_WORD = /^[A-Za-z0-9_$]+/
 const HEX_RUN = /\b[0-9a-fA-F]{32,}\b/g
 const BASE64_RUN = /[A-Za-z0-9+/]{32,}={0,2}/g
 const SUBRESOURCE_PREFIX = /sha\d{3}-$/
+/** Hexadecimal lengths of SHA-1 and SHA-256 digests, which git object ids and content hashes have. */
+const DIGEST_HEX_LENGTHS = [40, 64]
+/** Hexadecimal length of a SHA-1 commit id, which pins a dependency after `@` (`actions/checkout@<sha>`). */
+const GIT_COMMIT_HEX_LENGTH = 40
+/**
+ * Line text before a value keyed by a file name, as translation catalogs
+ * record source hashes: `README.md: `, `  docs/x.zh.md: "`, and the same
+ * line behind a diff's `+` or `-` marker.
+ */
+const FILE_NAME_KEY = /(?:^[+-]?|\s)[\w./-]*\.[A-Za-z0-9]{1,8}["']?\s*:\s*["']?$/
+/** How far back on the line the file-name key is looked for. */
+const FILE_NAME_KEY_MAX = 128
 
 const SHA_CONTEXT = /commit|sha|hash|rev|digest|checksum|blob|tree|oid|integrity|etag/i
 const SECRET_CONTEXT = /secret|token|password|api[_-]?key|authorization|credential/i
@@ -383,6 +405,61 @@ export function collectCardCandidates(text: string, push: PushCandidate, afterEs
 }
 
 /**
+ * Collect payment card numbers only in the forms cards are printed in, for the
+ * opt-in `card-strict` rule: one whole digit group of 13 to 19 digits (after a
+ * single leading `0` when the run is one group), or whole groups in a card
+ * grouping joined by one separator that no further group with that separator
+ * extends. A mask therefore never ends inside a digit group, and
+ * `8000 5259-6589 0921-9030` or a numeric UUID is not cut into a card. A run
+ * glued to a letter or `_`, opened by a `..` revision range, or the fraction of
+ * a decimal number (`1432.4982166290283`) is not read.
+ * @param text - text to scan.
+ * @param push - candidate sink.
+ * @param afterEscape - whether `text` holds a high escape, which then also counts as a left boundary.
+ */
+export function collectStrictCardCandidates(text: string, push: PushCandidate, afterEscape = false): void {
+  const pushCard = (digits: string, start: number, end: number): void => {
+    if (digits.length < 13 || digits.length > 19 || !validCardPrefix(digits) || !luhn(digits)) return
+    push(start, end, 'CARD', PRIORITY_PII)
+  }
+  for (const pattern of afterEscape ? [CARD_RUN, CARD_RUN_AFTER_ESCAPE] : [CARD_RUN]) {
+    runAll(pattern, text, (match) => {
+      const end = match.index + match[0].length
+      if (TOKEN_CHAR.test(text.charAt(match.index - 1)) && !endsHighEscape(text, match.index)) return
+      if (TOKEN_CHAR.test(text.charAt(end)) || RANGE_OR_DECIMAL_POINT.test(text.slice(match.index - 2, match.index))) return
+      // Each group with its offset in `text` and the separator before it (`''` for the first).
+      const groups = [...match[0].matchAll(/\d+/g)].map(group => ({
+        digits: group[0],
+        start: match.index + group.index,
+        separator: match[0].charAt(group.index - 1),
+      }))
+      for (const group of groups) pushCard(group.digits, group.start, group.start + group.digits.length)
+      if (groups.length === 1 && match[0].startsWith('0')) pushCard(match[0].slice(1), match.index + 1, end)
+      // Each maximal chain of groups joined by one separator is one printed number or none;
+      // neighbouring chains share the group between them.
+      let chain: typeof groups = []
+      let separator = ''
+      const pushChain = (): void => {
+        const [head] = chain
+        const tail = chain.at(-1)
+        if (chain.length < 2 || head === undefined || tail === undefined) return
+        if (!CARD_GROUPING.test(chain.map(group => group.digits.length).join(','))) return
+        pushCard(chain.map(group => group.digits).join(''), head.start, tail.start + tail.digits.length)
+      }
+      for (const group of groups) {
+        if (chain.length > 1 && group.separator !== separator) {
+          pushChain()
+          chain = chain.slice(-1)
+        }
+        if (chain.length === 1) separator = group.separator
+        chain.push(group)
+      }
+      pushChain()
+    })
+  }
+}
+
+/**
  * Collect private addresses, and internal host names anchored on their suffix.
  * @param text - text to scan.
  * @param rules - which of `ip` and `host` are enabled.
@@ -406,9 +483,25 @@ export function collectNetworkCandidates(
       })
     }
   }
-  if (!rules.has('host')) return
+  if (rules.has('host')) collectHostCandidates(text, HOST_SUFFIX, push, originalAt)
+}
+
+/**
+ * Collect host names anchored on a private suffix: the name is walked back
+ * from the suffix match and ends where the match ends.
+ * @param text - text to scan.
+ * @param suffix - global pattern matching a suffix from its leading `.`, plus any labels after it that belong to the name.
+ * @param push - candidate sink.
+ * @param originalAt - the submitted character an offset of `text` came from; `(` right after the name marks a call.
+ */
+export function collectHostCandidates(
+  text: string,
+  suffix: RegExp,
+  push: PushCandidate,
+  originalAt: (offset: number) => string = offset => text.charAt(offset),
+): void {
   // Anchor on the suffix and walk back, so a long dotted run stays linear.
-  runAll(HOST_SUFFIX, text, (match) => {
+  runAll(suffix, text, (match) => {
     const floor = Math.max(0, match.index - HOST_NAME_MAX)
     let start = match.index
     while (start > floor && HOST_CHAR.test(text.charAt(start - 1))) start -= 1
@@ -423,12 +516,27 @@ export function collectNetworkCandidates(
 }
 
 /**
+ * Whether the value at an offset is keyed by a file name on its line.
+ * @param text - text holding the value.
+ * @param at - the value's start offset.
+ * @returns whether the line text before the value ends in a file-name key.
+ */
+function isFileNameKeyed(text: string, at: number): boolean {
+  const lineStart = Math.max(text.lastIndexOf('\n', at - 1) + 1, at - FILE_NAME_KEY_MAX)
+  return FILE_NAME_KEY.test(text.slice(lineStart, at))
+}
+
+/**
  * Collect high-entropy runs. A run beside credential words is a credential; a
  * 32, 40, or 64 digit hexadecimal run beside revision words is a digest.
  * @param text - text to scan.
  * @param push - candidate sink.
+ * @param fileDigests - whether a 40 or 64 digit hexadecimal run keyed by a file
+ *   name (`README.md: <sha>`, as translation catalogs record source hashes),
+ *   and a 40 digit run right after `@` (`actions/checkout@<sha>`), is a digest
+ *   too; the opt-in `entropy-strict` rule sets it.
  */
-export function collectEntropyCandidates(text: string, push: PushCandidate): void {
+export function collectEntropyCandidates(text: string, push: PushCandidate, fileDigests = false): void {
   const contextAround = (start: number, end: number): string =>
     text.slice(Math.max(0, start - 32), start) + text.slice(end, Math.min(text.length, end + 32))
 
@@ -441,6 +549,8 @@ export function collectEntropyCandidates(text: string, push: PushCandidate): voi
       return
     }
     if ([32, 40, 64].includes(match[0].length) && SHA_CONTEXT.test(context)) return
+    if (fileDigests && DIGEST_HEX_LENGTHS.includes(match[0].length) && isFileNameKeyed(text, match.index)) return
+    if (fileDigests && match[0].length === GIT_COMMIT_HEX_LENGTH && text.charAt(match.index - 1) === '@') return
     push(match.index, end, 'ENTROPY', PRIORITY_ENTROPY)
   })
 

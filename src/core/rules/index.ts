@@ -3,7 +3,7 @@
  * identification and business numbers, telephone numbers, payment card
  * numbers, credentials, high-entropy runs, private addresses, internal host
  * names, configured literal terms, and, when enabled, identifiers issued
- * outside Taiwan, with every rule run again over an NFKC
+ * outside Taiwan and the extended rules, with every rule run again over an NFKC
  * projection, over a percent-decoded projection, and over the NFKC projection
  * of the decoded text, and every detected value propagated to its other
  * occurrences.
@@ -28,6 +28,7 @@ import {
   collectNetworkCandidates,
   collectNumberCandidates,
   collectPathCandidates,
+  collectStrictCardCandidates,
   collectTermCandidates,
   termIdentityKey,
 } from './rules.ts'
@@ -40,10 +41,19 @@ import {
   INTERNATIONAL_RULES_VERSION,
   isInternationalRule,
 } from './international.ts'
+import type { ExtendedRuleName } from './extended.ts'
+import {
+  EXTENDED_COLLECTORS,
+  EXTENDED_RULE_CATEGORIES,
+  EXTENDED_RULE_NAMES,
+  EXTENDED_RULES_VERSION,
+  isExtendedRule,
+} from './extended.ts'
 
 export { isTaiwanBusinessNumber, isTaiwanNationalId } from './checksum.ts'
 
 export type { InternationalRuleName } from './international.ts'
+export type { ExtendedRuleName } from './extended.ts'
 
 /** Names of the rules enabled by default. */
 export type DefaultRuleName =
@@ -59,7 +69,7 @@ export type DefaultRuleName =
   | 'entropy'
 
 /** Built-in rule names. */
-export type RedactionRuleName = DefaultRuleName | InternationalRuleName
+export type RedactionRuleName = DefaultRuleName | InternationalRuleName | ExtendedRuleName
 
 /** Rules-provider configuration. */
 export interface RulesRedactionConfig {
@@ -91,8 +101,12 @@ export const DEFAULT_RULE_NAMES: readonly DefaultRuleName[] = [
   'email', 'user-path', 'api-key', 'tw-national-id', 'phone', 'tax-id', 'card', 'ip', 'host', 'entropy',
 ]
 
-/** Every built-in rule name, in declaration order: the default rules, then the international ones. */
-export const RULE_NAMES: readonly RedactionRuleName[] = [...DEFAULT_RULE_NAMES, ...INTERNATIONAL_RULE_NAMES]
+/**
+ * Every built-in rule name, in declaration order: the default rules, the
+ * international ones, then the extended ones. Enabling `card` with
+ * `card-strict`, or `entropy` with `entropy-strict`, masks what either masks.
+ */
+export const RULE_NAMES: readonly RedactionRuleName[] = [...DEFAULT_RULE_NAMES, ...INTERNATIONAL_RULE_NAMES, ...EXTENDED_RULE_NAMES]
 
 const PERCENT_ESCAPE = /%[0-9A-Fa-f]{2}/
 
@@ -119,7 +133,8 @@ const DEFAULT_RULE_CATEGORIES: Readonly<Record<DefaultRuleName, readonly string[
  * @returns the rule's categories, in the order `categories` lists them.
  */
 function categoriesOf(rule: RedactionRuleName): readonly string[] {
-  return isInternationalRule(rule) ? [INTERNATIONAL_RULE_CATEGORIES[rule]] : DEFAULT_RULE_CATEGORIES[rule]
+  if (isInternationalRule(rule)) return [INTERNATIONAL_RULE_CATEGORIES[rule]]
+  return isExtendedRule(rule) ? EXTENDED_RULE_CATEGORIES[rule] : DEFAULT_RULE_CATEGORIES[rule]
 }
 
 /**
@@ -194,6 +209,7 @@ export class RulesDetector implements RedactionDetector {
   readonly categories: readonly string[]
   private readonly rules: ReadonlySet<RedactionRuleName>
   private readonly internationalRules: readonly InternationalRuleName[]
+  private readonly extendedRules: readonly ExtendedRuleName[]
   private readonly terms: readonly ConfiguredTerm[]
   private readonly allowlist: ReadonlySet<string>
 
@@ -205,9 +221,12 @@ export class RulesDetector implements RedactionDetector {
     const resolved = resolveRulesConfig(config)
     this.rules = new Set(resolved.rules)
     this.internationalRules = INTERNATIONAL_RULE_NAMES.filter(rule => this.rules.has(rule))
-    this.detectorVersion = this.internationalRules.length === 0
-      ? DETECTOR_VERSION
-      : `${DETECTOR_VERSION}+${INTERNATIONAL_RULES_VERSION}`
+    this.extendedRules = EXTENDED_RULE_NAMES.filter(rule => this.rules.has(rule))
+    this.detectorVersion = [
+      DETECTOR_VERSION,
+      ...this.internationalRules.length === 0 ? [] : [INTERNATIONAL_RULES_VERSION],
+      ...this.extendedRules.length === 0 ? [] : [EXTENDED_RULES_VERSION],
+    ].join('+')
     this.terms = [
       ...resolved.projectNames.map(value => ({ value, category: 'PROJECT' })),
       ...resolved.terms.map(value => ({ value, category: 'TERM' })),
@@ -256,9 +275,12 @@ export class RulesDetector implements RedactionDetector {
     // Before cards: an identity number that is also a Luhn-valid digit run keeps its own category.
     for (const rule of this.internationalRules) INTERNATIONAL_COLLECTORS[rule](text, push)
     if (this.rules.has('card')) collectCardCandidates(text, push, afterEscape)
+    if (this.rules.has('card-strict')) collectStrictCardCandidates(text, push, afterEscape)
     collectNetworkCandidates(text, this.rules, push, originalAt, afterEscape)
     if (this.rules.has('api-key')) collectSecretCandidates(text, push, afterEscape)
+    for (const rule of this.extendedRules) EXTENDED_COLLECTORS[rule]?.(text, push, originalAt)
     if (this.rules.has('entropy')) collectEntropyCandidates(text, push)
+    if (this.rules.has('entropy-strict')) collectEntropyCandidates(text, push, true)
     if (!skipTerms) collectTermCandidates(text, this.terms, push)
   }
 
