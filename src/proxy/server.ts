@@ -1,5 +1,5 @@
 /**
- * The redaction proxy: an HTTP server on 127.0.0.1 that masks the text of
+ * The redaction proxy: an HTTP server, on 127.0.0.1 by default, that masks the text of
  * OpenAI Chat Completions, OpenAI Responses, and Anthropic Messages requests,
  * forwards them to the configured upstream with the client's own credentials,
  * and restores placeholders in the JSON or SSE response.
@@ -715,15 +715,17 @@ function abortedByClient(error: unknown): boolean {
 }
 
 /**
- * Listen on 127.0.0.1 only; the proxy holds no authentication of its own.
+ * Listen on `host`, 127.0.0.1 unless the caller names another address; the
+ * proxy holds no authentication of its own.
  * @param server - the proxy server.
  * @param port - TCP port; 0 picks a free one.
+ * @param host - address to bind.
  * @returns the bound port.
  */
-export function listen(server: Server, port: number): Promise<number> {
+export function listen(server: Server, port: number, host = '127.0.0.1'): Promise<number> {
   return new Promise((resolve, reject) => {
     server.once('error', reject)
-    server.listen(port, '127.0.0.1', () => {
+    server.listen(port, host, () => {
       const address = server.address()
       resolve(typeof address === 'object' && address !== null ? address.port : port)
     })

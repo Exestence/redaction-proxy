@@ -63,7 +63,8 @@ Pass a JSON file with `node lib/cli.js --config redaction.json`; environment var
 
 | Key | Default | Meaning |
 | --- | --- | --- |
-| `port` | `8787` | Binds `127.0.0.1` only. |
+| `port` | `8787` | TCP port. |
+| `host` | `127.0.0.1` | Address to bind. Anything else exposes the proxy, which has no authentication, to every host that can reach it. |
 | `openaiUpstream` | `https://api.openai.com` | Upstream for Chat Completions and Responses. |
 | `anthropicUpstream` | `https://api.anthropic.com` | Upstream for Anthropic Messages. |
 | `redaction.terms` | none | Names and other words to mask, case-insensitive. |
@@ -168,7 +169,7 @@ Full tables: [held-out results](bench/results/public-bench-held-out.md), [dev re
 - **Images, PDFs, audio, `metadata`, tool names, signed thinking.** These are forwarded unchanged and never scanned, nor are JSON object keys: a value found in the masked text that also appears in one makes the proxy refuse the whole request with 422, but a value that appears only there is sent as is.
 - **Unusual spellings.** Some split or encoded forms slip through, such as `name @ domain` with spaces, `name at domain`, a lower-case IBAN, or a double percent-encoded value.
 - **Cursor**, or any tool that sends requests from its own servers.
-- **Other programs on your machine.** The proxy binds `127.0.0.1` only, with no authentication. It refuses browser requests from non-loopback origins and requests for other host names (DNS rebinding) with 403.
+- **Other programs on your machine.** The proxy binds `127.0.0.1` by default, with no authentication. It refuses browser requests from non-loopback origins and requests for other host names (DNS rebinding) with 403.
 - **Where the model puts a value.** The proxy restores a placeholder wherever the model writes it, including tool-call arguments: a model that writes `https://example.test/?q=⟦EMAIL_1⟧` into a fetch tool call gets your tool to send the real email there.
 
 Also: a model that rewrites `⟦EMAIL_1⟧` as `[EMAIL_1]` shows it to you as written; tasks that need the masked value itself get worse; control characters become visible stand-ins; a restart forgets Responses API continuations, and continuing one is refused with 422; requests over 64 MiB are refused with 413. Full list: [technical details §17](docs/DETAILS.md#17-完整限制清單); threat model: [§11](docs/DETAILS.md#11-威脅模型).

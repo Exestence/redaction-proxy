@@ -17,8 +17,14 @@ export type ScreenMode = 'replace' | 'refuse'
 
 /** Validated proxy configuration. */
 export interface ProxyConfig {
-  /** TCP port on 127.0.0.1. */
+  /** TCP port. */
   port: number
+  /**
+   * Address to bind; `127.0.0.1` by default. The proxy has no authentication,
+   * so any other address lets every host that can reach it use the client
+   * credentials it forwards. The Docker image sets `0.0.0.0`.
+   */
+  host: string
   /** Base URL that `/v1/chat/completions`, `/v1/responses`, and OpenAI-style GETs are forwarded to. */
   openaiUpstream: string
   /** Base URL that `/v1/messages` and Anthropic-style GETs are forwarded to. */
@@ -51,7 +57,7 @@ export interface ProxyConfig {
  */
 export const PROXY_DEFAULT_RULES = RULE_NAMES.filter(rule => rule !== 'e164-phone')
 
-const FILE_KEYS = new Set(['port', 'openaiUpstream', 'anthropicUpstream', 'redaction', 'nameModel', 'screen', 'debugMasked'])
+const FILE_KEYS = new Set(['port', 'host', 'openaiUpstream', 'anthropicUpstream', 'redaction', 'nameModel', 'screen', 'debugMasked'])
 
 /**
  * Check one upstream base URL.
@@ -93,12 +99,15 @@ export function loadConfig(path: string | undefined, env: NodeJS.ProcessEnv): Pr
   }
   const port = Number(env.REDACTION_PROXY_PORT ?? file.port ?? 8787)
   if (!Number.isInteger(port) || port < 0 || port > 65535) throw new Error('port must be an integer in 0..65535')
+  const host = env.REDACTION_PROXY_HOST ?? file.host ?? '127.0.0.1'
+  if (typeof host !== 'string' || host === '') throw new Error('host must be a non-empty string')
   const screen = env.REDACTION_PROXY_SCREEN ?? file.screen ?? 'replace'
   if (screen !== 'replace' && screen !== 'refuse') throw new Error('screen must be "replace" or "refuse"')
   const redaction = { rules: [...PROXY_DEFAULT_RULES], ...(file.redaction ?? {}) } as RulesRedactionConfig
   resolveRulesConfig(redaction)
   const config: ProxyConfig = {
     port,
+    host,
     openaiUpstream: upstream(env.REDACTION_PROXY_OPENAI_UPSTREAM ?? file.openaiUpstream ?? 'https://api.openai.com', 'openaiUpstream'),
     anthropicUpstream: upstream(env.REDACTION_PROXY_ANTHROPIC_UPSTREAM ?? file.anthropicUpstream ?? 'https://api.anthropic.com', 'anthropicUpstream'),
     redaction,

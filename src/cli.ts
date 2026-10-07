@@ -32,9 +32,12 @@ try {
 }
 const nameModel = config.nameModel === undefined ? undefined : await loadNameModel(config.nameModel).catch(exitWith)
 const server = createProxyServer(config, undefined, nameModel)
-const port = await listen(server, config.port)
+const port = await listen(server, config.port, config.host)
 for (const signal of ['SIGINT', 'SIGTERM'] as const) {
   process.once(signal, () => void closeProxy(server, nameModel))
 }
 const modelNote = nameModel === undefined ? '' : ', name model on (experimental)'
-console.error(`redaction-proxy on http://127.0.0.1:${port} -> openai ${config.openaiUpstream}, anthropic ${config.anthropicUpstream}${modelNote}`)
+if (!['127.0.0.1', '::1', 'localhost'].includes(config.host)) {
+  console.error(`redaction-proxy: WARNING bound to ${config.host} with no authentication; anyone who can reach this port can use the credentials it forwards`)
+}
+console.error(`redaction-proxy on http://${config.host.includes(':') ? `[${config.host}]` : config.host}:${port} -> openai ${config.openaiUpstream}, anthropic ${config.anthropicUpstream}${modelNote}`)

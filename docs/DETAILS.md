@@ -297,7 +297,7 @@ POST /v1/chat/completions -> 200 masked 3 (EMAIL 1, TWID 1, PATH 1) restored 3 u
 - 惡意上游把佔位符寫進工具呼叫參數（例如 `https://example.test/?q=⟦EMAIL_1⟧`）：代理在工具參數中照常還原，用戶端執行工具時就把原始值送往該處。代理本身不送，但用戶端的工具會；
 - 輸入者刻意規避（例如用規則不會折疊的字元拆開一個值）。
 
-代理只綁定 `127.0.0.1`，綁定位址不可設定；socket 沒有身分驗證。
+代理預設只綁定 `127.0.0.1`；socket 沒有身分驗證。`host` 可改成其他位址，但任何連得到該埠的主機都能透過代理使用它轉送的憑證（包括環境變數中的備援金鑰），所以啟動時會印出警告。Docker 映像在容器內綁定 `0.0.0.0`，只能以 `-p 127.0.0.1:8787:8787` 對應到本機。
 
 品質影響：需要直接操作被遮值的任務（把絕對路徑改成相對路徑、對地點做推理）可能變差。這類失敗看得見（回覆中會出現佔位符或錯誤的推論），不是把錯誤的值靜默寫回。
 
@@ -323,7 +323,8 @@ POST /v1/chat/completions -> 200 masked 3 (EMAIL 1, TWID 1, PATH 1) restored 3 u
 
 | 檔案鍵 | 環境變數 | 預設 | 說明 |
 | --- | --- | --- | --- |
-| `port` | `REDACTION_PROXY_PORT` | `8787` | 127.0.0.1 上的埠號，0–65535；0 代表隨機。 |
+| `port` | `REDACTION_PROXY_PORT` | `8787` | 埠號，0–65535；0 代表隨機。 |
+| `host` | `REDACTION_PROXY_HOST` | `127.0.0.1` | 綁定位址。非本機位址會讓連得到的人都能使用代理，啟動時會警告；見 [§11](#11-威脅模型)。 |
 | `openaiUpstream` | `REDACTION_PROXY_OPENAI_UPSTREAM` | `https://api.openai.com` | Chat Completions、Responses 與 OpenAI 型 GET 的上游 base，必須是 http(s)。 |
 | `anthropicUpstream` | `REDACTION_PROXY_ANTHROPIC_UPSTREAM` | `https://api.anthropic.com` | Messages 與 Anthropic 型 GET 的上游 base。 |
 | `screen` | `REDACTION_PROXY_SCREEN` | `replace` | `replace` 或 `refuse`，見第 9 節。 |
@@ -458,7 +459,7 @@ node scripts/fetch-name-model.mjs ~/models/nym       # 從 Hugging Face 下載�
 | 模型品質可能下降 | 需要直接操作被遮值的任務（例如把絕對路徑改成相對路徑）會變差。你會看到佔位符，不是靜默出錯。 |
 | 會改動一些字元 | 預設把控制字元換成可見字元（`␛`），把原文中的 `⟦` `⟧` 換成 `⟪` `⟫`。 |
 | 重啟會忘記接續對話 | Responses API 的 `previous_response_id` 依賴記憶體中最近 256 個回應；重啟或被擠出後，接續請求以 422 拒絕。 |
-| 本機沒有驗證 | 只綁定 `127.0.0.1`，但你電腦上的任何程式都能使用它。網頁的請求（非本機 `Origin`、DNS rebinding）以 403 拒絕。 |
+| 本機沒有驗證 | 預設只綁定 `127.0.0.1`，但你電腦上的任何程式都能使用它。網頁的請求（非本機 `Origin`、DNS rebinding）以 403 拒絕。 |
 | 請求大小 | 本文超過 64 MiB 以 413 拒絕。 |
 | 尚未對真實服務測試 | 測試與示範都用本機假上游，尚未對 OpenAI、Anthropic、DeepSeek 或真實用戶端驗證。驗證工具已備妥（[e2e/real](../e2e/real/README.md)），尚未執行。 |
 
@@ -487,7 +488,7 @@ node scripts/fetch-name-model.mjs ~/models/nym       # 從 Hugging Face 下載�
 
 **代理會存我的金鑰或對話嗎？** 金鑰原樣轉送，不儲存。對話不存，唯一例外是 Responses API 接續用的最近 256 份輸入，只在記憶體中。
 
-**能放在伺服器上給別人用嗎？** 不能。綁定位址固定為 `127.0.0.1`，而且沒有身分驗證。
+**能放在伺服器上給別人用嗎？** 不能。代理沒有身分驗證；`host` 改成非本機位址時，任何連得到的人都能用它。
 
 ## 20. README 圖片與影片
 

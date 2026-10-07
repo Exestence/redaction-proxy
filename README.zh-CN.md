@@ -63,7 +63,8 @@ curl http://127.0.0.1:8787/v1/chat/completions \
 
 | 键 | 默认值 | 说明 |
 | --- | --- | --- |
-| `port` | `8787` | 只监听 `127.0.0.1`。 |
+| `port` | `8787` | TCP 端口。 |
+| `host` | `127.0.0.1` | 监听地址。改成其他地址会让能访问到的主机都能使用没有身份验证的代理。 |
 | `openaiUpstream` | `https://api.openai.com` | Chat Completions 和 Responses 的上游。 |
 | `anthropicUpstream` | `https://api.anthropic.com` | Anthropic Messages 的上游。 |
 | `redaction.terms` | 无 | 需要脱敏的人名等词语，不区分大小写。 |
@@ -169,7 +170,7 @@ REDACTION_PROXY_NAME_MODEL_DIR=$HOME/models/nym node lib/cli.js
 - **图片、PDF、音频、`metadata`、工具名、带签名的 thinking。** 这些原样转发且不扫描，JSON 对象的键也一样：在被遮的文本中检测到的值如果也出现在其中，整个请求以 422 拒绝；只出现在这些地方的值则原样发出。
 - **少见的写法。** 有些拆开或编码过的写法识别不了，比如带空格的 `name @ domain`、`name at domain`、小写的 IBAN、两次百分号编码的值。
 - **Cursor**，以及任何从自家服务器发请求的工具。
-- **本机上的其他程序。** 代理只监听 `127.0.0.1`，没有身份验证。来自非本机来源（Origin）的浏览器请求，以及指定其他主机名的请求（DNS rebinding），会以 403 拒绝。
+- **本机上的其他程序。** 代理默认只监听 `127.0.0.1`，没有身份验证。来自非本机来源（Origin）的浏览器请求，以及指定其他主机名的请求（DNS rebinding），会以 403 拒绝。
 - **模型把值写到哪里。** 模型在哪里写占位符，代理就在哪里还原，包括工具调用的参数：模型如果在抓取网页的工具调用中写 `https://example.test/?q=⟦EMAIL_1⟧`，你的工具就会把真实 email 发到那里。
 
 另外：模型如果把 `⟦EMAIL_1⟧` 改写成 `[EMAIL_1]`，你会原样看到；需要直接处理被遮值的任务效果会变差；控制字符会被替换成可见字符；重启后会丢失 Responses API 的续接对话，续接请求会以 422 拒绝；超过 64 MiB 的请求以 413 拒绝。完整清单见[技术细节第 17 节](docs/DETAILS.md#17-完整限制清單)，威胁模型见[第 11 节](docs/DETAILS.md#11-威脅模型)。
