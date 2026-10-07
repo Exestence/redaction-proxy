@@ -48,19 +48,32 @@ describe('NameModelDetector', () => {
     expect((await maskWith(['Write to jane.doe@example.test'])).masked).toEqual(['Write to ⟦EMAIL_1⟧'])
   })
 
-  it('propagates a multi-word name to every text through the terms matcher, sharing one placeholder', async () => {
-    const { masked } = await maskWith(['Ask Jane Doe', 'tool output: JANE DOE replied'], ['Ask Jane Doe'])
-    expect(masked).toEqual(['Ask ⟦NAME_1⟧', 'tool output: ⟦NAME_1⟧ replied'])
+  it('propagates a multi-word name to every text through the terms matcher', async () => {
+    const { masked } = await maskWith(['Ask Jane Doe', 'tool output: JANE DOE replied, Jane Doe too'], ['Ask Jane Doe'])
+    expect(masked).toEqual(['Ask ⟦NAME_1⟧', 'tool output: ⟦NAME_2⟧ replied, ⟦NAME_1⟧ too'])
   })
 
   it('propagates a Han name to its spaced spelling', async () => {
     const { masked } = await maskWith(['請問許雅雯', '系統：許 雅 雯 已回覆'], ['請問許雅雯'])
-    expect(masked).toEqual(['請問⟦NAME_1⟧', '系統：⟦NAME_1⟧ 已回覆'])
+    expect(masked).toEqual(['請問⟦NAME_1⟧', '系統：⟦NAME_2⟧ 已回覆'])
   })
 
   it('propagates a single word and an ORG to every text, whole words only', async () => {
     const { masked } = await maskWith(['Ask Jordan at Acme', 'JORDAN, Jordan\'s, Jordanian, ACME-Corp, Acmes'], ['Ask Jordan at Acme'])
-    expect(masked).toEqual(['Ask ⟦NAME_1⟧ at ⟦ORG_1⟧', '⟦NAME_1⟧, ⟦NAME_1⟧\'s, Jordanian, ⟦ORG_1⟧-Corp, Acmes'])
+    expect(masked).toEqual(['Ask ⟦NAME_1⟧ at ⟦ORG_1⟧', '⟦NAME_2⟧, ⟦NAME_1⟧\'s, Jordanian, ⟦ORG_2⟧-Corp, Acmes'])
+  })
+
+  // Restore writes back the one original an identity is bound to, so a folded spelling sharing it came back altered.
+  it.each([
+    'Ask Jordan then JORDAN, jordan, and Ｊｏｒｄａｎ',
+    '請問許雅雯，許 雅 雯 已回覆',
+    'Ask Jane Doe 𠮷 or JANE DOE 😀 at Acme, ACME, ａｃｍｅ',
+  ])('restores every propagated spelling exactly in %j', async text => {
+    const { model } = fakeNameModel(LABELS)
+    const detector = new NameModelDetector(new RulesDetector(), model).forRequest(new Set([text]), () => {})
+    const result = await mask(detector, [{ seq: 0, path: '', text }], emptyRedactionIndex())
+    expect(result.applied.length).toBeGreaterThan(1)
+    expect(restore(result.masked[0] as string, result.registry)).toMatchObject({ ok: true, text })
   })
 
   it('propagates a Han value as a substring, with no word edges', async () => {

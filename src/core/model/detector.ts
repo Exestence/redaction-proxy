@@ -4,10 +4,11 @@
  * spans give way to every rules detection they overlap.
  *
  * Every value the model finds (NAME, ORG, LOC, ADDR) is masked everywhere in
- * the request with one placeholder: system prompts, assistant turns, tool
- * results, and tool-call arguments. Further occurrences are found by the
- * configured-terms matcher, so `許雅雯` and `許 雅 雯`, or `Jordan` and
- * `JORDAN`, share one placeholder. A Latin-script value matches whole words
+ * the request: system prompts, assistant turns, tool results, and tool-call
+ * arguments. Further occurrences are found by the configured-terms matcher, so
+ * `許 雅 雯` is masked after `許雅雯`, and `JORDAN` after `Jordan`. Each
+ * spelling has its own placeholder, because restore writes back the one
+ * original its placeholder is bound to. A Latin-script value matches whole words
  * only (`Lee` never inside `Leeds`); a CJK value matches anywhere. False
  * positives spread the same way, which the allowlist contains.
  *
@@ -19,14 +20,14 @@ import { RedactionPolicyDigest } from '../engine.ts'
 import type { RulesDetector } from '../rules/index.ts'
 import type { Candidate } from '../rules/candidate.ts'
 import { mergeCandidates } from '../rules/candidate.ts'
-import { collectTermCandidates, termIdentityKey } from '../rules/rules.ts'
+import { collectTermCandidates } from '../rules/rules.ts'
 import type { RedactionDetection, RedactionDetector, RedactionPropagation } from '../types.ts'
 import type { NameModel } from './name-model.ts'
 import { NAME_MODEL_CATEGORIES } from './config.ts'
 import { dropOverlapping } from './spans.ts'
 
 /** Suffix that marks a detector version as rules plus the name model. */
-const NAME_MODEL_VERSION = 'nym-edge-int8-2'
+const NAME_MODEL_VERSION = 'nym-edge-int8-3'
 
 const MODEL_CATEGORIES: ReadonlySet<string> = new Set(NAME_MODEL_CATEGORIES)
 
@@ -154,7 +155,7 @@ export class NameModelDetector {
         return [...ruleDetections, ...dropOverlapping(await this.findOrFail(text, onFailure), ruleDetections)]
       },
       propagate: (texts, values) => this.propagate(texts, values),
-      identityKey: (value, category) => MODEL_CATEGORIES.has(category) ? termIdentityKey(value, category) : this.rules.identityKey(value, category),
+      identityKey: (value, category) => this.rules.identityKey(value, category),
     }
   }
 

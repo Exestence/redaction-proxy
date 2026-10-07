@@ -71,10 +71,9 @@ describe('proxy with the name model', () => {
       { role: 'user', content: [{ type: 'text', text: '我是許雅雯, ask Jane Doe' }] },
     ])
     expect(received[0].messages).toEqual([
-      { role: 'system', content: 'The user is ⟦NAME_1⟧.' },
+      { role: 'system', content: 'The user is ⟦NAME_3⟧.' },
       { role: 'user', content: [{ type: 'text', text: '我是⟦NAME_1⟧, ask ⟦NAME_2⟧' }] },
     ])
-    // The reply gets the spelling the model found, which is bound before the propagated one.
     expect((await response.json()).choices[0].message.content).toEqual([{ type: 'text', text: '我是許雅雯, ask Jane Doe' }])
   })
 

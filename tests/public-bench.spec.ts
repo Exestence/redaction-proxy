@@ -3,15 +3,18 @@ import { mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterAll, describe, expect, it } from 'vitest'
-import { isTaiwanNationalId } from '../src/core/index.ts'
+import { RulesDetector, isTaiwanNationalId } from '../src/core/index.ts'
+import { NameModelDetector } from '../src/core/model/detector.ts'
 import { buildDataset, fillTemplate } from '../bench/public/dataset.ts'
 import type { Sample } from '../bench/public/dataset.ts'
 import { categoriesInReportOrder, loadHeldOutSet, parseRecord } from '../bench/public/heldout.ts'
 import { classify, isCovered, mergeOverlapping, percentile, scoreSystem } from '../bench/public/metrics.ts'
 import { renderMarkdown } from '../bench/public/report.ts'
 import { createRandom } from '../bench/public/random.ts'
+import { runCoreDetector } from '../bench/public/systems.ts'
 import type { SystemRun } from '../bench/public/systems.ts'
 import { luhnCheckDigit, myNumberCheckDigit, nationalId, prcCheckCharacter } from '../bench/public/values.ts'
+import { fakeNameModel } from './name-model-fake.ts'
 
 describe('dataset', () => {
   const samples = buildDataset({ seed: 7, samplesPerCell: 3 })
@@ -108,6 +111,16 @@ describe('metrics', () => {
     expect(report.overall.regionPrecision).toEqual({ hits: 2, total: 3 })
     expect(report.overall.restoreExact).toBeUndefined()
     expect(report.negativeHits).toEqual({ version: { hits: 1, total: 1 } })
+  })
+})
+
+describe('core detector runs', () => {
+  it('restores every propagated spelling of a model value exactly', async () => {
+    const sample: Sample = { id: 'one', language: 'en', format: 'chat', text: 'Ask Jordan then JORDAN', gold: [], negatives: [] }
+    const detector = new NameModelDetector(new RulesDetector(), fakeNameModel({ Jordan: 'B-GIVEN_NAME' }).model)
+      .forRequest(new Set([sample.text]), error => { throw error })
+    const run = await runCoreDetector({ name: 'model', detector }, [sample])
+    expect(run.outcomes.get('one')).toMatchObject({ detected: [{ start: 4, end: 10 }, { start: 16, end: 22 }], restoredExactly: true })
   })
 })
 
