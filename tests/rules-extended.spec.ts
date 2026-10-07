@@ -58,7 +58,8 @@ describe('card-strict', () => {
     ['a numeric UUID', 'id 123-4567-8901-4111-111111111111'],
     ['a revision range', 'fix a1b2c3d..4111111111 111111 and abc12..4111111111111111'],
     ['digits glued to a letter or `_`', 'x4111111111111111 4111111111111111_x'],
-    ['a card grouping extended by one more group', '4111 1111 1111 1111 1234'],
+    // Luhn-valid as one 20-digit run, so only the length bound leaves it alone.
+    ['a card grouping extended by one more group', '4111 1111 1111 1111 1230'],
     ['the run the default rule slides a window over', 'id 14111111111111111 here'],
     ['a nanosecond timestamp', 'ts=1758000000000000000 level=info'],
   ])('leaves %s alone', async (_name, text) => {

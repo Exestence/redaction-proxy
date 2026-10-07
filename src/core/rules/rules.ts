@@ -413,9 +413,9 @@ export function collectCardCandidates(text: string, push: PushCandidate, afterEs
  * @param afterEscape - whether `text` holds a high escape, which then also counts as a left boundary.
  */
 export function collectStrictCardCandidates(text: string, push: PushCandidate, afterEscape = false): void {
-  const pushCard = (digits: string, start: number): void => {
+  const pushCard = (digits: string, start: number, end: number): void => {
     if (digits.length < 13 || digits.length > 19 || !validCardPrefix(digits) || !luhn(digits)) return
-    push(start, start + digits.length, 'CARD', PRIORITY_PII)
+    push(start, end, 'CARD', PRIORITY_PII)
   }
   for (const pattern of afterEscape ? [CARD_RUN, CARD_RUN_AFTER_ESCAPE] : [CARD_RUN]) {
     runAll(pattern, text, (match) => {
@@ -434,9 +434,9 @@ export function collectStrictCardCandidates(text: string, push: PushCandidate, a
       }
       groups.forEach((group, i) => {
         // oxlint-disable-next-line typescript/no-non-null-assertion -- one start per group.
-        pushCard(group, starts[i]!)
+        pushCard(group, starts[i]!, starts[i]! + group.length)
       })
-      if (groups.length === 1 && match[0].startsWith('0')) pushCard(match[0].slice(1), match.index + 1)
+      if (groups.length === 1 && match[0].startsWith('0')) pushCard(match[0].slice(1), match.index + 1, end)
       // Each maximal chain of groups joined by one separator is one printed number or none.
       for (let first = 0; first < separators.length; first += 1) {
         if (first > 0 && separators[first - 1] === separators[first]) continue
@@ -444,10 +444,8 @@ export function collectStrictCardCandidates(text: string, push: PushCandidate, a
         while (last < separators.length && separators[last] === separators[first]) last += 1
         const chain = groups.slice(first, last + 1)
         if (!CARD_GROUPING.test(chain.map(group => group.length).join(','))) continue
-        const digits = chain.join('')
-        if (digits.length < 13 || !validCardPrefix(digits) || !luhn(digits)) continue
         // oxlint-disable-next-line typescript/no-non-null-assertion -- `first` and `last` index groups.
-        push(starts[first]!, starts[last]! + chain[chain.length - 1]!.length, 'CARD', PRIORITY_PII)
+        pushCard(chain.join(''), starts[first]!, starts[last]! + chain[chain.length - 1]!.length)
       }
     })
   }

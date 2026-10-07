@@ -155,7 +155,7 @@ describe('national telephone formats', () => {
     ['celular (11) 91234-5678, fixo (21) 3456-7890', 'celular ⟦PHONE_1⟧, fixo ⟦PHONE_2⟧'],
     ['Telefon: 030 12345678, Handy 0151/23456789', 'Telefon: ⟦PHONE_1⟧, Handy ⟦PHONE_2⟧'],
     ['phone 98765 43210', 'phone ⟦PHONE_1⟧'],
-    ['tel 4155550132', 'tel ⟦PHONE_1⟧'],
+    ['tel 4155550132, phone_number: 4155550199', 'tel ⟦PHONE_1⟧, phone_number: ⟦PHONE_2⟧'],
     ['Tél : (0)1 23 45 67 89', 'Tél : ⟦PHONE_1⟧'],
     ['電話 02 2345 6789', '電話 ⟦PHONE_1⟧'],
     ['WhatsApp +55 11 91234-5678', 'WhatsApp ⟦PHONE_1⟧'],
@@ -165,6 +165,7 @@ describe('national telephone formats', () => {
 
   it.each([
     ['a number after a keyword that is too short', 'Phone: 3 retries, tel 1234567'],
+    ['a number after a field that starts with a keyword', 'cell_id 123456789 tel_ext 12345678 mobile2 12345678'],
     ['a date after a keyword', 'phone: 2026-10-07 and mobile 2026/10/07'],
     ['bare ten digits', 'order 4155550132'],
     ['space-separated groups without a keyword', 'row 415 555 0132'],

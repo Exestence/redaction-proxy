@@ -207,7 +207,8 @@ const BR_PHONE = new RegExp(`${LEFT_EDGE}\\([1-9]\\d\\) ?9?\\d{4}-\\d{4}${RIGHT_
  * Spanish, Portuguese, Chinese, Japanese, and Korean, for `phone-keyword`.
  */
 const PHONE_KEYWORD_WORDS = [
-  'phone(?: number)?', 'telephone', 'tel', 'mobile', 'cell(?:phone)?', 'fax', 'whatsapp', 'contact number',
+  'phone(?:[ _-]?(?:number|no))?', 'telephone', 'tel', 'mobile(?:[ _-]?(?:number|no))?', 'cell(?:phone)?', 'fax', 'whatsapp',
+  'contact[ _-]?number',
   'call me(?: at| on)?', 'text me(?: at| on)?', 'telefon(?:nummer)?', 'handy', 'mobil', 'rufnummer', 'festnetz',
   'téléphone', 'tél', 'portable', 'teléfono', 'telefono', 'telefone', 'celular', 'móvil', 'movil',
   '電話', '电话', '手機', '手机', '携帯', 'ケータイ', '전화', '휴대폰', '핸드폰', '연락처',
@@ -369,10 +370,11 @@ function anyCase(keyword: string): string {
  * its keywords, for values whose bare digits read like any log identifier.
  * @param keywords - lower-case keyword patterns, matched in any case as whole words.
  * @param value - the value's pattern, captured as the `value` group.
+ * @param wordCharacters - character class body of what may not touch a keyword.
  * @returns a global pattern with match indices.
  */
-function valueAfterKeyword(keywords: readonly string[], value: string): RegExp {
-  const keyword = `(?<![A-Za-z])(?:${keywords.map(anyCase).join('|')})(?![A-Za-z])`
+function valueAfterKeyword(keywords: readonly string[], value: string, wordCharacters = 'A-Za-z'): RegExp {
+  const keyword = `(?<![${wordCharacters}])(?:${keywords.map(anyCase).join('|')})(?![${wordCharacters}])`
   return new RegExp(`${keyword}${KEYWORD_GAP}${LEFT_EDGE}(?<value>${value})${RIGHT_EDGE}`, 'gd')
 }
 
@@ -541,7 +543,11 @@ const INTERNATIONAL_RULES: Readonly<Record<InternationalRuleName, ValidatedRule>
   'jp-phone': { patterns: [JP_PHONE], isValid: compact => compact.length === JP_PHONE_DIGITS },
   'kr-mobile': { patterns: mobilePatterns(KOREA_MOBILE), isValid: acceptsEveryMatch },
   'br-phone': { patterns: [BR_PHONE], isValid: acceptsEveryMatch },
-  'phone-keyword': { patterns: [valueAfterKeyword(PHONE_KEYWORD_WORDS, PHONE_KEYWORD_VALUE)], isValid: hasPhoneNumberLength },
+  'phone-keyword': {
+    // `_` and digits also bound a word here, so a field such as `cell_id` or `tel_ext` is not a telephone keyword.
+    patterns: [valueAfterKeyword(PHONE_KEYWORD_WORDS, PHONE_KEYWORD_VALUE, 'A-Za-z0-9_')],
+    isValid: hasPhoneNumberLength,
+  },
 }
 
 /** The pass of every international rule, keyed by rule name. */
