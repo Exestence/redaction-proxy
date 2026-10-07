@@ -88,6 +88,12 @@ const TAX_ID = new RegExp(
   'gi',
 )
 const CARD_RUN = /(?<!\d)\d{4,}(?:[ -]\d{3,})*/g
+/**
+ * Digit groups of any length joined by a space, a `-` or `.` with at most one
+ * space on each side, or a line break with its indentation: a card number as
+ * a person regroups, dots, mixes, or wraps it.
+ */
+const CARD_SPELLED_RUN = /(?<!\d)\d+(?:(?: ?[-.] ?| |[ \t]*\r?\n[ \t]*)\d+)+/g
 const PRIVATE_IP = new RegExp(
   '(?<![\\d.])(?:10\\.\\d{1,3}\\.\\d{1,3}\\.\\d{1,3}'
   + '|192\\.168\\.\\d{1,3}\\.\\d{1,3}'
@@ -104,6 +110,7 @@ const PRIVATE_IP = new RegExp(
 const PHONE_MOBILE_AFTER_ESCAPE = afterHighEscape(PHONE_MOBILE, '(?<![0-9A-Za-z])')
 const TAX_ID_AFTER_ESCAPE = afterHighEscape(TAX_ID, '(?<!\\d)')
 const CARD_RUN_AFTER_ESCAPE = afterHighEscape(CARD_RUN, '(?<!\\d)')
+const CARD_SPELLED_RUN_AFTER_ESCAPE = afterHighEscape(CARD_SPELLED_RUN, '(?<!\\d)')
 const PHONE_MOBILE_SPLIT_AFTER_ESCAPE = afterHighEscape(PHONE_MOBILE_SPLIT, '(?<![A-Za-z0-9-])')
 const PHONE_KEYWORD_AFTER_ESCAPE = afterHighEscape(PHONE_KEYWORD, '(?<!\\d)')
 const PRIVATE_IP_AFTER_ESCAPE = afterHighEscape(PRIVATE_IP, '(?<![\\d.])')
@@ -412,7 +419,11 @@ export function collectCardCandidates(text: string, push: PushCandidate, afterEs
  * extends. A mask therefore never ends inside a digit group, and
  * `8000 5259-6589 0921-9030` or a numeric UUID is not cut into a card. A run
  * glued to a letter or `_`, opened by a `..` revision range, or the fraction of
- * a decimal number (`1432.4982166290283`) is not read.
+ * a decimal number (`1432.4982166290283`) is not read. A whole run of two or
+ * more groups of at least two digits in any other grouping, joined by spaces,
+ * `-`, `.` (three groups or more), or one line break, is read as one number:
+ * `41 1111 111 1111 111`, `4111.1111.1111.1111`, `4111 1111-1111.1111`, and a
+ * card wrapped after its second group.
  * @param text - text to scan.
  * @param push - candidate sink.
  * @param afterEscape - whether `text` holds a high escape, which then also counts as a left boundary.
@@ -455,6 +466,20 @@ export function collectStrictCardCandidates(text: string, push: PushCandidate, a
         chain.push(group)
       }
       pushChain()
+    })
+  }
+  // A whole run in any other grouping is one card or none, so no mask ends inside it.
+  for (const pattern of afterEscape ? [CARD_SPELLED_RUN, CARD_SPELLED_RUN_AFTER_ESCAPE] : [CARD_SPELLED_RUN]) {
+    runAll(pattern, text, (match) => {
+      const end = match.index + match[0].length
+      if (TOKEN_CHAR.test(text.charAt(match.index - 1)) && !endsHighEscape(text, match.index)) return
+      if (TOKEN_CHAR.test(text.charAt(end)) || RANGE_OR_DECIMAL_POINT.test(text.slice(match.index - 2, match.index))) return
+      const groups = match[0].match(/\d+/g) ?? []
+      const separators = match[0].split(/\d+/).join('')
+      // A one-digit group is a list item or a version part; two dotted groups are a decimal number.
+      if (groups.some(group => group.length < 2) || separators.split('\n').length > 2) return
+      if (separators.includes('.') && groups.length < 3) return
+      pushCard(groups.join(''), match.index, end)
     })
   }
 }

@@ -229,5 +229,26 @@ describe('held-out set', () => {
     expect(markdown).toContain('| PERSON | 0.0% / 0.0% / 100.0% |\n| EMAIL | 100.0% / 0.0% / 0.0% |\n| IBAN | — / — / — |')
     expect(markdown).toContain('| commit_hash | 0.0% |')
     expect(markdown).not.toContain('HOME_PATH')
+    expect(report.bySpelling).toBeUndefined()
+  })
+
+  it('splits each category into standard and non-standard spellings when the set names styles', () => {
+    const text = 'a@b.example A@B.EXAMPLE 10.0.0.1 db.lan'
+    const sample = parseRecord(JSON.stringify({
+      id: 's', lang: 'en', format: 'chat', text, negatives: [],
+      spans: [
+        { start: 0, end: 11, category: 'EMAIL', value: 'a@b.example', style: 'std' },
+        { start: 12, end: 23, category: 'EMAIL', value: 'A@B.EXAMPLE', style: 'upper' },
+        { start: 24, end: 32, category: 'HOST', value: '10.0.0.1', style: 'ipv4' },
+        { start: 33, end: 39, category: 'HOST', value: 'db.lan', style: 'bare' },
+      ],
+    }), 'x')
+    expect(sample.gold.map(gold => gold.style)).toEqual(['std', 'upper', 'ipv4', 'bare'])
+    const run: SystemRun = { name: 'stub', outcomes: new Map([['s', { detected: [{ start: 0, end: 11 }, { start: 24, end: 32 }], milliseconds: 1 }]]) }
+    const spelling = scoreSystem(run, [sample], ['EMAIL', 'HOST']).bySpelling
+    expect(spelling?.EMAIL?.standard.outcomes.fullyMasked).toEqual({ hits: 1, total: 1 })
+    expect(spelling?.EMAIL?.nonStandard.outcomes.untouched).toEqual({ hits: 1, total: 1 })
+    expect(spelling?.HOST?.standard.outcomes.fullyMasked).toEqual({ hits: 1, total: 1 })
+    expect(Object.keys(spelling?.HOST?.byStyle ?? {})).toEqual(['ipv4', 'bare'])
   })
 })

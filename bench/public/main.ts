@@ -98,8 +98,10 @@ function devSet(seed: number, samplesPerCell: number): EvaluationSet {
 
 function heldOutSet(path: string): EvaluationSet {
   const { fileName, sha256, samples, categories } = loadHeldOutSet(path)
+  // `heldout-v2.jsonl` writes `public-bench-held-out-v2.*`, so each version keeps its own result files.
+  const version = /-(v\d+)\.jsonl$/.exec(fileName)?.[1]
   return {
-    label: 'held-out',
+    label: version === undefined ? 'held-out' : `held-out-${version}`,
     source: `Frozen file \`${fileName}\`, SHA-256 \`${sha256}\``,
     reproduce: `pnpm run bench:public --heldout <path to ${fileName}>${nameModelArgument}`,
     samples,

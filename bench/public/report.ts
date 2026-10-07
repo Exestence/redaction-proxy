@@ -5,10 +5,10 @@
  */
 
 import { MASK_OUTCOMES, fraction } from './metrics.ts'
-import type { MaskOutcome, Rate, Scorecard, SystemReport, ValueScore } from './metrics.ts'
+import type { MaskOutcome, Rate, Scorecard, SpellingScore, SystemReport, ValueScore } from './metrics.ts'
 
-/** Which evaluation set a result belongs to. */
-export type SetLabel = 'dev' | 'held-out'
+/** Which evaluation set a result belongs to: `dev`, or `held-out` with the held-out file's version, such as `held-out-v2`. */
+export type SetLabel = string
 
 /** Everything one run produced on one evaluation set; written as JSON beside the Markdown. */
 export interface SetResult {
@@ -59,6 +59,7 @@ export function renderMarkdown(result: SetResult): string {
     OUTCOME_LEGEND,
     renderCategoryTable(result.english),
     renderCoreTable(result.english),
+    renderSpelling(result.english, `English prompts by spelling (${result.set})`),
     `## English prompts: precision, restore, latency (${result.set})`,
     renderOperationTable(result.english),
     renderNegativeTable(result.english),
@@ -66,6 +67,7 @@ export function renderMarkdown(result: SetResult): string {
     `Systems marked "${REFERENCE_ONLY}" analyze every prompt as English, so their results outside English are for reference only. ${OUTCOME_LEGEND}`,
     renderCategoryTable(allLanguages),
     renderCoreTable(allLanguages),
+    renderSpelling(allLanguages, `All languages by spelling (${result.set})`),
     renderTable(allLanguages, { label: 'Language', keys: groupKeys(allLanguages, system => system.byLanguage), cell: languageCell }),
     details('All languages: hard negatives masked, and results by format',
       `${renderNegativeTable(allLanguages)}\n\n${renderTable(allLanguages, { label: 'Format', keys: groupKeys(allLanguages, system => system.byFormat), cell: (system, format) => scorecardCell(system.byFormat[format]) })}`),
@@ -79,6 +81,8 @@ export interface SystemSummary {
   byCategory: Record<string, Record<MaskOutcome, number>>
   macroAverage: Record<MaskOutcome, number>
   regionPrecision: number
+  /** Per category, standard and non-standard spellings; absent when the set names no styles. */
+  bySpelling?: Record<string, { standard: Record<MaskOutcome, number>; nonStandard: Record<MaskOutcome, number> }>
   hardNegativesMasked: Record<string, number>
   latencyMs: { p50: number; p95: number }
 }
@@ -98,6 +102,10 @@ function summarizeSystem(system: SystemReport): SystemSummary {
     name: system.name,
     byCategory: Object.fromEntries(Object.entries(system.byCategory).map(([category, score]) => [category, shares(score.outcomes)])),
     macroAverage: system.macroAverage.outcomes,
+    ...(system.bySpelling === undefined ? {} : {
+      bySpelling: Object.fromEntries(Object.entries(system.bySpelling).map(([category, score]) =>
+        [category, { standard: shares(score.standard.outcomes), nonStandard: shares(score.nonStandard.outcomes) }])),
+    }),
     regionPrecision: fraction(system.overall.regionPrecision),
     hardNegativesMasked: shares(system.negativeHits),
     latencyMs: { p50: system.latency.median, p95: system.latency.p95 },
@@ -128,6 +136,26 @@ function renderCoreTable(systems: readonly SystemReport[]): string {
     keys: categories,
     cell: (system, category) => percent(system.byCategory[category]?.coreFullyMasked ?? NO_VALUES),
   })
+}
+
+/** Standard against non-standard spellings per category, then every style in a collapsed table; empty when the set names no styles. */
+function renderSpelling(systems: readonly SystemReport[], heading: string): string {
+  const spelling = systems[0]?.bySpelling
+  if (spelling === undefined) return ''
+  const rows = (pick: (score: SpellingScore) => Record<string, ValueScore>): string[][] =>
+    Object.entries(spelling).flatMap(([category, score]) => Object.entries(pick(score))
+      .filter(([, values]) => values.outcomes.fullyMasked.total > 0)
+      .map(([group, values]) => [
+        `${category} ${group} (n=${values.outcomes.fullyMasked.total})`,
+        ...systems.map(system => outcomeCell(pick(system.bySpelling?.[category] ?? score)[group])),
+      ]))
+  const header = ['Category and spelling', ...systems.map(system => system.name)]
+  return [
+    `### ${heading}`,
+    `Standard spellings are the \`std\` style (and \`ipv4\` hosts); every other style is non-standard. ${OUTCOME_LEGEND}`,
+    markdownTable(header, rows(score => ({ standard: score.standard, 'non-standard': score.nonStandard }))),
+    details(`${heading}: every style`, markdownTable(header, rows(score => score.byStyle))),
+  ].join('\n\n')
 }
 
 function renderOperationTable(systems: readonly SystemReport[]): string {

@@ -15,7 +15,7 @@
  * The set names its own gold categories; they are reported in
  * {@link CATEGORY_REPORT_ORDER}, then any others in order of first appearance.
  * `core` is optional: absolute offsets inside the span, or the core's text when
- * it occurs once in `value`. A negative names what it is in `kind` (or
+ * it occurs once in `value`. `style` is optional: how the value is spelled, `std` or a variant name. A negative names what it is in `kind` (or
  * `category`), free-form; its `value` is optional.
  * MANIFEST holds `sha256sum` lines (`<hex>  <file name>`) beside the JSONL file.
  *
@@ -106,7 +106,12 @@ function parseGoldSpan(raw: unknown, text: string, where: string): GoldSpan {
   requireSliceEquals(text, span, value, where)
   const category = requireString(fields.category, `${where} category`)
   if (category === '') throw new Error(`${where} category must not be empty`)
-  return { ...span, category, ...(fields.core === undefined ? {} : { core: parseCore(fields.core, span, value, text, where) }) }
+  return {
+    ...span,
+    category,
+    ...(fields.core === undefined ? {} : { core: parseCore(fields.core, span, value, text, where) }),
+    ...(fields.style === undefined ? {} : { style: requireString(fields.style, `${where} style`) }),
+  }
 }
 
 function parseCore(raw: unknown, span: Span, value: string, text: string, where: string): Span {

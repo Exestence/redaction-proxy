@@ -38,6 +38,8 @@ export interface GoldSpan extends Span {
   category: string
   /** The part of the value that identifies someone, such as the user name of a home path; absent when the set gives none. */
   core?: Span
+  /** How the value is spelled, such as `std` or a variant name; absent when the set gives none. */
+  style?: string
 }
 
 /** A hard negative inside a sample; `kind` names what it is, such as `uuid`. */
