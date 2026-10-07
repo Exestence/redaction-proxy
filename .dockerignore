@@ -1,0 +1,10 @@
+# Allowlist: only what the image build reads. Keeps .env files, node_modules, and research data out of the context.
+*
+!package.json
+!pnpm-lock.yaml
+!pnpm-workspace.yaml
+!tsconfig.json
+!tsconfig.build.json
+!src
+!LICENSE
+!NOTICE
