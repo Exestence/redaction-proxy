@@ -642,13 +642,13 @@ export function createProxyServer(
   return createServer((req, res) => {
     const path = (req.url ?? '/').split('?')[0] ?? '/'
     const api = ROUTES[path]
-    const fail = (status: number, message: string): void => {
+    const fail = (status: number, message: string, headers: Record<string, string> = {}): void => {
       log(`${req.method} ${path} -> ${status} refused: ${message}`)
       if (res.headersSent) {
         res.destroy()
         return
       }
-      res.writeHead(status, { 'content-type': 'application/json', connection: 'close' })
+      res.writeHead(status, { 'content-type': 'application/json', ...headers })
       res.end(JSON.stringify({ error: { type: 'redaction_proxy_error', message } }))
     }
     if (!isLoopbackRequest(req)) {
@@ -668,7 +668,7 @@ export function createProxyServer(
       size += chunk.length
       if (size <= BODY_MAX_BYTES) return void chunks.push(chunk)
       chunks.length = 0
-      fail(413, `request body exceeds ${BODY_MAX_BYTES} bytes; it was not forwarded`)
+      fail(413, `request body exceeds ${BODY_MAX_BYTES} bytes; it was not forwarded`, { connection: 'close' })
       res.once('finish', () => req.destroy())
     })
     req.on('end', () => {
