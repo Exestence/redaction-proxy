@@ -139,6 +139,13 @@ describe('token-format', () => {
     '123456789:AAAbCdEfGhIjKlMnOpQrStUvWxYz0123456',
     'eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9.e30.abc',
     'eyJhbGciOiJub25lIn0.eyJzdWIiOiIxIn0.',
+    'SK0123456789abcdef0123456789ABCDEF',
+    'sq0atp-AbCdEfGhIjKlMnOpQrStUv',
+    `EAAA${'AbCdEfGhIjKlMnOpQrSt'.repeat(3)}`,
+    'glsa_AbCdEfGhIjKlMnOpQrStUvWxYz012345_0a1b2c3d',
+    'glc_AbCdEfGhIjKlMnOpQrStUvWxYz0123456789+/==',
+    'dapi0123456789abcdef0123456789abcdef',
+    'dapi0123456789abcdef0123456789abcdef-2',
   ])('masks %j', async (text) => {
     expect(await maskWith(['token-format'], `use ${text} here`)).toBe('use ⟦KEY_1⟧ here')
   })
@@ -155,6 +162,7 @@ describe('token-format', () => {
     ['a short prefix lookalike', 'hf_short glpat-short sk_live_short'],
     ['a prefix inside a word', 'xsk_live_51HxYzAbCdEfGhIjKlMnOp'],
     ['a short SAS field', 'sig=abc'],
+    ['a vendor prefix on a value of the wrong length or alphabet', 'SK0123456789abcdef dapi0123456789abcdefXYZ glsa_short_0a1b2c3d'],
   ])('leaves %s alone', async (_name, text) => {
     expect(await maskWith(['token-format'], text)).toBe(text)
   })
@@ -173,6 +181,12 @@ describe('credential-phrase', () => {
     ['pw: Tr0ub4dor&3', 'pw: ⟦KEY_1⟧'],
     ["the password is 'Hunter22!'", "the password is '⟦KEY_1⟧'"],
     ['the passcode is 482913', 'the passcode is ⟦KEY_1⟧'],
+    ['密码是 abc12345，密碼: abc12346', '密码是 ⟦KEY_1⟧，密碼: ⟦KEY_2⟧'],
+    ['パスワードは abc12345 です', 'パスワードは ⟦KEY_1⟧ です'],
+    ['비밀번호 abc12345, 비밀번호는 abc12346', '비밀번호 ⟦KEY_1⟧, 비밀번호는 ⟦KEY_2⟧'],
+    ['Passwort: abc12345, Passwort ist abc12346', 'Passwort: ⟦KEY_1⟧, Passwort ist ⟦KEY_2⟧'],
+    ['mot de passe : abc12345', 'mot de passe : ⟦KEY_1⟧'],
+    ['contraseña: abc12345, senha é abc12346', 'contraseña: ⟦KEY_1⟧, senha é ⟦KEY_2⟧'],
   ])('masks %j', async (text, expected) => {
     expect(await maskWith(['credential-phrase'], text)).toBe(expected)
   })
@@ -191,7 +205,8 @@ describe('credential-phrase', () => {
     ['an assignment, which the api-key rule reads', 'token=Zq8xT2vK9mN4pL7wR3sYuB1'],
     ['a short value after a general word', 'token Ab3dEf9h'],
     ['a URL', 'key https://example.com/Zq8xT2vK9mN4pL7wR3sYuB1'],
-    ['a date or a version after a password word', 'pw 2026-10-07 expires, passcode: 1.2.3.4'],
+    ['a date or a version after a password word', 'pw 2026-10-07 expires, passcode: 1.2.3.4, Passwort: 2026-10-07'],
+    ['prose after a password word in another language', '密码是错误的，请重试。Passwort vergessen? mot de passe oublié, パスワードを変更してください'],
     ['prose in another script after a password word', 'Token Password 以静态形式被读取。passwd 条目解析沙箱用户的登录主目录，以'],
   ])('leaves %s alone', async (_name, text) => {
     expect(await maskWith(['credential-phrase'], text)).toBe(text)

@@ -63,28 +63,46 @@ const PACKAGE_ROOTS = new Set(['com', 'org', 'net', 'io', 'dev', 'edu', 'gov', '
 /** Last labels that make a dotted name a file name (`settings.corp.yaml`). */
 const FILE_EXTENSION = /\.(?:json|ya?ml|toml|xml|ini|conf|cfg|env|properties|ts|js|mjs|py|go|rs|java|kt|md|txt|sh|html|css|lock)$/
 
+/** No letter, digit, or `_` before a credential, so it is not the tail of a longer identifier. */
+const TOKEN_LEFT_EDGE = '(?<![A-Za-z0-9_])'
+/**
+ * A credential format that starts at {@link TOKEN_LEFT_EDGE}.
+ * @param body - the format's pattern.
+ * @returns a global pattern.
+ */
+const token = (body: string): RegExp => new RegExp(`${TOKEN_LEFT_EDGE}${body}`, 'g')
+
 /** Credential formats with a vendor prefix that the `api-key` rule does not list. */
 const TOKEN_FORMATS: readonly RegExp[] = [
   // GitLab personal, project, and group access tokens.
   /(?<![A-Za-z0-9_-])glpat-[A-Za-z0-9_-]{20,}/g,
   // Stripe secret and restricted keys; publishable `pk_` keys are public by design.
-  /(?<![A-Za-z0-9_])[rs]k_(?:live|test)_[A-Za-z0-9]{16,}/g,
+  token('[rs]k_(?:live|test)_[A-Za-z0-9]{16,}'),
   // Stripe webhook signing secrets.
-  /(?<![A-Za-z0-9_])whsec_[A-Za-z0-9+/]{16,}/g,
+  token('whsec_[A-Za-z0-9+/]{16,}'),
   // SendGrid API keys.
-  /(?<![A-Za-z0-9_])SG\.[A-Za-z0-9_-]{16,32}\.[A-Za-z0-9_-]{16,64}/g,
+  token('SG\\.[A-Za-z0-9_-]{16,32}\\.[A-Za-z0-9_-]{16,64}'),
   // Hugging Face access tokens.
-  /(?<![A-Za-z0-9_])hf_[A-Za-z0-9]{30,}/g,
+  token('hf_[A-Za-z0-9]{30,}'),
   // npm access tokens.
-  /(?<![A-Za-z0-9_])npm_[A-Za-z0-9]{36}/g,
+  token('npm_[A-Za-z0-9]{36}'),
   // Slack app-level tokens.
   /(?<![A-Za-z0-9_-])xapp-\d-[A-Za-z0-9-]{10,}/g,
   // Shopify access tokens and shared secrets.
-  /(?<![A-Za-z0-9_])shp(?:at|ca|pa|ss)_[a-fA-F0-9]{32}/g,
+  token('shp(?:at|ca|pa|ss)_[a-fA-F0-9]{32}'),
   // DigitalOcean personal, OAuth, and refresh tokens.
-  /(?<![A-Za-z0-9_])do[opr]_v1_[a-f0-9]{64}/g,
+  token('do[opr]_v1_[a-f0-9]{64}'),
   // Atlassian API tokens.
-  /(?<![A-Za-z0-9_])ATATT3[A-Za-z0-9_=-]{20,}/g,
+  token('ATATT3[A-Za-z0-9_=-]{20,}'),
+  // Twilio API keys.
+  token('SK[0-9a-fA-F]{32}(?![A-Za-z0-9])'),
+  // Square access tokens.
+  token('(?:EAAA|sq0atp-)[\\w-]{22,60}(?![\\w-])'),
+  // Grafana service account tokens and Grafana Cloud API tokens.
+  token('glsa_[A-Za-z0-9]{32}_[A-Fa-f0-9]{8}(?![A-Za-z0-9])'),
+  token('glc_[A-Za-z0-9+/]{32,400}={0,3}'),
+  // Databricks personal access tokens.
+  token('dapi[a-f0-9]{32}(?:-\\d)?(?![A-Za-z0-9])'),
   // Telegram bot tokens.
   /(?<![A-Za-z0-9_:])\d{8,10}:AA[A-Za-z0-9_-]{33}(?![A-Za-z0-9_-])/g,
   // JSON Web Tokens with a short payload or no signature (`alg: none`), which the `api-key` rule's JWT pattern needs ten characters in.
@@ -94,25 +112,34 @@ const TOKEN_FORMATS: readonly RegExp[] = [
 const AZURE_KEY = /(?<![A-Za-z0-9])(?:AccountKey|SharedAccessKey|sig)=([A-Za-z0-9%+/]{16,}={0,2})/g
 
 /**
- * A credential word in prose, an optional `is`, `was`, or `:`, and the word
- * after it, quoted or not: `the secret is X`, `here is my key: X`, `use token 'X'`. `key = X`
- * assignments are the `api-key` rule's. Not a shell variable (`$PWD`), a
+ * Words that name a password, in English, German, French, Spanish,
+ * Portuguese, Chinese, Japanese, and Korean; their value may be short and
+ * need not look random.
+ */
+const PASSWORD_WORD = 'password|passphrase|passcode|passwd|pwd|pw|passwort|mot de passe|contraseña|senha'
+  + '|密碼|密码|パスワード|비밀번호'
+/**
+ * A credential word in prose, an optional `is`, `was`, or `:` (or the same
+ * word in the password word's language: `ist`, `est`, `es`, `é`, `是`, `は`,
+ * `는`), and the word after it, quoted or not: `the secret is X`,
+ * `here is my key: X`, `use token 'X'`, `密码是 X`. `key = X` assignments are
+ * the `api-key` rule's. Not a shell variable (`$PWD`), a
  * member (`this.key`), or a flag (`--password`), and the value ends at a
  * list separator, a placeholder, or the next query parameter (`&next=`).
  */
 const CREDENTIAL_PHRASE = new RegExp(
   '(?<![A-Za-z0-9_$.-])(?<word>api[ _-]?key|access[ _-]?key|secret[ _-]?key|access[ _-]?token|auth[ _-]?token'
-  + '|token|secret|key|password|passphrase|passcode|passwd|pwd|pw)(?![A-Za-z0-9_])'
-  + '(?:[ \\t]{1,4}(?:is|was)[ \\t]{1,4}|[ \\t]{0,4}:[ \\t]{0,4}|[ \\t]{1,4})'
+  + `|token|secret|key|${PASSWORD_WORD})(?![A-Za-z0-9_])`
+  + '(?:[ \\t]{1,4}(?:is|was|ist|est|es|é)[ \\t]{1,4}|[ \\t]{0,4}:[ \\t]{0,4}|[ \\t]{0,4}(?:是|為|为|は|는|은)[ \\t]{0,4}|[ \\t]{1,4})'
   + '[\'"`]?(?<value>[^\\s\'"`<>()[\\]{},;⟦]{6,128})',
-  'gid',
+  'gi',
 )
 /** A member chain such as `process.env.TOKEN_2`, which names a value rather than being one. */
 const DOTTED_IDENTIFIER = /^[A-Za-z_$][\w$]*(?:\.[A-Za-z_$][\w$]*)+$/
 /** The next parameter of a query string, which ends a value read out of a URL. */
 const NEXT_QUERY_PARAMETER = /&[A-Za-z_][\w-]*=/
-/** Words that name a password, whose value may be short and need not look random. */
-const PASSWORD_WORDS = /^(?:password|passphrase|passcode|passwd|pwd|pw)$/i
+/** Whether a matched credential word is one of {@link PASSWORD_WORD}. */
+const PASSWORD_WORDS = new RegExp(`^(?:${PASSWORD_WORD})$`, 'i')
 /** Shortest value a general credential word (`key`, `token`, `secret`) is read with. */
 const GENERAL_VALUE_MIN = 16
 /** Lowest Shannon entropy, in bits per character, of a value after a general credential word. */
@@ -154,9 +181,8 @@ function collectTokenFormatCandidates(text: string, push: PushCandidate): void {
   }
   AZURE_KEY.lastIndex = 0
   for (let match = AZURE_KEY.exec(text); match !== null; match = AZURE_KEY.exec(text)) {
-    // oxlint-disable-next-line typescript/no-non-null-assertion -- the pattern has one group.
-    const value = match[1]!
-    const at = match.index + match[0].length - value.length
+    const [whole, value = ''] = match
+    const at = match.index + whole.length - value.length
     push(at, at + value.length, 'KEY', PRIORITY_SECRET)
   }
 }
@@ -179,7 +205,8 @@ function isPhraseCredential(value: string, password: boolean): boolean {
   if (isCodeShape(value, { loose: true })) return false
   if (password) {
     // A value without a letter is a passcode only when it is all digits; `2026-10-07` and `1.2.3` are not.
-    const shaped = /[A-Za-z]/.test(value) ? /[^A-Za-z]/.test(value) : /^\d+$/.test(value)
+    // A closing `?` or `!` is sentence punctuation (`Passwort vergessen?`), not the value's symbol.
+    const shaped = /[A-Za-z]/.test(value) ? /[^A-Za-z]/.test(value.replace(/[?!]+$/, '')) : /^\d+$/.test(value)
     return value.length >= PASSWORD_VALUE_MIN && PRINTABLE_ASCII.test(value) && shaped
   }
   if (!/[A-Za-z]/.test(value) || value.length < GENERAL_VALUE_MIN || value.includes(':') || shannon(value) < GENERAL_ENTROPY_MIN) return false
@@ -196,18 +223,15 @@ function isPhraseCredential(value: string, password: boolean): boolean {
 function collectCredentialPhraseCandidates(text: string, push: PushCandidate): void {
   CREDENTIAL_PHRASE.lastIndex = 0
   for (let match = CREDENTIAL_PHRASE.exec(text); match !== null; match = CREDENTIAL_PHRASE.exec(text)) {
-    // oxlint-disable-next-line typescript/no-non-null-assertion -- both groups always participate.
-    const [start] = match.indices!.groups!.value!
-    // oxlint-disable-next-line typescript/no-non-null-assertion -- see above.
-    const raw = match.groups!.value!
+    const { word = '', value: raw = '' } = match.groups ?? {}
+    // The value closes the match, and the word opens it: the lookbehind before it takes no characters.
+    const start = match.index + match[0].length - raw.length
     const parameter = raw.search(NEXT_QUERY_PARAMETER)
     const read = parameter < 0 ? raw : raw.slice(0, parameter)
     const value = read.slice(0, trimValueEnd(read))
-    // oxlint-disable-next-line typescript/no-non-null-assertion -- see above.
-    if (isPhraseCredential(value, PASSWORD_WORDS.test(match.groups!.word!))) push(start, start + value.length, 'KEY', PRIORITY_SECRET)
+    if (isPhraseCredential(value, PASSWORD_WORDS.test(word))) push(start, start + value.length, 'KEY', PRIORITY_SECRET)
     // The value may itself hold the next credential word (`token: key-…`), so scanning resumes right after the word.
-    // oxlint-disable-next-line typescript/no-non-null-assertion -- see above.
-    CREDENTIAL_PHRASE.lastIndex = match.indices!.groups!.word![1]
+    CREDENTIAL_PHRASE.lastIndex = match.index + word.length
   }
 }
 
