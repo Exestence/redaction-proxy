@@ -159,7 +159,7 @@ Where it is weak:
 
 These numbers are for `rules-6+intl-1`. The phone, host, and credential rules and the strict card and entropy rules added since then (`intl-2`, `ext-1`) target these weaknesses and have not been measured on a held-out set yet.
 
-The dev set scored much higher (77.8% English macro average for the proxy default) because it was written alongside the rules; it is kept only as a development check.
+The dev set scored much higher (88.9% English macro average for the proxy default) because it was written alongside the rules; it is kept only as a development check.
 
 Full tables: [held-out results](bench/results/public-bench-held-out.md), [dev results](bench/results/public-bench-dev.md). Method and other measurements: [technical details §18](docs/DETAILS.md#18-實測數字).
 <!-- RESULTS:END -->

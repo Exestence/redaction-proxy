@@ -159,7 +159,7 @@ REDACTION_PROXY_NAME_MODEL_DIR=$HOME/models/nym node lib/cli.js
 
 これらの数字は `rules-6+intl-1` の測定です。その後これらの弱点に向けて追加した電話番号・ホスト・認証情報のルールと、厳格版のカード番号・高エントロピーのルール（`intl-2`、`ext-1`）は、まだ保留セットで測定していません。
 
-開発セット（dev set）のスコアはずっと高く出ました（プロキシ既定の英語マクロ平均 77.8%）。ルールと並行して作成したためで、現在は開発中の確認にだけ使っています。
+開発セット（dev set）のスコアはずっと高く出ました（プロキシ既定の英語マクロ平均 88.9%）。ルールと並行して作成したためで、現在は開発中の確認にだけ使っています。
 
 詳しい表：[ホールドアウトの結果](bench/results/public-bench-held-out.md)、[開発セットの結果](bench/results/public-bench-dev.md)。方法とその他の計測：[技術詳細 第 18 節](docs/DETAILS.md#18-實測數字)。
 <!-- RESULTS:END -->

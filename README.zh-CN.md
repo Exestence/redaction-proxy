@@ -160,7 +160,7 @@ REDACTION_PROXY_NAME_MODEL_DIR=$HOME/models/nym node lib/cli.js
 
 这些数字测量的是 `rules-6+intl-1`。之后针对这些弱点加入的电话、主机、密钥规则以及严格版卡号、高熵规则（`intl-2`、`ext-1`）还没有在保留集上测量。
 
-开发集（dev set）的分数高得多（代理默认配置的英文宏平均为 77.8%），因为它是和规则一起编写的；现在只作为开发时的检查。
+开发集（dev set）的分数高得多（代理默认配置的英文宏平均为 88.9%），因为它是和规则一起编写的；现在只作为开发时的检查。
 
 完整表格：[保留集结果](bench/results/public-bench-held-out.md)、[开发集结果](bench/results/public-bench-dev.md)。方法和其他测量：[技术细节第 18 节](docs/DETAILS.md#18-實測數字)。
 <!-- RESULTS:END -->

@@ -466,8 +466,8 @@
         }
       },
       "latency": {
-        "median": 0.052833000000021,
-        "p95": 0.12433300000003555
+        "median": 0.06920800000000327,
+        "p95": 0.1566249999999627
       }
     },
     {
@@ -516,7 +516,7 @@
         "PHONE": {
           "outcomes": {
             "fullyMasked": {
-              "hits": 0,
+              "hits": 48,
               "total": 48
             },
             "partlyMasked": {
@@ -524,12 +524,12 @@
               "total": 48
             },
             "untouched": {
-              "hits": 48,
+              "hits": 0,
               "total": 48
             }
           },
           "coreFullyMasked": {
-            "hits": 0,
+            "hits": 48,
             "total": 48
           }
         },
@@ -657,15 +657,15 @@
       "macroAverage": {
         "categories": 9,
         "outcomes": {
-          "fullyMasked": 0.7777777777777778,
+          "fullyMasked": 0.8888888888888888,
           "partlyMasked": 0,
-          "untouched": 0.2222222222222222
+          "untouched": 0.1111111111111111
         }
       },
       "overall": {
         "outcomes": {
           "fullyMasked": {
-            "hits": 628,
+            "hits": 676,
             "total": 771
           },
           "partlyMasked": {
@@ -673,17 +673,17 @@
             "total": 771
           },
           "untouched": {
-            "hits": 143,
+            "hits": 95,
             "total": 771
           }
         },
         "coreFullyMasked": {
-          "hits": 182,
+          "hits": 230,
           "total": 230
         },
         "regionPrecision": {
-          "hits": 628,
-          "total": 654
+          "hits": 676,
+          "total": 702
         },
         "restoreExact": {
           "hits": 300,
@@ -694,7 +694,7 @@
         "en": {
           "outcomes": {
             "fullyMasked": {
-              "hits": 628,
+              "hits": 676,
               "total": 771
             },
             "partlyMasked": {
@@ -702,17 +702,17 @@
               "total": 771
             },
             "untouched": {
-              "hits": 143,
+              "hits": 95,
               "total": 771
             }
           },
           "coreFullyMasked": {
-            "hits": 182,
+            "hits": 230,
             "total": 230
           },
           "regionPrecision": {
-            "hits": 628,
-            "total": 654
+            "hits": 676,
+            "total": 702
           },
           "restoreExact": {
             "hits": 300,
@@ -724,7 +724,7 @@
         "chat": {
           "outcomes": {
             "fullyMasked": {
-              "hits": 79,
+              "hits": 100,
               "total": 121
             },
             "partlyMasked": {
@@ -732,17 +732,17 @@
               "total": 121
             },
             "untouched": {
-              "hits": 42,
+              "hits": 21,
               "total": 121
             }
           },
           "coreFullyMasked": {
-            "hits": 0,
+            "hits": 21,
             "total": 21
           },
           "regionPrecision": {
-            "hits": 79,
-            "total": 79
+            "hits": 100,
+            "total": 100
           },
           "restoreExact": {
             "hits": 50,
@@ -836,7 +836,7 @@
         "email": {
           "outcomes": {
             "fullyMasked": {
-              "hits": 77,
+              "hits": 104,
               "total": 154
             },
             "partlyMasked": {
@@ -844,17 +844,17 @@
               "total": 154
             },
             "untouched": {
-              "hits": 77,
+              "hits": 50,
               "total": 154
             }
           },
           "coreFullyMasked": {
-            "hits": 0,
+            "hits": 27,
             "total": 27
           },
           "regionPrecision": {
-            "hits": 77,
-            "total": 77
+            "hits": 104,
+            "total": 104
           },
           "restoreExact": {
             "hits": 50,
@@ -925,13 +925,13 @@
         }
       },
       "latency": {
-        "median": 0.04329100000001063,
-        "p95": 0.07883299999997462
+        "median": 0.04908299999999599,
+        "p95": 0.091083000000026
       }
     },
     {
       "name": "rules + name model (experimental)",
-      "note": "rules + name model (experimental): the proxy-default rules plus the nym name model (`rules-6+intl-1+nym-edge-int8-2`, shipped `nameModel` defaults), through the code path the proxy uses for user-written text. Each prompt is one user message; the model reads only its prose lines and skips code, log, config, and data lines by design, so it cannot find names there except by propagation of a value found in prose. Sensitive values inside prose lines, by format: chat 100%, code 0%, log 60%, config 0%, email 100%, stacktrace 0%. Its latency includes inference",
+      "note": "rules + name model (experimental): the proxy-default rules plus the nym name model (`rules-6+intl-2+ext-1+nym-edge-int8-2`, shipped `nameModel` defaults), through the code path the proxy uses for user-written text. Each prompt is one user message; the model reads only its prose lines and skips code, log, config, and data lines by design, so it cannot find names there except by propagation of a value found in prose. Sensitive values inside prose lines, by format: chat 100%, code 0%, log 60%, config 0%, email 100%, stacktrace 0%. Its latency includes inference",
       "byCategory": {
         "PERSON": {
           "outcomes": {
@@ -976,7 +976,7 @@
         "PHONE": {
           "outcomes": {
             "fullyMasked": {
-              "hits": 0,
+              "hits": 48,
               "total": 48
             },
             "partlyMasked": {
@@ -984,12 +984,12 @@
               "total": 48
             },
             "untouched": {
-              "hits": 48,
+              "hits": 0,
               "total": 48
             }
           },
           "coreFullyMasked": {
-            "hits": 0,
+            "hits": 48,
             "total": 48
           }
         },
@@ -1117,15 +1117,15 @@
       "macroAverage": {
         "categories": 9,
         "outcomes": {
-          "fullyMasked": 0.8608187134502924,
+          "fullyMasked": 0.9719298245614034,
           "partlyMasked": 0,
-          "untouched": 0.1391812865497076
+          "untouched": 0.028070175438596492
         }
       },
       "overall": {
         "outcomes": {
           "fullyMasked": {
-            "hits": 699,
+            "hits": 747,
             "total": 771
           },
           "partlyMasked": {
@@ -1133,17 +1133,17 @@
             "total": 771
           },
           "untouched": {
-            "hits": 72,
+            "hits": 24,
             "total": 771
           }
         },
         "coreFullyMasked": {
-          "hits": 182,
+          "hits": 230,
           "total": 230
         },
         "regionPrecision": {
-          "hits": 699,
-          "total": 725
+          "hits": 747,
+          "total": 773
         },
         "restoreExact": {
           "hits": 300,
@@ -1154,7 +1154,7 @@
         "en": {
           "outcomes": {
             "fullyMasked": {
-              "hits": 699,
+              "hits": 747,
               "total": 771
             },
             "partlyMasked": {
@@ -1162,17 +1162,17 @@
               "total": 771
             },
             "untouched": {
-              "hits": 72,
+              "hits": 24,
               "total": 771
             }
           },
           "coreFullyMasked": {
-            "hits": 182,
+            "hits": 230,
             "total": 230
           },
           "regionPrecision": {
-            "hits": 699,
-            "total": 725
+            "hits": 747,
+            "total": 773
           },
           "restoreExact": {
             "hits": 300,
@@ -1184,7 +1184,7 @@
         "chat": {
           "outcomes": {
             "fullyMasked": {
-              "hits": 100,
+              "hits": 121,
               "total": 121
             },
             "partlyMasked": {
@@ -1192,17 +1192,17 @@
               "total": 121
             },
             "untouched": {
-              "hits": 21,
+              "hits": 0,
               "total": 121
             }
           },
           "coreFullyMasked": {
-            "hits": 0,
+            "hits": 21,
             "total": 21
           },
           "regionPrecision": {
-            "hits": 100,
-            "total": 100
+            "hits": 121,
+            "total": 121
           },
           "restoreExact": {
             "hits": 50,
@@ -1296,7 +1296,7 @@
         "email": {
           "outcomes": {
             "fullyMasked": {
-              "hits": 127,
+              "hits": 154,
               "total": 154
             },
             "partlyMasked": {
@@ -1304,17 +1304,17 @@
               "total": 154
             },
             "untouched": {
-              "hits": 27,
+              "hits": 0,
               "total": 154
             }
           },
           "coreFullyMasked": {
-            "hits": 0,
+            "hits": 27,
             "total": 27
           },
           "regionPrecision": {
-            "hits": 127,
-            "total": 127
+            "hits": 154,
+            "total": 154
           },
           "restoreExact": {
             "hits": 50,
@@ -1385,8 +1385,8 @@
         }
       },
       "latency": {
-        "median": 5.843166999999994,
-        "p95": 12.91579200000001
+        "median": 5.686208000000079,
+        "p95": 12.89108299999998
       }
     },
     {
@@ -1814,8 +1814,8 @@
         }
       },
       "latency": {
-        "median": 5.941583949606866,
-        "p95": 7.663875003345311
+        "median": 6.130333000328392,
+        "p95": 8.436958014499396
       }
     },
     {
@@ -2243,8 +2243,8 @@
         }
       },
       "latency": {
-        "median": 5.858541000634432,
-        "p95": 7.50291597796604
+        "median": 5.9071669820696115,
+        "p95": 7.598292024340481
       }
     }
   ],
@@ -2788,8 +2788,8 @@
         }
       },
       "latency": {
-        "median": 0.05012499999997999,
-        "p95": 0.09383300000001782
+        "median": 0.058708000000024185,
+        "p95": 0.11541599999998198
       }
     },
     {
@@ -2838,7 +2838,7 @@
         "PHONE": {
           "outcomes": {
             "fullyMasked": {
-              "hits": 117,
+              "hits": 165,
               "total": 193
             },
             "partlyMasked": {
@@ -2846,12 +2846,12 @@
               "total": 193
             },
             "untouched": {
-              "hits": 76,
+              "hits": 28,
               "total": 193
             }
           },
           "coreFullyMasked": {
-            "hits": 117,
+            "hits": 165,
             "total": 193
           }
         },
@@ -2979,15 +2979,15 @@
       "macroAverage": {
         "categories": 9,
         "outcomes": {
-          "fullyMasked": 0.8338631490242213,
+          "fullyMasked": 0.8614970004922697,
           "partlyMasked": 0,
-          "untouched": 0.16613685097577868
+          "untouched": 0.13850299950773032
         }
       },
       "overall": {
         "outcomes": {
           "fullyMasked": {
-            "hits": 2635,
+            "hits": 2683,
             "total": 3122
           },
           "partlyMasked": {
@@ -2995,17 +2995,17 @@
             "total": 3122
           },
           "untouched": {
-            "hits": 487,
+            "hits": 439,
             "total": 3122
           }
         },
         "coreFullyMasked": {
-          "hits": 854,
+          "hits": 902,
           "total": 930
         },
         "regionPrecision": {
-          "hits": 2635,
-          "total": 2738
+          "hits": 2683,
+          "total": 2785
         },
         "restoreExact": {
           "hits": 1200,
@@ -3016,7 +3016,7 @@
         "en": {
           "outcomes": {
             "fullyMasked": {
-              "hits": 628,
+              "hits": 676,
               "total": 771
             },
             "partlyMasked": {
@@ -3024,17 +3024,17 @@
               "total": 771
             },
             "untouched": {
-              "hits": 143,
+              "hits": 95,
               "total": 771
             }
           },
           "coreFullyMasked": {
-            "hits": 182,
+            "hits": 230,
             "total": 230
           },
           "regionPrecision": {
-            "hits": 628,
-            "total": 654
+            "hits": 676,
+            "total": 702
           },
           "restoreExact": {
             "hits": 300,
@@ -3118,7 +3118,7 @@
           },
           "regionPrecision": {
             "hits": 701,
-            "total": 733
+            "total": 732
           },
           "restoreExact": {
             "hits": 300,
@@ -3130,7 +3130,7 @@
         "chat": {
           "outcomes": {
             "fullyMasked": {
-              "hits": 354,
+              "hits": 375,
               "total": 492
             },
             "partlyMasked": {
@@ -3138,17 +3138,17 @@
               "total": 492
             },
             "untouched": {
-              "hits": 138,
+              "hits": 117,
               "total": 492
             }
           },
           "coreFullyMasked": {
-            "hits": 57,
+            "hits": 78,
             "total": 92
           },
           "regionPrecision": {
-            "hits": 354,
-            "total": 354
+            "hits": 375,
+            "total": 375
           },
           "restoreExact": {
             "hits": 200,
@@ -3204,7 +3204,7 @@
           },
           "regionPrecision": {
             "hits": 400,
-            "total": 401
+            "total": 400
           },
           "restoreExact": {
             "hits": 200,
@@ -3242,7 +3242,7 @@
         "email": {
           "outcomes": {
             "fullyMasked": {
-              "hits": 351,
+              "hits": 378,
               "total": 602
             },
             "partlyMasked": {
@@ -3250,17 +3250,17 @@
               "total": 602
             },
             "untouched": {
-              "hits": 251,
+              "hits": 224,
               "total": 602
             }
           },
           "coreFullyMasked": {
-            "hits": 60,
+            "hits": 87,
             "total": 101
           },
           "regionPrecision": {
-            "hits": 351,
-            "total": 351
+            "hits": 378,
+            "total": 378
           },
           "restoreExact": {
             "hits": 200,
@@ -3322,7 +3322,7 @@
           "total": 81
         },
         "sha256": {
-          "hits": 1,
+          "hits": 0,
           "total": 200
         },
         "tracking-number": {
@@ -3331,13 +3331,13 @@
         }
       },
       "latency": {
-        "median": 0.04795799999999417,
-        "p95": 0.08825000000001637
+        "median": 0.06062499999995907,
+        "p95": 0.12079099999994014
       }
     },
     {
       "name": "rules + name model (experimental)",
-      "note": "rules + name model (experimental): the proxy-default rules plus the nym name model (`rules-6+intl-1+nym-edge-int8-2`, shipped `nameModel` defaults), through the code path the proxy uses for user-written text. Each prompt is one user message; the model reads only its prose lines and skips code, log, config, and data lines by design, so it cannot find names there except by propagation of a value found in prose. Sensitive values inside prose lines, by format: chat 100%, code 0%, log 60%, config 0%, email 100%, stacktrace 0%. Its latency includes inference",
+      "note": "rules + name model (experimental): the proxy-default rules plus the nym name model (`rules-6+intl-2+ext-1+nym-edge-int8-2`, shipped `nameModel` defaults), through the code path the proxy uses for user-written text. Each prompt is one user message; the model reads only its prose lines and skips code, log, config, and data lines by design, so it cannot find names there except by propagation of a value found in prose. Sensitive values inside prose lines, by format: chat 100%, code 0%, log 60%, config 0%, email 100%, stacktrace 0%. Its latency includes inference",
       "byCategory": {
         "PERSON": {
           "outcomes": {
@@ -3382,7 +3382,7 @@
         "PHONE": {
           "outcomes": {
             "fullyMasked": {
-              "hits": 117,
+              "hits": 165,
               "total": 193
             },
             "partlyMasked": {
@@ -3390,12 +3390,12 @@
               "total": 193
             },
             "untouched": {
-              "hits": 76,
+              "hits": 28,
               "total": 193
             }
           },
           "coreFullyMasked": {
-            "hits": 117,
+            "hits": 165,
             "total": 193
           }
         },
@@ -3523,15 +3523,15 @@
       "macroAverage": {
         "categories": 9,
         "outcomes": {
-          "fullyMasked": 0.9073674225284949,
+          "fullyMasked": 0.9350012739965431,
           "partlyMasked": 0.009686609686609686,
-          "untouched": 0.08294596778489548
+          "untouched": 0.055312116316847106
         }
       },
       "overall": {
         "outcomes": {
           "fullyMasked": {
-            "hits": 2893,
+            "hits": 2941,
             "total": 3122
           },
           "partlyMasked": {
@@ -3539,17 +3539,17 @@
             "total": 3122
           },
           "untouched": {
-            "hits": 195,
+            "hits": 147,
             "total": 3122
           }
         },
         "coreFullyMasked": {
-          "hits": 854,
+          "hits": 902,
           "total": 930
         },
         "regionPrecision": {
-          "hits": 2927,
-          "total": 3030
+          "hits": 2975,
+          "total": 3077
         },
         "restoreExact": {
           "hits": 1200,
@@ -3560,7 +3560,7 @@
         "en": {
           "outcomes": {
             "fullyMasked": {
-              "hits": 699,
+              "hits": 747,
               "total": 771
             },
             "partlyMasked": {
@@ -3568,17 +3568,17 @@
               "total": 771
             },
             "untouched": {
-              "hits": 72,
+              "hits": 24,
               "total": 771
             }
           },
           "coreFullyMasked": {
-            "hits": 182,
+            "hits": 230,
             "total": 230
           },
           "regionPrecision": {
-            "hits": 699,
-            "total": 725
+            "hits": 747,
+            "total": 773
           },
           "restoreExact": {
             "hits": 300,
@@ -3662,7 +3662,7 @@
           },
           "regionPrecision": {
             "hits": 776,
-            "total": 808
+            "total": 807
           },
           "restoreExact": {
             "hits": 300,
@@ -3674,7 +3674,7 @@
         "chat": {
           "outcomes": {
             "fullyMasked": {
-              "hits": 443,
+              "hits": 464,
               "total": 492
             },
             "partlyMasked": {
@@ -3682,17 +3682,17 @@
               "total": 492
             },
             "untouched": {
-              "hits": 46,
+              "hits": 25,
               "total": 492
             }
           },
           "coreFullyMasked": {
-            "hits": 57,
+            "hits": 78,
             "total": 92
           },
           "regionPrecision": {
-            "hits": 446,
-            "total": 446
+            "hits": 467,
+            "total": 467
           },
           "restoreExact": {
             "hits": 200,
@@ -3748,7 +3748,7 @@
           },
           "regionPrecision": {
             "hits": 400,
-            "total": 401
+            "total": 400
           },
           "restoreExact": {
             "hits": 200,
@@ -3786,7 +3786,7 @@
         "email": {
           "outcomes": {
             "fullyMasked": {
-              "hits": 520,
+              "hits": 547,
               "total": 602
             },
             "partlyMasked": {
@@ -3794,17 +3794,17 @@
               "total": 602
             },
             "untouched": {
-              "hits": 51,
+              "hits": 24,
               "total": 602
             }
           },
           "coreFullyMasked": {
-            "hits": 60,
+            "hits": 87,
             "total": 101
           },
           "regionPrecision": {
-            "hits": 551,
-            "total": 551
+            "hits": 578,
+            "total": 578
           },
           "restoreExact": {
             "hits": 200,
@@ -3866,7 +3866,7 @@
           "total": 81
         },
         "sha256": {
-          "hits": 1,
+          "hits": 0,
           "total": 200
         },
         "tracking-number": {
@@ -3875,8 +3875,8 @@
         }
       },
       "latency": {
-        "median": 5.844250000000102,
-        "p95": 13.627583999999842
+        "median": 5.9513749999996435,
+        "p95": 13.478916999999456
       }
     },
     {
@@ -4376,8 +4376,8 @@
         }
       },
       "latency": {
-        "median": 5.228166002780199,
-        "p95": 7.297417032532394
+        "median": 5.391207989305258,
+        "p95": 7.5577080133371055
       }
     },
     {
@@ -4877,8 +4877,8 @@
         }
       },
       "latency": {
-        "median": 5.182666995096952,
-        "p95": 7.2732080006971955
+        "median": 5.2767080487683415,
+        "p95": 7.413042010739446
       }
     }
   ],
