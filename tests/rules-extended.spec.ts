@@ -191,6 +191,7 @@ describe('credential-phrase', () => {
     ['an assignment, which the api-key rule reads', 'token=Zq8xT2vK9mN4pL7wR3sYuB1'],
     ['a short value after a general word', 'token Ab3dEf9h'],
     ['a URL', 'key https://example.com/Zq8xT2vK9mN4pL7wR3sYuB1'],
+    ['a date or a version after a password word', 'pw 2026-10-07 expires, passcode: 1.2.3.4'],
     ['prose in another script after a password word', 'Token Password 以静态形式被读取。passwd 条目解析沙箱用户的登录主目录，以'],
   ])('leaves %s alone', async (_name, text) => {
     expect(await maskWith(['credential-phrase'], text)).toBe(text)

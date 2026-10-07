@@ -163,8 +163,8 @@ function collectTokenFormatCandidates(text: string, push: PushCandidate): void {
 
 /**
  * Whether a value after a credential word reads as a credential. After a
- * password word any printable ASCII value with a digit or symbol does, a
- * numeric passcode included; after a general word only a long random-looking
+ * password word any printable ASCII value with a letter and a digit or symbol
+ * does, and so does an all-digit passcode; after a general word only a long random-looking
  * one does: mixed case and digits, or hexadecimal with letters and digits,
  * and high entropy.
  * A URL, a path, an identifier, and code are never credentials here.
@@ -177,7 +177,11 @@ function isPhraseCredential(value: string, password: boolean): boolean {
   if (DOTTED_IDENTIFIER.test(value)) return false
   if ((value.match(/\//g)?.length ?? 0) > 1) return false
   if (isCodeShape(value, { loose: true })) return false
-  if (password) return value.length >= PASSWORD_VALUE_MIN && PRINTABLE_ASCII.test(value) && /[^A-Za-z]/.test(value)
+  if (password) {
+    // A value without a letter is a passcode only when it is all digits; `2026-10-07` and `1.2.3` are not.
+    const shaped = /[A-Za-z]/.test(value) ? /[^A-Za-z]/.test(value) : /^\d+$/.test(value)
+    return value.length >= PASSWORD_VALUE_MIN && PRINTABLE_ASCII.test(value) && shaped
+  }
   if (!/[A-Za-z]/.test(value) || value.length < GENERAL_VALUE_MIN || value.includes(':') || shannon(value) < GENERAL_ENTROPY_MIN) return false
   const mixed = /[a-z]/.test(value) && /[A-Z]/.test(value) && /\d/.test(value)
   const hexadecimal = /^[0-9a-f]+$/i.test(value) && /\d/.test(value)
