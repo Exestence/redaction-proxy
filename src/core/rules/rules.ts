@@ -425,31 +425,34 @@ export function collectStrictCardCandidates(text: string, push: PushCandidate, a
       const end = match.index + match[0].length
       if (TOKEN_CHAR.test(text.charAt(match.index - 1)) && !endsHighEscape(text, match.index)) return
       if (TOKEN_CHAR.test(text.charAt(end)) || RANGE_OR_DECIMAL_POINT.test(text.slice(match.index - 2, match.index))) return
-      // Splitting on a captured separator alternates groups (even indexes) and separators (odd).
-      const parts = match[0].split(/([ -])/)
-      const groups = parts.filter((_, i) => i % 2 === 0)
-      const separators = parts.filter((_, i) => i % 2 === 1)
-      const starts: number[] = []
-      let at = match.index
-      for (const group of groups) {
-        starts.push(at)
-        at += group.length + 1
-      }
-      groups.forEach((group, i) => {
-        // oxlint-disable-next-line typescript/no-non-null-assertion -- one start per group.
-        pushCard(group, starts[i]!, starts[i]! + group.length)
-      })
+      // Each group with its offset in `text` and the separator before it (`''` for the first).
+      const groups = [...match[0].matchAll(/\d+/g)].map(group => ({
+        digits: group[0],
+        start: match.index + group.index,
+        separator: match[0].charAt(group.index - 1),
+      }))
+      for (const group of groups) pushCard(group.digits, group.start, group.start + group.digits.length)
       if (groups.length === 1 && match[0].startsWith('0')) pushCard(match[0].slice(1), match.index + 1, end)
-      // Each maximal chain of groups joined by one separator is one printed number or none.
-      for (let first = 0; first < separators.length; first += 1) {
-        if (first > 0 && separators[first - 1] === separators[first]) continue
-        let last = first + 1
-        while (last < separators.length && separators[last] === separators[first]) last += 1
-        const chain = groups.slice(first, last + 1)
-        if (!CARD_GROUPING.test(chain.map(group => group.length).join(','))) continue
-        // oxlint-disable-next-line typescript/no-non-null-assertion -- `first` and `last` index groups.
-        pushCard(chain.join(''), starts[first]!, starts[last]! + chain[chain.length - 1]!.length)
+      // Each maximal chain of groups joined by one separator is one printed number or none;
+      // neighbouring chains share the group between them.
+      let chain: typeof groups = []
+      let separator = ''
+      const pushChain = (): void => {
+        const [head] = chain
+        const tail = chain.at(-1)
+        if (chain.length < 2 || head === undefined || tail === undefined) return
+        if (!CARD_GROUPING.test(chain.map(group => group.digits.length).join(','))) return
+        pushCard(chain.map(group => group.digits).join(''), head.start, tail.start + tail.digits.length)
       }
+      for (const group of groups) {
+        if (chain.length > 1 && group.separator !== separator) {
+          pushChain()
+          chain = chain.slice(-1)
+        }
+        if (chain.length === 1) separator = group.separator
+        chain.push(group)
+      }
+      pushChain()
     })
   }
 }
