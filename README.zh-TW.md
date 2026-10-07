@@ -59,13 +59,17 @@ curl http://127.0.0.1:8787/v1/chat/completions \
   -d '{"model":"gpt-4o-mini","messages":[{"role":"user","content":"寄信給 lin@example.test"}]}'
 ```
 
-用 `node lib/cli.js --config redaction.json` 指定 JSON 檔，環境變數可覆寫。金鑰永遠不放在檔案裡；不認得的鍵會讓啟動失敗。
+用 `node lib/cli.js --config redaction.json` 指定 JSON 檔，環境變數可覆寫。上游 API 金鑰永遠不放在檔案裡；不認得的鍵會讓啟動失敗。
 
 | 鍵 | 預設 | 說明 |
 | --- | --- | --- |
-| `port` | `8787` | 只綁定 `127.0.0.1`。 |
+| `port` | `8787` | TCP 埠號。 |
+| `host` | `127.0.0.1` | 綁定位址。非本機位址（例如 Docker 中的 `0.0.0.0`）必須設定 `authToken`。 |
+| `authToken` | 無 | 用戶端必須在 `x-redaction-proxy-token` 標頭送出的權杖，至少 16 個字元（`openssl rand -hex 32`）。綁定本機時可不設。Claude Code 用 `ANTHROPIC_CUSTOM_HEADERS="x-redaction-proxy-token: <權杖>"` 送出；SDK 用其預設標頭選項。 |
+| `allowedOrigins` | 無 | 除了本機 `http(s)` 網頁之外，允許的瀏覽器或 Electron 來源，例如 `app://my-client`。不接受 `null`（`file://` 網頁）。 |
 | `openaiUpstream` | `https://api.openai.com` | Chat Completions 與 Responses 的上游。 |
 | `anthropicUpstream` | `https://api.anthropic.com` | Anthropic Messages 的上游。 |
+| `allowInsecureUpstream` | `false` | 允許以明文 `http://` 連到非本機的上游；API 金鑰會以明文傳送。 |
 | `redaction.terms` | 無 | 要遮的人名等字詞，不分大小寫。 |
 | `redaction.projectNames` | 無 | 要遮的專案代號。 |
 | `redaction.allowlist` | `git@github.com`、`noreply@github.com` | 永遠不遮的值。 |
@@ -83,7 +87,7 @@ curl http://127.0.0.1:8787/v1/chat/completions \
 }
 ```
 
-環境變數與所有選項見[技術細節第 12 節](docs/DETAILS.md#12-完整設定)。日誌每個請求一行，只有計數與耗時，絕不含原始值或標頭。
+環境變數與所有選項見[技術細節第 12 節](docs/DETAILS.md#12-完整設定)。日誌每個請求一行，只有計數與耗時；工具呼叫參數中的每個佔位符另記一行（id、工具、參數路徑）。絕不含原始值或標頭。
 
 </details>
 
@@ -165,12 +169,13 @@ REDACTION_PROXY_NAME_MODEL_DIR=$HOME/models/nym node lib/cli.js
 
 - **語意。** 雲端仍讀得到佔位符周圍的一切：`⟦PATH_1⟧/clients/acme-layoffs.md` 依然透露很多。
 - **人名、地址、病況、薪資**，除非你列進 `terms` 或人名模型找到。
-- **圖片、PDF、音訊、`metadata`、工具名稱、帶簽章的 thinking。** 這些原樣轉送；若偵測到的值出現在其中，整個請求以 422 拒絕。
+- **圖片、PDF、音訊、`url` 欄位、`metadata`、`stop` 序列、`name` 欄位（工具與參與者名稱）、帶簽章的 thinking。** 這些原樣轉送且不掃描，JSON 物件的鍵也是：在被遮的文字中偵測到的值若也出現在其中，整個請求以 422 拒絕；只出現在這些地方的值則照原樣送出。
 - **少見的寫法。** 有些拆開或編碼過的寫法抓不到，例如有空白的 `name @ domain`、`name at domain`、小寫的 IBAN、編碼兩次的百分比編碼。
 - **Cursor**，以及任何從自家伺服器發出請求的工具。
-- **你電腦上的其他程式。** 代理只綁定 `127.0.0.1`，沒有身分驗證。
+- **你電腦上的其他程式。** 代理預設只綁定 `127.0.0.1`；沒設 `authToken` 時，你電腦上的任何程式都能使用它。網頁的請求以 403 拒絕，除非來源（Origin）是本機 `http(s)` 網頁或列在 `allowedOrigins`；指名其他主機名稱的請求（DNS rebinding）也以 403 拒絕。
+- **模型把值寫到哪裡。** 模型在哪裡寫佔位符，代理就在哪裡還原，只有工具呼叫參數中的 URL 例外：那裡的 `https://example.test/?q=⟦EMAIL_1⟧` 保持原樣，抓網頁的工具就送不出真實 email。工具參數的其他位置照常還原，所以模型寫的 shell 指令仍可能把值送出；每次這類還原都會記入日誌。
 
-另外：模型若把 `⟦EMAIL_1⟧` 改寫成 `[EMAIL_1]`，你會原樣看到；需要直接操作被遮值的任務會變差；控制字元會換成可見字元；重啟後會忘記 Responses API 的接續對話。完整清單見[技術細節第 17 節](docs/DETAILS.md#17-完整限制清單)，威脅模型見[第 11 節](docs/DETAILS.md#11-威脅模型)。
+另外：模型若把 `⟦EMAIL_1⟧` 改寫成 `[EMAIL_1]`，你會原樣看到；需要直接操作被遮值的任務會變差；控制字元會換成可見字元；重啟後會忘記 Responses API 的接續對話，接續請求會以 422 拒絕；超過 64 MiB 的請求以 413 拒絕。完整清單見[技術細節第 17 節](docs/DETAILS.md#17-完整限制清單)，威脅模型見[第 11 節](docs/DETAILS.md#11-威脅模型)。
 
 ## 更多
 

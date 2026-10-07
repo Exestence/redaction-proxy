@@ -59,13 +59,17 @@ curl http://127.0.0.1:8787/v1/chat/completions \
   -d '{"model":"gpt-4o-mini","messages":[{"role":"user","content":"email lin@example.test"}]}'
 ```
 
-Pass a JSON file with `node lib/cli.js --config redaction.json`; environment variables override it. Keys never go in the file, and an unknown key stops startup.
+Pass a JSON file with `node lib/cli.js --config redaction.json`; environment variables override it. Upstream API keys never go in the file, and an unknown key stops startup.
 
 | Key | Default | Meaning |
 | --- | --- | --- |
-| `port` | `8787` | Binds `127.0.0.1` only. |
+| `port` | `8787` | TCP port. |
+| `host` | `127.0.0.1` | Address to bind. An address that is not loopback (such as `0.0.0.0` in Docker) requires `authToken`. |
+| `authToken` | none | Token every client must send in the `x-redaction-proxy-token` header, at least 16 characters (`openssl rand -hex 32`). Optional on loopback. Claude Code sends it with `ANTHROPIC_CUSTOM_HEADERS="x-redaction-proxy-token: <token>"`; SDKs through their default-headers option. |
+| `allowedOrigins` | none | Browser or Electron origins served besides loopback `http(s)` pages, such as `app://my-client`. `null` (`file://` pages) is not accepted. |
 | `openaiUpstream` | `https://api.openai.com` | Upstream for Chat Completions and Responses. |
 | `anthropicUpstream` | `https://api.anthropic.com` | Upstream for Anthropic Messages. |
+| `allowInsecureUpstream` | `false` | Allow plain `http://` to an upstream that is not loopback, which sends API keys in cleartext. |
 | `redaction.terms` | none | Names and other words to mask, case-insensitive. |
 | `redaction.projectNames` | none | Project code names to mask. |
 | `redaction.allowlist` | `git@github.com`, `noreply@github.com` | Values never masked. |
@@ -83,7 +87,7 @@ Pass a JSON file with `node lib/cli.js --config redaction.json`; environment var
 }
 ```
 
-Environment variables and every option: [technical details §12](docs/DETAILS.md#12-完整設定) (Traditional Chinese). The log has one line per request with counts and duration, never an original value or a header.
+Environment variables and every option: [technical details §12](docs/DETAILS.md#12-完整設定) (Traditional Chinese). The log has one line per request with counts and duration, and one line per placeholder in tool-call arguments (its id, the tool, and the argument path); never an original value or a header.
 
 </details>
 
@@ -165,12 +169,13 @@ Full tables: [held-out results](bench/results/public-bench-held-out.md), [dev re
 
 - **Meaning.** The cloud still reads everything around the placeholders: `⟦PATH_1⟧/clients/acme-layoffs.md` still says a lot.
 - **Names, addresses, health details, salaries**, unless you list them in `terms` or the name model finds them.
-- **Images, PDFs, audio, `metadata`, tool names, signed thinking.** These are forwarded unchanged; if a detected value appears in one, the whole request is refused with 422.
+- **Images, PDFs, audio, `url` fields, `metadata`, `stop` sequences, `name` fields (tool and participant names), signed thinking.** These are forwarded unchanged and never scanned, nor are JSON object keys: a value found in the masked text that also appears in one makes the proxy refuse the whole request with 422, but a value that appears only there is sent as is.
 - **Unusual spellings.** Some split or encoded forms slip through, such as `name @ domain` with spaces, `name at domain`, a lower-case IBAN, or a double percent-encoded value.
 - **Cursor**, or any tool that sends requests from its own servers.
-- **Other programs on your machine.** The proxy binds `127.0.0.1` only, with no authentication.
+- **Other programs on your machine.** The proxy binds `127.0.0.1` by default; without `authToken`, any program on your machine can use it. Web pages are refused with 403 unless their origin is a loopback `http(s)` page or in `allowedOrigins`, and so are requests for other host names (DNS rebinding).
+- **Where the model puts a value.** The proxy restores a placeholder wherever the model writes it, except inside a URL in tool-call arguments: there `https://example.test/?q=⟦EMAIL_1⟧` stays as written, so a fetch tool cannot send the real email. Elsewhere in tool arguments values are restored, so a shell command the model writes can still send them; each such restore is logged.
 
-Also: a model that rewrites `⟦EMAIL_1⟧` as `[EMAIL_1]` shows it to you as written; tasks that need the masked value itself get worse; control characters become visible stand-ins; a restart forgets Responses API continuations. Full list: [technical details §17](docs/DETAILS.md#17-完整限制清單); threat model: [§11](docs/DETAILS.md#11-威脅模型).
+Also: a model that rewrites `⟦EMAIL_1⟧` as `[EMAIL_1]` shows it to you as written; tasks that need the masked value itself get worse; control characters become visible stand-ins; a restart forgets Responses API continuations, and continuing one is refused with 422; requests over 64 MiB are refused with 413. Full list: [technical details §17](docs/DETAILS.md#17-完整限制清單); threat model: [§11](docs/DETAILS.md#11-威脅模型).
 
 ## More
 

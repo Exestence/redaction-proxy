@@ -32,9 +32,10 @@ try {
 }
 const nameModel = config.nameModel === undefined ? undefined : await loadNameModel(config.nameModel).catch(exitWith)
 const server = createProxyServer(config, undefined, nameModel)
-const port = await listen(server, config.port)
+const port = await listen(server, config.port, config.host)
 for (const signal of ['SIGINT', 'SIGTERM'] as const) {
   process.once(signal, () => void closeProxy(server, nameModel))
 }
 const modelNote = nameModel === undefined ? '' : ', name model on (experimental)'
-console.error(`redaction-proxy on http://127.0.0.1:${port} -> openai ${config.openaiUpstream}, anthropic ${config.anthropicUpstream}${modelNote}`)
+const tokenNote = config.authToken === undefined ? '' : ', x-redaction-proxy-token required'
+console.error(`redaction-proxy on http://${config.host.includes(':') ? `[${config.host}]` : config.host}:${port} -> openai ${config.openaiUpstream}, anthropic ${config.anthropicUpstream}${tokenNote}${modelNote}`)

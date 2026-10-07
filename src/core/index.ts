@@ -24,7 +24,7 @@ export {
 } from './engine.ts'
 export type { RedactionErrorCode } from './engine.ts'
 export { createStreamRestorer, restoreLenient } from './restore.ts'
-export type { StreamRestoreOptions, StreamRestorer } from './restore.ts'
+export type { PlaceholderEvent, StreamRestoreOptions, StreamRestorer } from './restore.ts'
 export {
   DEFAULT_ALLOWLIST,
   DEFAULT_RULE_NAMES,
