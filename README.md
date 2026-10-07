@@ -42,10 +42,13 @@ Not yet built or tested; Docker was not available where this image was written.
 
 ```sh
 docker build -t redaction-proxy .
-docker run --rm -p 127.0.0.1:8787:8787 redaction-proxy
+export REDACTION_PROXY_AUTH_TOKEN=$(openssl rand -hex 32)
+docker run --rm -p 127.0.0.1:8787:8787 -e REDACTION_PROXY_AUTH_TOKEN redaction-proxy
 ```
 
-> **Always publish with `-p 127.0.0.1:8787:8787`, never `-p 8787:8787`.** The proxy has no authentication. The image binds `0.0.0.0` inside the container, so the `127.0.0.1:` prefix is the only thing keeping the proxy, and the API keys your tools send through it, off your network.
+> **Always publish with `-p 127.0.0.1:8787:8787`, never `-p 8787:8787`.** The image binds `0.0.0.0` inside the container, so it refuses to start without `REDACTION_PROXY_AUTH_TOKEN` and answers 401 to any request without the token. The token travels as plain HTTP; the `127.0.0.1:` prefix keeps it, and the API keys your tools send through the proxy, off your network.
+
+Clients send the token in the `x-redaction-proxy-token` header: Claude Code with `ANTHROPIC_CUSTOM_HEADERS="x-redaction-proxy-token: $REDACTION_PROXY_AUTH_TOKEN"`; the OpenAI and Anthropic SDKs with their default-headers option (`default_headers` in Python, `defaultHeaders` in TypeScript).
 
 A config file: add `-v "$PWD/redaction.json:/redaction.json:ro"` and append `--config /redaction.json`. The name model: build with `--build-arg NAME_MODEL=1` and add `-v ~/models/nym:/models:ro -e REDACTION_PROXY_NAME_MODEL_DIR=/models`.
 
@@ -55,7 +58,7 @@ Not on npm yet. Once it is published:
 
 ```sh
 npx redaction-proxy --demo
-npx redaction-proxy           # the proxy, on http://127.0.0.1:8787
+npx redaction-proxy           # the proxy, on http://127.0.0.1:8787 (loopback: no token needed)
 ```
 
 ## Point your tool at it
@@ -158,7 +161,7 @@ What it reads, every number, and the options: [technical details §16](docs/DETA
 ## Results
 
 <!-- RESULTS:START -->
-**held-out set (written blind, run once).** 1,518 synthetic prompts in 7 languages (English, Traditional and Simplified Chinese, Japanese, Korean, German, French), written by someone who never saw the rules, frozen with a SHA-256 checksum, and scored once. Nothing was changed after the results were seen.
+**held-out set v1 (written blind, run once).** 1,518 synthetic prompts in 7 languages (English, Traditional and Simplified Chinese, Japanese, Korean, German, French), written by someone who never saw the rules, frozen with a SHA-256 checksum, and scored once. Nothing was changed after the results were seen.
 
 ![Bar chart: share of sensitive values fully masked per category on the English held-out prompts, proxy-default rules and rules plus name model against Presidio at cutoff 0.4.](docs/media/results.svg)
 
@@ -183,9 +186,9 @@ Where it is weak:
 - **Addresses.** There is no address rule.
 - **The name model** fully masks 65–70% of names, and it also masks user-agent strings.
 
-These numbers are for `rules-6+intl-1`. The phone, host, and credential rules and the strict card and entropy rules added since then (`intl-2`, `ext-1`) target these weaknesses and have not been measured on a held-out set yet.
+These held-out v1 numbers were measured on the older proxy default (`rules-6+intl-1`), before the phone, host, and credential rules and the strict card and entropy rules (`intl-2`, `ext-1`) that target these weaknesses; a held-out v2 run will replace them.
 
-The dev set scored much higher (88.9% English macro average for the proxy default) because it was written alongside the rules; it is kept only as a development check.
+On the dev set the current proxy default (`rules-6+intl-2+ext-1`) fully masks 88.9% (English macro average; phone 100%, was 0%) with 96.3% region precision. The dev set was written alongside the rules, so it is kept only as a development check.
 
 Full tables: [held-out results](bench/results/public-bench-held-out.md), [dev results](bench/results/public-bench-dev.md). Method and other measurements: [technical details §18](docs/DETAILS.md#18-實測數字).
 <!-- RESULTS:END -->

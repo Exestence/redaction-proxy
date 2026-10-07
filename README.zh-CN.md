@@ -42,10 +42,13 @@ client receives:   I will email lin.fictional@example.test about /Users/fictiona
 
 ```sh
 docker build -t redaction-proxy .
-docker run --rm -p 127.0.0.1:8787:8787 redaction-proxy
+export REDACTION_PROXY_AUTH_TOKEN=$(openssl rand -hex 32)
+docker run --rm -p 127.0.0.1:8787:8787 -e REDACTION_PROXY_AUTH_TOKEN redaction-proxy
 ```
 
-> **一定要用 `-p 127.0.0.1:8787:8787`，不要用 `-p 8787:8787`。** 代理没有身份验证。镜像在容器内监听 `0.0.0.0`，只有 `127.0.0.1:` 这个前缀能让代理，以及你的工具经由它发出的 API 密钥，不暴露在你的网络上。
+> **一定要用 `-p 127.0.0.1:8787:8787`，不要用 `-p 8787:8787`。** 镜像在容器内监听 `0.0.0.0`，所以没设 `REDACTION_PROXY_AUTH_TOKEN` 就拒绝启动，没带令牌的请求一律返回 401。令牌以明文 HTTP 传输；`127.0.0.1:` 这个前缀让它，以及你的工具经由代理发出的 API 密钥，不暴露在你的网络上。
+
+客户端在 `x-redaction-proxy-token` 请求头中带上令牌：Claude Code 用 `ANTHROPIC_CUSTOM_HEADERS="x-redaction-proxy-token: $REDACTION_PROXY_AUTH_TOKEN"`；OpenAI 和 Anthropic SDK 用默认请求头选项（Python 的 `default_headers`、TypeScript 的 `defaultHeaders`）。
 
 配置文件：加上 `-v "$PWD/redaction.json:/redaction.json:ro"`，并在末尾加 `--config /redaction.json`。人名模型：用 `--build-arg NAME_MODEL=1` 构建，并加上 `-v ~/models/nym:/models:ro -e REDACTION_PROXY_NAME_MODEL_DIR=/models`。
 
@@ -55,7 +58,7 @@ docker run --rm -p 127.0.0.1:8787:8787 redaction-proxy
 
 ```sh
 npx redaction-proxy --demo
-npx redaction-proxy           # 启动代理，地址 http://127.0.0.1:8787
+npx redaction-proxy           # 启动代理，地址 http://127.0.0.1:8787（本机不需要令牌）
 ```
 
 ## 接入你的工具
@@ -159,7 +162,7 @@ REDACTION_PROXY_NAME_MODEL_DIR=$HOME/models/nym node lib/cli.js
 ## 实测结果
 
 <!-- RESULTS:START -->
-**held-out set (written blind, run once)，保留集（盲写、只跑一次）。** 7 种语言（英文、繁中、简中、日文、韩文、德文、法文）共 1,518 条合成提示词，由从没看过规则的人编写，用 SHA-256 冻结后只评分一次；看到结果后没有做任何修改。
+**held-out set v1 (written blind, run once)，保留集第 1 版（盲写、只跑一次）。** 7 种语言（英文、繁中、简中、日文、韩文、德文、法文）共 1,518 条合成提示词，由从没看过规则的人编写，用 SHA-256 冻结后只评分一次；看到结果后没有做任何修改。
 
 ![柱状图：英文保留集提示词中各类别被完整脱敏的比例，代理默认规则、规则加人名模型与 Presidio（cutoff 0.4）对比。](docs/media/results.svg)
 
@@ -184,9 +187,9 @@ REDACTION_PROXY_NAME_MODEL_DIR=$HOME/models/nym node lib/cli.js
 - **地址。** 没有地址规则。
 - **人名模型**能完整脱敏 65–70% 的人名，而且会误遮 user-agent 字符串。
 
-这些数字测量的是 `rules-6+intl-1`。之后针对这些弱点加入的电话、主机、密钥规则以及严格版卡号、高熵规则（`intl-2`、`ext-1`）还没有在保留集上测量。
+这些保留集第 1 版的数字测量的是较旧的代理默认配置（`rules-6+intl-1`），还不含之后针对这些弱点加入的电话、主机、密钥规则以及严格版卡号、高熵规则（`intl-2`、`ext-1`）；之后会用保留集第 2 版的结果替换。
 
-开发集（dev set）的分数高得多（代理默认配置的英文宏平均为 88.9%），因为它是和规则一起编写的；现在只作为开发时的检查。
+在开发集（dev set）上，当前的代理默认配置（`rules-6+intl-2+ext-1`）英文宏平均完全遮蔽 88.9%（电话 100%，原来 0%），遮掉的范围 96.3% 确实是敏感值。开发集是和规则一起编写的，所以只作为开发时的检查。
 
 完整表格：[保留集结果](bench/results/public-bench-held-out.md)、[开发集结果](bench/results/public-bench-dev.md)。方法和其他测量：[技术细节第 18 节](docs/DETAILS.md#18-實測數字)。
 <!-- RESULTS:END -->

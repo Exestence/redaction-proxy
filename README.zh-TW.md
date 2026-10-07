@@ -42,10 +42,13 @@ client receives:   I will email lin.fictional@example.test about /Users/fictiona
 
 ```sh
 docker build -t redaction-proxy .
-docker run --rm -p 127.0.0.1:8787:8787 redaction-proxy
+export REDACTION_PROXY_AUTH_TOKEN=$(openssl rand -hex 32)
+docker run --rm -p 127.0.0.1:8787:8787 -e REDACTION_PROXY_AUTH_TOKEN redaction-proxy
 ```
 
-> **一定要用 `-p 127.0.0.1:8787:8787`，不要用 `-p 8787:8787`。** 代理沒有身分驗證。映像在容器內綁定 `0.0.0.0`，只有 `127.0.0.1:` 這個前綴能讓代理，以及你的工具經由它送出的 API 金鑰，不暴露在你的網路上。
+> **一定要用 `-p 127.0.0.1:8787:8787`，不要用 `-p 8787:8787`。** 映像在容器內綁定 `0.0.0.0`，所以沒設 `REDACTION_PROXY_AUTH_TOKEN` 就拒絕啟動，沒帶權杖的請求一律回 401。權杖以明文 HTTP 傳送；`127.0.0.1:` 這個前綴讓它，以及你的工具經由代理送出的 API 金鑰，不暴露在你的網路上。
+
+用戶端在 `x-redaction-proxy-token` 標頭帶上權杖：Claude Code 用 `ANTHROPIC_CUSTOM_HEADERS="x-redaction-proxy-token: $REDACTION_PROXY_AUTH_TOKEN"`；OpenAI 與 Anthropic SDK 用預設標頭選項（Python 的 `default_headers`、TypeScript 的 `defaultHeaders`）。
 
 設定檔：加上 `-v "$PWD/redaction.json:/redaction.json:ro"`，並在最後加 `--config /redaction.json`。人名模型：以 `--build-arg NAME_MODEL=1` 建置，並加上 `-v ~/models/nym:/models:ro -e REDACTION_PROXY_NAME_MODEL_DIR=/models`。
 
@@ -55,7 +58,7 @@ docker run --rm -p 127.0.0.1:8787:8787 redaction-proxy
 
 ```sh
 npx redaction-proxy --demo
-npx redaction-proxy           # 啟動代理，位址 http://127.0.0.1:8787
+npx redaction-proxy           # 啟動代理，位址 http://127.0.0.1:8787（本機不需要權杖）
 ```
 
 ## 讓你的工具走代理
@@ -158,7 +161,7 @@ REDACTION_PROXY_NAME_MODEL_DIR=$HOME/models/nym node lib/cli.js
 ## 實測結果
 
 <!-- RESULTS:START -->
-**held-out set (written blind, run once)，保留集（盲寫、只跑一次）。** 7 種語言（英文、繁中、簡中、日文、韓文、德文、法文）共 1,518 筆合成提示，由從未看過規則的人撰寫，以 SHA-256 凍結後只評分一次；看到結果後沒有任何修改。
+**held-out set v1 (written blind, run once)，保留集第 1 版（盲寫、只跑一次）。** 7 種語言（英文、繁中、簡中、日文、韓文、德文、法文）共 1,518 筆合成提示，由從未看過規則的人撰寫，以 SHA-256 凍結後只評分一次；看到結果後沒有任何修改。
 
 ![長條圖：英文保留集提示中各類別完全遮蔽的比例，代理預設規則、規則加人名模型與 Presidio（cutoff 0.4）對照。](docs/media/results.svg)
 
@@ -183,9 +186,9 @@ REDACTION_PROXY_NAME_MODEL_DIR=$HOME/models/nym node lib/cli.js
 - **地址。** 沒有地址規則。
 - **人名模型**完全遮蔽 65–70% 的人名，而且會誤遮 user-agent 字串。
 
-這些數字量測的是 `rules-6+intl-1`。之後針對這些弱點加入的電話、主機、金鑰規則與嚴格版卡號、高熵規則（`intl-2`、`ext-1`）還沒有在保留集上量測。
+這些保留集第 1 版的數字量測的是較舊的代理預設（`rules-6+intl-1`），還不含之後針對這些弱點加入的電話、主機、金鑰規則與嚴格版卡號、高熵規則（`intl-2`、`ext-1`）；之後會以保留集第 2 版的結果取代。
 
-開發集（dev set）的分數高得多（代理預設的英文宏平均為 88.9%），因為它是和規則一起寫的；現在只當開發時的檢查。
+在開發集（dev set）上，目前的代理預設（`rules-6+intl-2+ext-1`）英文宏平均完全遮蔽 88.9%（電話 100%，原本 0%），遮掉的範圍 96.3% 確實是敏感值。開發集是和規則一起寫的，所以只當開發時的檢查。
 
 完整表格：[保留集結果](bench/results/public-bench-held-out.md)、[開發集結果](bench/results/public-bench-dev.md)。方法與其他量測：[技術細節第 18 節](docs/DETAILS.md#18-實測數字)。
 <!-- RESULTS:END -->

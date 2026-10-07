@@ -42,10 +42,13 @@ client receives:   I will email lin.fictional@example.test about /Users/fictiona
 
 ```sh
 docker build -t redaction-proxy .
-docker run --rm -p 127.0.0.1:8787:8787 redaction-proxy
+export REDACTION_PROXY_AUTH_TOKEN=$(openssl rand -hex 32)
+docker run --rm -p 127.0.0.1:8787:8787 -e REDACTION_PROXY_AUTH_TOKEN redaction-proxy
 ```
 
-> **必ず `-p 127.0.0.1:8787:8787` で公開し、`-p 8787:8787` は使わないでください。** プロキシには認証がありません。イメージはコンテナ内で `0.0.0.0` で待ち受けるため、`127.0.0.1:` の接頭辞だけが、プロキシと、ツールがそれを通して送る API キーをネットワークから守ります。
+> **必ず `-p 127.0.0.1:8787:8787` で公開し、`-p 8787:8787` は使わないでください。** イメージはコンテナ内で `0.0.0.0` で待ち受けるため、`REDACTION_PROXY_AUTH_TOKEN` がないと起動せず、トークンのないリクエストには 401 を返します。トークンは平文の HTTP で送られます。`127.0.0.1:` の接頭辞が、トークンと、ツールがプロキシを通して送る API キーをネットワークから守ります。
+
+クライアントはトークンを `x-redaction-proxy-token` ヘッダーで送ります。Claude Code は `ANTHROPIC_CUSTOM_HEADERS="x-redaction-proxy-token: $REDACTION_PROXY_AUTH_TOKEN"`、OpenAI と Anthropic の SDK は既定ヘッダーのオプション（Python は `default_headers`、TypeScript は `defaultHeaders`）を使います。
 
 設定ファイル：`-v "$PWD/redaction.json:/redaction.json:ro"` を加え、末尾に `--config /redaction.json` を付けます。人名モデル：`--build-arg NAME_MODEL=1` でビルドし、`-v ~/models/nym:/models:ro -e REDACTION_PROXY_NAME_MODEL_DIR=/models` を加えます。
 
@@ -55,7 +58,7 @@ docker run --rm -p 127.0.0.1:8787:8787 redaction-proxy
 
 ```sh
 npx redaction-proxy --demo
-npx redaction-proxy           # プロキシを http://127.0.0.1:8787 で起動
+npx redaction-proxy           # プロキシを http://127.0.0.1:8787 で起動（ループバックではトークン不要）
 ```
 
 ## ツールの接続先を変える
@@ -158,7 +161,7 @@ REDACTION_PROXY_NAME_MODEL_DIR=$HOME/models/nym node lib/cli.js
 ## 結果
 
 <!-- RESULTS:START -->
-**held-out set (written blind, run once)：ホールドアウトセット（ルールを見ずに作成、1 回だけ実行）。** 7 言語（英語・繁体字中国語・簡体字中国語・日本語・韓国語・ドイツ語・フランス語）の合成プロンプト 1,518 件です。ルールを一度も見ていない人が作成し、SHA-256 で固定してから 1 回だけ採点しました。結果を見た後の修正はありません。
+**held-out set v1 (written blind, run once)：ホールドアウトセット第 1 版（ルールを見ずに作成、1 回だけ実行）。** 7 言語（英語・繁体字中国語・簡体字中国語・日本語・韓国語・ドイツ語・フランス語）の合成プロンプト 1,518 件です。ルールを一度も見ていない人が作成し、SHA-256 で固定してから 1 回だけ採点しました。結果を見た後の修正はありません。
 
 ![棒グラフ：英語のホールドアウトプロンプトで種類ごとに完全にマスクされた割合。プロキシ既定のルール、ルール＋人名モデル、Presidio（cutoff 0.4）の比較。](docs/media/results.svg)
 
@@ -183,9 +186,9 @@ REDACTION_PROXY_NAME_MODEL_DIR=$HOME/models/nym node lib/cli.js
 - **住所。** 住所のルールはありません。
 - **人名モデル**が完全にマスクする人名は 65〜70% で、user-agent 文字列も誤ってマスクします。
 
-これらの数字は `rules-6+intl-1` の測定です。その後これらの弱点に向けて追加した電話番号・ホスト・認証情報のルールと、厳格版のカード番号・高エントロピーのルール（`intl-2`、`ext-1`）は、まだ保留セットで測定していません。
+このホールドアウト第 1 版の数字は、以前のプロキシ既定（`rules-6+intl-1`）で測定したもので、その後これらの弱点に向けて追加した電話番号・ホスト・認証情報のルールと、厳格版のカード番号・高エントロピーのルール（`intl-2`、`ext-1`）は含みません。ホールドアウト第 2 版の結果で置き換える予定です。
 
-開発セット（dev set）のスコアはずっと高く出ました（プロキシ既定の英語マクロ平均 88.9%）。ルールと並行して作成したためで、現在は開発中の確認にだけ使っています。
+開発セット（dev set）では、現在のプロキシ既定（`rules-6+intl-2+ext-1`）が英語マクロ平均 88.9% を完全にマスクします（電話番号 100%、以前は 0%）。マスクした範囲の 96.3% が実際に機密値でした。開発セットはルールと並行して作成したため、開発中の確認にだけ使っています。
 
 詳しい表：[ホールドアウトの結果](bench/results/public-bench-held-out.md)、[開発セットの結果](bench/results/public-bench-dev.md)。方法とその他の計測：[技術詳細 第 18 節](docs/DETAILS.md#18-實測數字)。
 <!-- RESULTS:END -->

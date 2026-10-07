@@ -1,6 +1,10 @@
-# redaction-proxy container. The proxy has no authentication: publish the port
-# on loopback only, `docker run -p 127.0.0.1:8787:8787 redaction-proxy`.
-# `-p 8787:8787` would expose it, and the credentials it forwards, to your network.
+# redaction-proxy container. The image binds 0.0.0.0, so the proxy refuses to start
+# without REDACTION_PROXY_AUTH_TOKEN and answers 401 to any request that lacks it in
+# the x-redaction-proxy-token header. Still publish on loopback only:
+#   export REDACTION_PROXY_AUTH_TOKEN=$(openssl rand -hex 32)
+#   docker run -p 127.0.0.1:8787:8787 -e REDACTION_PROXY_AUTH_TOKEN redaction-proxy
+# The token travels in cleartext HTTP; `-p 8787:8787` would put it, and the API keys
+# your tools forward, on your network.
 #
 # Name model variant: `docker build --build-arg NAME_MODEL=1 -t redaction-proxy:name-model .`,
 # then mount a model directory fetched with scripts/fetch-name-model.mjs:
@@ -28,7 +32,7 @@ COPY --from=build /src/package.json ./
 COPY --from=build /src/lib lib
 USER node
 # Inside the container 127.0.0.1 is unreachable from the host, so the image binds all interfaces;
-# the loopback-only `-p 127.0.0.1:...` mapping above is what keeps it private.
+# loadConfig then requires the auth token, and the `-p 127.0.0.1:...` mapping keeps it off the network.
 ENV REDACTION_PROXY_HOST=0.0.0.0
 EXPOSE 8787
 ENTRYPOINT ["node", "lib/cli.js"]
