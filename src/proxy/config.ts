@@ -20,11 +20,20 @@ export interface ProxyConfig {
   /** TCP port. */
   port: number
   /**
-   * Address to bind; `127.0.0.1` by default. The proxy has no authentication,
-   * so any other address lets every host that can reach it use the client
-   * credentials it forwards. The Docker image sets `0.0.0.0`.
+   * Address to bind; `127.0.0.1` by default. Any address that is not loopback
+   * requires `authToken`. The Docker image sets `0.0.0.0`.
    */
   host: string
+  /**
+   * Token every request must carry in the `x-redaction-proxy-token` header;
+   * required when `host` is not loopback, optional otherwise. Never forwarded.
+   */
+  authToken?: string
+  /**
+   * Browser origins served besides loopback `http(s)` ones, as the exact
+   * `Origin` header value, such as `app://client`; lower case, no trailing slash.
+   */
+  allowedOrigins: string[]
   /** Base URL that `/v1/chat/completions`, `/v1/responses`, and OpenAI-style GETs are forwarded to. */
   openaiUpstream: string
   /** Base URL that `/v1/messages` and Anthropic-style GETs are forwarded to. */
@@ -57,18 +66,55 @@ export interface ProxyConfig {
  */
 export const PROXY_DEFAULT_RULES = RULE_NAMES.filter(rule => rule !== 'e164-phone')
 
-const FILE_KEYS = new Set(['port', 'host', 'openaiUpstream', 'anthropicUpstream', 'redaction', 'nameModel', 'screen', 'debugMasked'])
+const FILE_KEYS = new Set([
+  'port', 'host', 'authToken', 'allowedOrigins', 'openaiUpstream', 'anthropicUpstream', 'allowInsecureUpstream',
+  'redaction', 'nameModel', 'screen', 'debugMasked',
+])
+
+/** Shortest `authToken` accepted; `openssl rand -hex 32` gives 64 characters. */
+const AUTH_TOKEN_MIN = 16
+
+/**
+ * Whether a host name or address is loopback: `localhost`, `::1`, or `127.0.0.0/8`.
+ * @param host - a host name, an IPv4 address, or an IPv6 address with or without brackets.
+ * @returns whether it is loopback.
+ */
+export function isLoopbackHost(host: string): boolean {
+  return host === 'localhost' || host === '::1' || host === '[::1]' || /^127\.\d{1,3}\.\d{1,3}\.\d{1,3}$/.test(host)
+}
 
 /**
  * Check one upstream base URL.
  * @param value - candidate URL.
  * @param label - setting name for the failure message.
+ * @param allowInsecure - whether plain `http://` may reach a host that is not loopback.
  * @returns the URL without a trailing slash.
- * @throws {Error} when the value is not an http(s) URL.
+ * @throws {Error} when the value is not an http(s) URL, or sends keys in cleartext over the network.
  */
-function upstream(value: unknown, label: string): string {
+function upstream(value: unknown, label: string, allowInsecure: boolean): string {
   if (typeof value !== 'string' || !/^https?:\/\/[^/]/.test(value)) throw new Error(`${label} must be an http(s) URL`)
+  if (value.startsWith('http:') && !allowInsecure && !isLoopbackHost(new URL(value).hostname)) {
+    throw new Error(`${label} is plain http:// to a host that is not loopback, which would send API keys in cleartext; use https:// or set allowInsecureUpstream (REDACTION_PROXY_ALLOW_INSECURE_UPSTREAM=1)`)
+  }
   return value.replace(/\/+$/, '')
+}
+
+/**
+ * Read `allowedOrigins`: a file array, or a comma-separated environment value.
+ * @param value - the file value or the environment string.
+ * @returns the origins in lower case without a trailing slash.
+ * @throws {Error} on a value that is not `scheme://host[:port]`, including `null` and `*`.
+ */
+function allowedOrigins(value: unknown): string[] {
+  const list = typeof value === 'string' ? value.split(',').map(item => item.trim()).filter(item => item !== '') : value ?? []
+  if (!Array.isArray(list)) throw new Error('allowedOrigins must be an array of origins')
+  return list.map(origin => {
+    const normal = typeof origin === 'string' ? origin.toLowerCase().replace(/\/$/, '') : ''
+    if (!/^[a-z][a-z0-9+.-]*:\/\/[^/\s]+$/.test(normal)) {
+      throw new Error('allowedOrigins entries must look like scheme://host[:port]; "null" (file:// pages, sandboxed frames) and "*" are not accepted')
+    }
+    return normal
+  })
 }
 
 /**
@@ -95,12 +141,22 @@ function nameModel(value: unknown, dir: string | undefined): ResolvedNameModelCo
 export function loadConfig(path: string | undefined, env: NodeJS.ProcessEnv): ProxyConfig {
   const file: Record<string, unknown> = path === undefined ? {} : JSON.parse(readFileSync(path, 'utf8')) as Record<string, unknown>
   for (const key of Object.keys(file)) {
-    if (!FILE_KEYS.has(key)) throw new Error(`config: unknown key "${key}"${/key|token|secret/i.test(key) ? ' (keys belong in the environment, not the file)' : ''}`)
+    if (!FILE_KEYS.has(key)) throw new Error(`config: unknown key "${key}"${/key|secret/i.test(key) ? ' (upstream API keys belong in the environment, not the file)' : ''}`)
   }
-  const port = Number(env.REDACTION_PROXY_PORT ?? file.port ?? 8787)
+  const envPort = env.REDACTION_PROXY_PORT
+  if (envPort !== undefined && !/^\d{1,5}$/.test(envPort)) throw new Error('REDACTION_PROXY_PORT must be a port number')
+  const port = Number(envPort ?? file.port ?? 8787)
   if (!Number.isInteger(port) || port < 0 || port > 65535) throw new Error('port must be an integer in 0..65535')
   const host = env.REDACTION_PROXY_HOST ?? file.host ?? '127.0.0.1'
   if (typeof host !== 'string' || host === '') throw new Error('host must be a non-empty string')
+  const authToken = env.REDACTION_PROXY_AUTH_TOKEN ?? file.authToken
+  if (authToken !== undefined && (typeof authToken !== 'string' || authToken.length < AUTH_TOKEN_MIN)) {
+    throw new Error(`authToken must be a string of at least ${AUTH_TOKEN_MIN} characters, such as the output of \`openssl rand -hex 32\``)
+  }
+  if (authToken === undefined && !isLoopbackHost(host)) {
+    throw new Error(`host ${host} is not loopback, so an auth token is required: set REDACTION_PROXY_AUTH_TOKEN (or authToken) and have clients send it in x-redaction-proxy-token`)
+  }
+  const allowInsecure = env.REDACTION_PROXY_ALLOW_INSECURE_UPSTREAM === '1' || file.allowInsecureUpstream === true
   const screen = env.REDACTION_PROXY_SCREEN ?? file.screen ?? 'replace'
   if (screen !== 'replace' && screen !== 'refuse') throw new Error('screen must be "replace" or "refuse"')
   const redaction = { rules: [...PROXY_DEFAULT_RULES], ...(file.redaction ?? {}) } as RulesRedactionConfig
@@ -108,14 +164,16 @@ export function loadConfig(path: string | undefined, env: NodeJS.ProcessEnv): Pr
   const config: ProxyConfig = {
     port,
     host,
-    openaiUpstream: upstream(env.REDACTION_PROXY_OPENAI_UPSTREAM ?? file.openaiUpstream ?? 'https://api.openai.com', 'openaiUpstream'),
-    anthropicUpstream: upstream(env.REDACTION_PROXY_ANTHROPIC_UPSTREAM ?? file.anthropicUpstream ?? 'https://api.anthropic.com', 'anthropicUpstream'),
+    allowedOrigins: allowedOrigins(env.REDACTION_PROXY_ALLOWED_ORIGINS ?? file.allowedOrigins),
+    openaiUpstream: upstream(env.REDACTION_PROXY_OPENAI_UPSTREAM ?? file.openaiUpstream ?? 'https://api.openai.com', 'openaiUpstream', allowInsecure),
+    anthropicUpstream: upstream(env.REDACTION_PROXY_ANTHROPIC_UPSTREAM ?? file.anthropicUpstream ?? 'https://api.anthropic.com', 'anthropicUpstream', allowInsecure),
     redaction,
     screen,
     debugMasked: env.REDACTION_PROXY_DEBUG_MASKED === '1' || file.debugMasked === true,
   }
   const model = nameModel(file.nameModel, env.REDACTION_PROXY_NAME_MODEL_DIR)
   if (model !== undefined) config.nameModel = model
+  if (authToken !== undefined) config.authToken = authToken
   if (env.REDACTION_PROXY_OPENAI_API_KEY) config.openaiApiKey = env.REDACTION_PROXY_OPENAI_API_KEY
   if (env.REDACTION_PROXY_ANTHROPIC_API_KEY) config.anthropicApiKey = env.REDACTION_PROXY_ANTHROPIC_API_KEY
   return config

@@ -14,6 +14,7 @@
  * @module redaction-proxy/proxy/server
  */
 
+import { createHash, timingSafeEqual } from 'node:crypto'
 import { createServer } from 'node:http'
 import type { IncomingMessage, Server, ServerResponse } from 'node:http'
 import { RedactionError, RulesDetector, createStreamRestorer, emptyRedactionIndex, mask, screenText } from '../core/index.ts'
@@ -21,6 +22,7 @@ import type { PlaceholderEvent, RedactionDetector, RedactionRegistry, StreamRest
 import { NameModelDetector, NameModelError, containsStandingAlone, isSearchedValue } from '../core/model/detector.ts'
 import type { NameModel } from '../core/model/name-model.ts'
 import { NAME_MODEL_CATEGORIES } from '../core/model/config.ts'
+import { isLoopbackHost } from './config.ts'
 import type { ProxyConfig } from './config.ts'
 
 /** Which wire API a route speaks. */
@@ -77,8 +79,8 @@ const CONTINUATIONS_MAX = 256
 // ponytail: fixed cap above Anthropic's 32 MB request limit; make it a setting if a provider accepts more.
 const BODY_MAX_BYTES = 64 * 1024 * 1024
 
-/** Host names that reach the proxy without DNS: anything else in `Host` or `Origin` is a rebinding or cross-site request. */
-const LOOPBACK_HOSTS = new Set(['127.0.0.1', 'localhost', '[::1]'])
+/** Header carrying `authToken`; it authenticates the client to the proxy and is never forwarded. */
+const TOKEN_HEADER = 'x-redaction-proxy-token'
 
 /** One maskable string inside a request body. */
 interface Slot {
@@ -599,6 +601,8 @@ export function createProxyServer(
   const detectorFor = (userTexts: ReadonlySet<string>, stats: Stats): RedactionDetector =>
     withModel?.forRequest(userTexts, () => { stats.nameModelFailed = true }) ?? rules
   const continuations = new Map<string, RequestTexts>()
+  const tokenDigest = config.authToken === undefined ? undefined : createHash('sha256').update(config.authToken).digest()
+  const originAllowed = (origin: string): boolean => config.allowedOrigins.includes(origin.toLowerCase()) || isLoopbackOrigin(origin)
 
   /**
    * Mask every text of one request body, a continuation's stored texts first.
@@ -655,7 +659,7 @@ export function createProxyServer(
     return { outgoing: JSON.stringify(parsed), registry: result.registry, texts: all, userTexts }
   }
 
-  const forward = async (req: IncomingMessage, res: ServerResponse, path: string, api: Api | undefined, body: Buffer | undefined): Promise<void> => {
+  const forward = async (req: IncomingMessage, res: ServerResponse, path: string, api: Api | undefined, body: Buffer | undefined, cors: Record<string, string>): Promise<void> => {
     const started = Date.now()
     const stats: Stats = { masked: {}, restored: 0, unknown: 0, kept: 0, nameModelFailed: false }
     const anthropic = api === 'messages' || (api === undefined && (req.headers['x-api-key'] !== undefined || req.headers['anthropic-version'] !== undefined))
@@ -667,7 +671,7 @@ export function createProxyServer(
 
     const headers: Record<string, string> = { 'accept-encoding': 'identity' }
     for (const [name, value] of Object.entries(req.headers)) {
-      if (!HOP.has(name) && value !== undefined) headers[name] = Array.isArray(value) ? value.join(', ') : value
+      if (!HOP.has(name) && name !== TOKEN_HEADER && value !== undefined) headers[name] = Array.isArray(value) ? value.join(', ') : value
     }
     if (anthropic && config.anthropicApiKey !== undefined && headers['x-api-key'] === undefined && headers.authorization === undefined) headers['x-api-key'] = config.anthropicApiKey
     if (!anthropic && config.openaiApiKey !== undefined && headers.authorization === undefined) headers.authorization = `Bearer ${config.openaiApiKey}`
@@ -681,9 +685,10 @@ export function createProxyServer(
       ...(outgoing === undefined ? {} : { body: outgoing }),
       signal: abort.signal,
     })
-    const out: Record<string, string> = {}
+    // The proxy, not the upstream, decides which browser origins may read the reply.
+    const out: Record<string, string> = { ...cors }
     upstream.headers.forEach((value, name) => {
-      if (!HOP.has(name)) out[name] = value
+      if (!HOP.has(name) && !name.startsWith('access-control-')) out[name] = value
     })
     const remember = (id: string): void => {
       if (masked === undefined) return
@@ -754,24 +759,47 @@ export function createProxyServer(
   return createServer((req, res) => {
     const path = (req.url ?? '/').split('?')[0] ?? '/'
     const api = ROUTES[path]
+    const origin = req.headers.origin
+    const cors: Record<string, string> = origin === undefined ? {} : { 'access-control-allow-origin': origin, vary: 'origin' }
     const fail = (status: number, message: string, headers: Record<string, string> = {}): void => {
       log(`${req.method} ${path} -> ${status} refused: ${message}`)
       if (res.headersSent) {
         res.destroy()
         return
       }
-      res.writeHead(status, { 'content-type': 'application/json', ...headers })
+      res.writeHead(status, { 'content-type': 'application/json', ...cors, ...headers })
       res.end(JSON.stringify({ error: { type: 'redaction_proxy_error', message } }))
     }
-    if (!isLoopbackRequest(req)) {
-      fail(403, 'the proxy only serves requests addressed to a loopback host from no browser origin or a loopback one')
+    const refuse = (status: number, message: string): void => {
+      fail(status, message)
       req.resume()
+    }
+    if (origin !== undefined && !originAllowed(origin)) {
+      delete cors['access-control-allow-origin']
+      return refuse(403, 'browser requests are served only from loopback http(s) origins and allowedOrigins')
+    }
+    // A preflight carries no custom header, so it cannot carry the token; it forwards nothing.
+    if (req.method === 'OPTIONS' && origin !== undefined && req.headers['access-control-request-method'] !== undefined) {
+      res.writeHead(204, {
+        ...cors,
+        'access-control-allow-methods': 'GET, POST',
+        'access-control-allow-headers': req.headers['access-control-request-headers'] ?? '',
+        'access-control-max-age': '600',
+      })
+      res.end()
       return
     }
+    if (tokenDigest !== undefined) {
+      const presented = req.headers[TOKEN_HEADER]
+      if (typeof presented !== 'string' || !timingSafeEqual(createHash('sha256').update(presented).digest(), tokenDigest)) {
+        return refuse(401, `missing or wrong ${TOKEN_HEADER} header`)
+      }
+    } else if (!hostIsLoopback(req.headers.host)) {
+      // Without a token, a non-loopback Host is a DNS-rebinding page; a token holder may use any name.
+      return refuse(403, 'the proxy only serves requests addressed to a loopback host unless authToken is set')
+    }
     if (req.method === 'POST' ? api === undefined : req.method !== 'GET') {
-      fail(404, `the proxy does not forward ${req.method} ${path}; only masked routes and GET are relayed`)
-      req.resume()
-      return
+      return refuse(404, `the proxy does not forward ${req.method} ${path}; only masked routes and GET are relayed`)
     }
     const chunks: Buffer[] = []
     let size = 0
@@ -785,7 +813,7 @@ export function createProxyServer(
     })
     req.on('end', () => {
       if (size > BODY_MAX_BYTES) return
-      forward(req, res, path, api, Buffer.concat(chunks)).catch((error: unknown) => {
+      forward(req, res, path, api, Buffer.concat(chunks), cors).catch((error: unknown) => {
         if (error instanceof Refusal) fail(error.status, error.message)
         else if (abortedByClient(error)) res.destroy()
         else fail(502, `upstream request failed: ${error instanceof Error ? (error.cause as { code?: string } | undefined)?.code ?? error.name : 'error'}`)
@@ -795,26 +823,34 @@ export function createProxyServer(
 }
 
 /**
- * Whether a request names a loopback host and, if a browser sent it, comes
- * from a loopback origin. A web page can reach 127.0.0.1 with a simple POST
- * or through DNS rebinding; its `Origin`, or the rebound name in `Host`, gives
- * it away. Clients that are not browsers send no `Origin`.
- * @param req - incoming request.
- * @returns whether the request may be served.
+ * Whether a `Host` header names a loopback host. A web page can reach
+ * 127.0.0.1 through DNS rebinding, but its `Host` then carries the rebound name.
+ * @param host - the `Host` header.
+ * @returns whether it is loopback; a missing or malformed header is not.
  */
-function isLoopbackRequest(req: IncomingMessage): boolean {
-  const hostname = (value: string): string | undefined => {
-    try {
-      return new URL(value).hostname
-    } catch {
-      // A malformed Host or Origin is refused like a foreign one.
-      return undefined
-    }
+function hostIsLoopback(host: string | undefined): boolean {
+  try {
+    return isLoopbackHost(new URL(`http://${host ?? ''}`).hostname)
+  } catch {
+    // A malformed Host is refused like a foreign one.
+    return false
   }
-  const host = hostname(`http://${req.headers.host ?? ''}`)
-  if (host === undefined || !LOOPBACK_HOSTS.has(host)) return false
-  const origin = req.headers.origin
-  return origin === undefined || LOOPBACK_HOSTS.has(hostname(origin) ?? '')
+}
+
+/**
+ * Whether an `Origin` is a loopback `http(s)` page. Clients that are not
+ * browsers send no `Origin`; a web page always sends its own.
+ * @param origin - the `Origin` header.
+ * @returns whether it is loopback http(s); `null` and custom schemes are not.
+ */
+function isLoopbackOrigin(origin: string): boolean {
+  try {
+    const url = new URL(origin)
+    return (url.protocol === 'http:' || url.protocol === 'https:') && isLoopbackHost(url.hostname)
+  } catch {
+    // `null` and other unparsable origins are refused.
+    return false
+  }
 }
 
 /**
@@ -827,8 +863,8 @@ function abortedByClient(error: unknown): boolean {
 }
 
 /**
- * Listen on `host`, 127.0.0.1 unless the caller names another address; the
- * proxy holds no authentication of its own.
+ * Listen on `host`, 127.0.0.1 unless the caller names another address.
+ * `loadConfig` refuses an address that is not loopback without `authToken`.
  * @param server - the proxy server.
  * @param port - TCP port; 0 picks a free one.
  * @param host - address to bind.

@@ -37,7 +37,5 @@ for (const signal of ['SIGINT', 'SIGTERM'] as const) {
   process.once(signal, () => void closeProxy(server, nameModel))
 }
 const modelNote = nameModel === undefined ? '' : ', name model on (experimental)'
-if (!['127.0.0.1', '::1', 'localhost'].includes(config.host)) {
-  console.error(`redaction-proxy: WARNING bound to ${config.host} with no authentication; anyone who can reach this port can use the credentials it forwards`)
-}
-console.error(`redaction-proxy on http://${config.host.includes(':') ? `[${config.host}]` : config.host}:${port} -> openai ${config.openaiUpstream}, anthropic ${config.anthropicUpstream}${modelNote}`)
+const tokenNote = config.authToken === undefined ? '' : ', x-redaction-proxy-token required'
+console.error(`redaction-proxy on http://${config.host.includes(':') ? `[${config.host}]` : config.host}:${port} -> openai ${config.openaiUpstream}, anthropic ${config.anthropicUpstream}${tokenNote}${modelNote}`)
