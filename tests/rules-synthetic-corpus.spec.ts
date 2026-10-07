@@ -79,6 +79,10 @@ describe('international rules on log shapes', () => {
     ['15-digit id', () => `id ${digits(15)} ok`, 0.002],
     ['18-digit id', () => `id ${digits(18)} ok`, 0.002],
     ['dated build serial', () => `build ${digits(6)}-${digits(7)}`, 0.01],
+    ['timestamp and duration', () => `took ${digits(3)} ms at 2026-10-07 ${digits(2)}:${digits(2)}:${digits(2)}`, 0.002],
+    ['row of digit pairs', () => `${digits(2)} ${digits(2)} ${digits(2)} ${digits(2)} ${digits(2)} ${digits(2)}`, 0.002],
+    ['row of grouped digits', () => `${digits(3)} ${digits(3)} ${digits(4)} ${digits(2)}`, 0.002],
+    ['count after a telephone word', () => `phone retries ${digits(1)} after ${digits(4)} ms`, 0.002],
   ]
 
   it.each(shapes)('keeps international false positives on a %s under its ceiling', async (_name, generate, ceiling) => {

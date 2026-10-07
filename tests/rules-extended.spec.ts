@@ -30,7 +30,7 @@ describe('extended rule configuration', () => {
     const withHost = new RulesDetector({ rules: [...DEFAULT_RULE_NAMES, 'private-host'] })
     expect(withHost.detectorVersion).toBe(`${DETECTOR_VERSION}+ext-1`)
     expect(withHost.policyDigest).not.toBe(DEFAULT_DIGEST)
-    expect(new RulesDetector({ rules: ['iban', 'token-format'] }).detectorVersion).toBe(`${DETECTOR_VERSION}+intl-1+ext-1`)
+    expect(new RulesDetector({ rules: ['iban', 'token-format'] }).detectorVersion).toBe(`${DETECTOR_VERSION}+intl-2+ext-1`)
     expect(new RulesDetector({ rules: [...EXTENDED_RULE_NAMES] }).categories).toEqual(['CARD', 'ENTROPY', 'KEY', 'HOST'])
   })
 })
