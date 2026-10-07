@@ -146,6 +146,7 @@ export function loadConfig(path: string | undefined, env: NodeJS.ProcessEnv): Pr
   }
   const envPort = env.REDACTION_PROXY_PORT
   if (envPort !== undefined && !/^\d{1,5}$/.test(envPort)) throw new Error('REDACTION_PROXY_PORT must be a port number')
+  if (file.port !== undefined && typeof file.port !== 'number') throw new Error('port must be an integer in 0..65535')
   const port = Number(envPort ?? file.port ?? 8787)
   if (!Number.isInteger(port) || port < 0 || port > 65535) throw new Error('port must be an integer in 0..65535')
   const host = env.REDACTION_PROXY_HOST ?? file.host ?? '127.0.0.1'

@@ -53,6 +53,13 @@ describe('settings that fail loud', () => {
     expect(loadConfig(undefined, { REDACTION_PROXY_PORT: '9000' }).port).toBe(9000)
   })
 
+  it('refuses a file port that is not a number instead of binding a random port', () => {
+    for (const port of ['', '8788', [], true, null]) {
+      expect(() => loadConfig(configFile({ port }), {})).toThrow('port must be an integer')
+    }
+    expect(loadConfig(configFile({ port: 9001 }), {}).port).toBe(9001)
+  })
+
   it('refuses plain http:// to an upstream that is not loopback unless allowed', () => {
     expect(() => loadConfig(undefined, { REDACTION_PROXY_OPENAI_UPSTREAM: 'http://api.example.test' })).toThrow('cleartext')
     expect(() => loadConfig(configFile({ anthropicUpstream: 'http://192.0.2.1:8080' }), {})).toThrow('cleartext')
