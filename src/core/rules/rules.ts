@@ -107,12 +107,30 @@ const CARD_RUN_AFTER_ESCAPE = afterHighEscape(CARD_RUN, '(?<!\\d)')
 const PHONE_MOBILE_SPLIT_AFTER_ESCAPE = afterHighEscape(PHONE_MOBILE_SPLIT, '(?<![A-Za-z0-9-])')
 const PHONE_KEYWORD_AFTER_ESCAPE = afterHighEscape(PHONE_KEYWORD, '(?<!\\d)')
 const PRIVATE_IP_AFTER_ESCAPE = afterHighEscape(PRIVATE_IP, '(?<![\\d.])')
+/**
+ * Group lengths of a printed card number, joined by commas: fours with an
+ * optional short last group, or the 4-6-5 and 4-6-4 groupings of American
+ * Express and Diners Club.
+ */
+const CARD_GROUPING = /^4(?:,4){2,3}(?:,[34])?$|^4,6,[45]$/
+/** A character that glues a digit run to a longer token: a letter or `_`. */
+const TOKEN_CHAR = /[A-Za-z_]/
 const HOST_SUFFIX = /\.(?:local|lan|internal)(?![a-z0-9-])/gi
 const HOST_CHAR = /[A-Za-z0-9.-]/
 const HOST_FIRST_WORD = /^[A-Za-z0-9_$]+/
 const HEX_RUN = /\b[0-9a-fA-F]{32,}\b/g
 const BASE64_RUN = /[A-Za-z0-9+/]{32,}={0,2}/g
 const SUBRESOURCE_PREFIX = /sha\d{3}-$/
+/** Hexadecimal lengths of SHA-1 and SHA-256 digests, which git object ids and content hashes have. */
+const DIGEST_HEX_LENGTHS = [40, 64]
+/**
+ * Line text before a value keyed by a file name, as translation catalogs
+ * record source hashes: `README.md: `, `  docs/x.zh.md: "`, and the same
+ * line behind a diff's `+` or `-` marker.
+ */
+const FILE_NAME_KEY = /(?:^[+-]?|\s)[\w./-]*\.[A-Za-z0-9]{1,8}["']?\s*:\s*["']?$/
+/** How far back on the line the file-name key is looked for. */
+const FILE_NAME_KEY_MAX = 128
 
 const SHA_CONTEXT = /commit|sha|hash|rev|digest|checksum|blob|tree|oid|integrity|etag/i
 const SECRET_CONTEXT = /secret|token|password|api[_-]?key|authorization|credential/i
@@ -383,6 +401,59 @@ export function collectCardCandidates(text: string, push: PushCandidate, afterEs
 }
 
 /**
+ * Collect payment card numbers only in the forms cards are printed in, for the
+ * opt-in `card-strict` rule: one whole digit group of 13 to 19 digits (after a
+ * single leading `0` when the run is one group), or whole groups in a card
+ * grouping joined by one separator that no further group with that separator
+ * extends. A mask therefore never ends inside a digit group, and
+ * `8000 5259-6589 0921-9030` or a numeric UUID is not cut into a card. A run
+ * glued to a letter or `_`, or opened by a `..` revision range, is not read.
+ * @param text - text to scan.
+ * @param push - candidate sink.
+ * @param afterEscape - whether `text` holds a high escape, which then also counts as a left boundary.
+ */
+export function collectStrictCardCandidates(text: string, push: PushCandidate, afterEscape = false): void {
+  const pushCard = (digits: string, start: number): void => {
+    if (digits.length < 13 || digits.length > 19 || !validCardPrefix(digits) || !luhn(digits)) return
+    push(start, start + digits.length, 'CARD', PRIORITY_PII)
+  }
+  for (const pattern of afterEscape ? [CARD_RUN, CARD_RUN_AFTER_ESCAPE] : [CARD_RUN]) {
+    runAll(pattern, text, (match) => {
+      const end = match.index + match[0].length
+      if (TOKEN_CHAR.test(text.charAt(match.index - 1)) && !endsHighEscape(text, match.index)) return
+      if (TOKEN_CHAR.test(text.charAt(end)) || text.slice(match.index - 2, match.index) === '..') return
+      // Splitting on a captured separator alternates groups (even indexes) and separators (odd).
+      const parts = match[0].split(/([ -])/)
+      const groups = parts.filter((_, i) => i % 2 === 0)
+      const separators = parts.filter((_, i) => i % 2 === 1)
+      const starts: number[] = []
+      let at = match.index
+      for (const group of groups) {
+        starts.push(at)
+        at += group.length + 1
+      }
+      groups.forEach((group, i) => {
+        // oxlint-disable-next-line typescript/no-non-null-assertion -- one start per group.
+        pushCard(group, starts[i]!)
+      })
+      if (groups.length === 1 && match[0].startsWith('0')) pushCard(match[0].slice(1), match.index + 1)
+      // Each maximal chain of groups joined by one separator is one printed number or none.
+      for (let first = 0; first < separators.length; first += 1) {
+        if (first > 0 && separators[first - 1] === separators[first]) continue
+        let last = first + 1
+        while (last < separators.length && separators[last] === separators[first]) last += 1
+        const chain = groups.slice(first, last + 1)
+        if (!CARD_GROUPING.test(chain.map(group => group.length).join(','))) continue
+        const digits = chain.join('')
+        if (digits.length < 13 || !validCardPrefix(digits) || !luhn(digits)) continue
+        // oxlint-disable-next-line typescript/no-non-null-assertion -- `first` and `last` index groups.
+        push(starts[first]!, starts[last]! + chain[chain.length - 1]!.length, 'CARD', PRIORITY_PII)
+      }
+    })
+  }
+}
+
+/**
  * Collect private addresses, and internal host names anchored on their suffix.
  * @param text - text to scan.
  * @param rules - which of `ip` and `host` are enabled.
@@ -406,9 +477,25 @@ export function collectNetworkCandidates(
       })
     }
   }
-  if (!rules.has('host')) return
+  if (rules.has('host')) collectHostCandidates(text, HOST_SUFFIX, push, originalAt)
+}
+
+/**
+ * Collect host names anchored on a private suffix: the name is walked back
+ * from the suffix match and ends where the match ends.
+ * @param text - text to scan.
+ * @param suffix - global pattern matching a suffix from its leading `.`, plus any labels after it that belong to the name.
+ * @param push - candidate sink.
+ * @param originalAt - the submitted character an offset of `text` came from; `(` right after the name marks a call.
+ */
+export function collectHostCandidates(
+  text: string,
+  suffix: RegExp,
+  push: PushCandidate,
+  originalAt: (offset: number) => string = offset => text.charAt(offset),
+): void {
   // Anchor on the suffix and walk back, so a long dotted run stays linear.
-  runAll(HOST_SUFFIX, text, (match) => {
+  runAll(suffix, text, (match) => {
     const floor = Math.max(0, match.index - HOST_NAME_MAX)
     let start = match.index
     while (start > floor && HOST_CHAR.test(text.charAt(start - 1))) start -= 1
@@ -423,12 +510,26 @@ export function collectNetworkCandidates(
 }
 
 /**
+ * Whether the value at an offset is keyed by a file name on its line.
+ * @param text - text holding the value.
+ * @param at - the value's start offset.
+ * @returns whether the line text before the value ends in a file-name key.
+ */
+function isFileNameKeyed(text: string, at: number): boolean {
+  const lineStart = Math.max(text.lastIndexOf('\n', at - 1) + 1, at - FILE_NAME_KEY_MAX)
+  return FILE_NAME_KEY.test(text.slice(lineStart, at))
+}
+
+/**
  * Collect high-entropy runs. A run beside credential words is a credential; a
  * 32, 40, or 64 digit hexadecimal run beside revision words is a digest.
  * @param text - text to scan.
  * @param push - candidate sink.
+ * @param fileDigests - whether a 40 or 64 digit hexadecimal run keyed by a file
+ *   name (`README.md: <sha>`, as translation catalogs record source hashes) is
+ *   a digest too; the opt-in `entropy-strict` rule sets it.
  */
-export function collectEntropyCandidates(text: string, push: PushCandidate): void {
+export function collectEntropyCandidates(text: string, push: PushCandidate, fileDigests = false): void {
   const contextAround = (start: number, end: number): string =>
     text.slice(Math.max(0, start - 32), start) + text.slice(end, Math.min(text.length, end + 32))
 
@@ -441,6 +542,7 @@ export function collectEntropyCandidates(text: string, push: PushCandidate): voi
       return
     }
     if ([32, 40, 64].includes(match[0].length) && SHA_CONTEXT.test(context)) return
+    if (fileDigests && DIGEST_HEX_LENGTHS.includes(match[0].length) && isFileNameKeyed(text, match.index)) return
     push(match.index, end, 'ENTROPY', PRIORITY_ENTROPY)
   })
 

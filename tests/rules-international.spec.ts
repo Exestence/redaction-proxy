@@ -8,6 +8,7 @@ import { describe, expect, it } from 'vitest'
 import {
   DEFAULT_RULE_NAMES,
   DETECTOR_VERSION,
+  EXTENDED_RULE_NAMES,
   INTERNATIONAL_RULE_NAMES,
   RULE_NAMES,
   RulesDetector,
@@ -152,7 +153,7 @@ describe('international rule configuration', () => {
   })
 
   it('lists every international rule after the default rules and refuses an unknown one', () => {
-    expect(RULE_NAMES).toEqual([...DEFAULT_RULE_NAMES, ...INTERNATIONAL_RULE_NAMES])
+    expect(RULE_NAMES).toEqual([...DEFAULT_RULE_NAMES, ...INTERNATIONAL_RULE_NAMES, ...EXTENDED_RULE_NAMES])
     expect(new RulesDetector({ rules: [...INTERNATIONAL_RULE_NAMES] }).categories).toEqual(['IBAN', 'PHONE', 'TAXID', 'NATID'])
     expect(() => resolveRulesConfig({ rules: ['br-cpf'] } as never)).toThrow('unknown rule "br-cpf"')
   })
