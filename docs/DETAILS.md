@@ -382,7 +382,7 @@ POST /v1/messages tool arguments: restored PATH_1 in read at /path
 | `adversarial` | 洩漏與往返、失敗即關閉的篩檢、54 種 200 KB 病態輸入各須在 2 秒 CPU 時間內（量測 worker 行程的 CPU 時間而非經過時間，平行執行的其他測試不計入）、串流回覆的所有 2 段與 3 段切法、100 KB 串流以 4 字元為單位。 |
 | `proxy` | 對本機假上游的端對端測試：Chat Completions、Responses、Anthropic Messages 的 JSON 與 SSE，佔位符跨越分塊邊界並出現在工具呼叫 JSON 中。 |
 
-`pnpm typecheck` 做型別檢查。所有端對端測試與 `pnpm demo` 都只用本機假上游，尚未對真實 API 或真實用戶端驗證。
+`pnpm typecheck` 做型別檢查。CI（`.github/workflows/ci.yml`）在 ubuntu 與 macOS、Node 22 與 24 上跑型別檢查、測試、建置、`--demo` 與 `npm pack --dry-run`，不安裝人名模型的選用依賴；真實服務的驗證（`e2e-real.yml`）只能手動觸發，金鑰來自 repository secrets。所有端對端測試與 `pnpm demo` 都只用本機假上游，尚未對真實 API 或真實用戶端驗證。
 
 ## 14. 誤遮率量測方法
 
@@ -414,7 +414,8 @@ POST /v1/messages tool arguments: restored PATH_1 in read at /path
 
 - 對真實 OpenAI、Anthropic、DeepSeek API 與真實用戶端（Claude Code、OpenAI SDK）做端對端驗證。
 - 量測中文散文語料的誤遮率。
-- 發布到 npm（目前未發布，也沒有 `bin` 入口）。授權條款已定為 Apache-2.0（[LICENSE](../LICENSE)）。
+- 發布到 npm。套件已可發布（`bin` 入口 `redaction-proxy`，`npm pack` 只含 `lib/`、README、LICENSE、NOTICE），但 `package.json` 仍是 `"private": true`；決定發布時刪掉這一行即可（若改用 scoped 名稱，另加 `"publishConfig": { "access": "public" }`）。`prepublishOnly` 會先跑型別檢查與測試。授權條款已定為 Apache-2.0（[LICENSE](../LICENSE)）。
+- 實際建置並執行 Docker 映像（`Dockerfile` 已寫好，尚未在有 Docker 的環境建置）。
 - 將 dsh-privacy-router 的串流還原器統一到這份核心。
 
 ## 16. 人名模型（實驗性）

@@ -36,6 +36,28 @@ upstream received: 請寄信給 ⟦EMAIL_1⟧，身分證 ⟦TWID_1⟧，檔案�
 client receives:   I will email lin.fictional@example.test about /Users/fictional-user/notes.md (ID A123456789).
 ```
 
+### Docker
+
+尚未實際建置或測試；撰寫這個映像的環境沒有 Docker。
+
+```sh
+docker build -t redaction-proxy .
+docker run --rm -p 127.0.0.1:8787:8787 redaction-proxy
+```
+
+> **一定要用 `-p 127.0.0.1:8787:8787`，不要用 `-p 8787:8787`。** 代理沒有身分驗證。映像在容器內綁定 `0.0.0.0`，只有 `127.0.0.1:` 這個前綴能讓代理，以及你的工具經由它送出的 API 金鑰，不暴露在你的網路上。
+
+設定檔：加上 `-v "$PWD/redaction.json:/redaction.json:ro"`，並在最後加 `--config /redaction.json`。人名模型：以 `--build-arg NAME_MODEL=1` 建置，並加上 `-v ~/models/nym:/models:ro -e REDACTION_PROXY_NAME_MODEL_DIR=/models`。
+
+### npx（第一次發布到 npm 之後）
+
+目前還沒上 npm。發布之後：
+
+```sh
+npx redaction-proxy --demo
+npx redaction-proxy           # 啟動代理，位址 http://127.0.0.1:8787
+```
+
 ## 讓你的工具走代理
 
 > **尚未在真實用戶端測試。** 只有 `pnpm demo` 與對假上游的測試實際跑過。真實服務的驗證工具已備妥（[e2e/real](e2e/real/README.md)），但還沒執行。
