@@ -25,6 +25,8 @@ describe('configured terms split by a separator', () => {
     ['資料 NIMBUS 7 已上線', '資料 ⟦PROJECT_1⟧ 已上線'],
     ['資料 NIMBUS_7 已上線', '資料 ⟦PROJECT_1⟧ 已上線'],
     ['資料 nimbus7 已上線', '資料 ⟦PROJECT_1⟧ 已上線'],
+    ['備註：星河  計畫 隔了兩個空格', '備註：⟦TERM_1⟧ 隔了兩個空格'],
+    ['NIMBUS - 7 has two separators', '⟦PROJECT_1⟧ has two separators'],
   ])('masks %j', async (text, expected) => {
     expect(await mask(text)).toBe(expected)
   })
@@ -33,10 +35,20 @@ describe('configured terms split by a separator', () => {
     '只寫了星河兩個字',
     '這個計畫延後',
     '星河計 是另一個詞',
-    '星河  計畫 隔了兩個空格',
-    'NIMBUS - 7 has two separators',
   ])('keeps %j', async (text) => {
     expect(await mask(text)).toBe(text)
+  })
+
+  it.each([
+    'Margaret  Holloway',
+    'cc: Margaret\n    Holloway',
+    'cc: margaret\r\n\tHOLLOWAY',
+  ])('masks a name with a run of separators in %j, and a term configured with one', async (text) => {
+    for (const term of ['Margaret Holloway', 'Margaret  Holloway']) {
+      const named = new RulesRedactionService(new Context(), { terms: [term] })
+      const result = await named.mask([{ seq: SessionSeq(1), path: '/a', text }], emptyRedactionIndex())
+      expect(result.masked[0]).toBe(text.replace(/margaret[\s\S]*holloway/i, '⟦TERM_1⟧'))
+    }
   })
 
   it('steps over an astral character between overlapping occurrences', async () => {

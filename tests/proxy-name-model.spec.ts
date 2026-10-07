@@ -110,6 +110,21 @@ describe('proxy with the name model', () => {
     expect(received).toHaveLength(1)
   })
 
+  it('masks a double-spaced spelling in tool text and refuses it left in a field it does not rewrite', async () => {
+    await start()
+    const leak = await fetch(`${base}/v1/chat/completions`, {
+      method: 'POST', headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        model: 'm',
+        metadata: { owner: 'JANE  DOE' },
+        messages: [{ role: 'user', content: 'Ask Jane Doe' }, { role: 'tool', tool_call_id: 'c', content: 'JANE  DOE replied' }],
+      }),
+    })
+    expect(leak.status).toBe(422)
+    expect((await leak.json()).error.message).toBe('a detected value is still unmasked at /metadata/owner; the request was not forwarded')
+    expect(received).toHaveLength(0)
+  })
+
   it('does not run the model on assistant or tool text', async () => {
     const runtime = await start()
     await chat([{ role: 'assistant', content: 'Jane Doe' }, { role: 'tool', tool_call_id: 't', content: 'Jane Doe' }, { role: 'user', content: 'ok' }])

@@ -194,7 +194,8 @@ function termParts(needle: string): string[] {
 
 /**
  * The pattern one configured term matches on a lower-cased projection: its
- * parts in order, with at most one separator between two parts.
+ * parts in order, with any run of separators, line breaks and indentation
+ * included, or none between two parts.
  * @param value - the configured term.
  * @returns a global pattern, or `undefined` for a term of one part.
  */
@@ -202,7 +203,7 @@ function termPattern(value: string): RegExp | undefined {
   const parts = termParts(projectNfkc(value).lower)
   if (parts.length < 2) return undefined
   const escape = (part: string): string => part.replaceAll(/[.*+?^${}()|[\]\\/]/g, '\\$&')
-  return new RegExp(parts.map(escape).join(`${TERM_SEPARATOR}?`), 'gu')
+  return new RegExp(parts.map(escape).join(`${TERM_SEPARATOR}*`), 'gu')
 }
 
 /**

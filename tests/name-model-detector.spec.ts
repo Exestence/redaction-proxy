@@ -53,6 +53,11 @@ describe('NameModelDetector', () => {
     expect(masked).toEqual(['Ask ⟦NAME_1⟧', 'tool output: ⟦NAME_2⟧ replied, ⟦NAME_1⟧ too'])
   })
 
+  it('propagates a multi-word name to a spelling with a run of separators', async () => {
+    const { masked } = await maskWith(['Ask Jane Doe', 'tool output: Jane  Doe replied\ncc: Jane\n    Doe'], ['Ask Jane Doe'])
+    expect(masked).toEqual(['Ask ⟦NAME_1⟧', 'tool output: ⟦NAME_2⟧ replied\ncc: ⟦NAME_3⟧'])
+  })
+
   it('propagates a Han name to its spaced spelling', async () => {
     const { masked } = await maskWith(['請問許雅雯', '系統：許 雅 雯 已回覆'], ['請問許雅雯'])
     expect(masked).toEqual(['請問⟦NAME_1⟧', '系統：⟦NAME_2⟧ 已回覆'])
@@ -68,6 +73,7 @@ describe('NameModelDetector', () => {
     'Ask Jordan then JORDAN, jordan, and Ｊｏｒｄａｎ',
     '請問許雅雯，許 雅 雯 已回覆',
     'Ask Jane Doe 𠮷 or JANE DOE 😀 at Acme, ACME, ａｃｍｅ',
+    'Ask Jane Doe, Jane  Doe, or Jane\n    Doe',
   ])('restores every propagated spelling exactly in %j', async text => {
     const { model } = fakeNameModel(LABELS)
     const detector = new NameModelDetector(new RulesDetector(), model).forRequest(new Set([text]), () => {})
