@@ -560,10 +560,14 @@ export function collectSecretCandidates(text: string, push: PushCandidate, after
     const raw = text.slice(read.start, read.end)
     const end = read.start + trimValueEnd(raw)
     if (end - read.start < 3) return
-    const lineStart = text.lastIndexOf('\n', keyStart) + 1
+    // The line prefix is read within KEY_SCAN_MAX too; a longer one is no env line.
+    const windowStart = Math.max(0, keyStart - KEY_SCAN_MAX)
+    const prefix = text.slice(windowStart, keyStart)
+    const newline = prefix.lastIndexOf('\n')
     const envLine = assign === '=' &&
       UPPER_SNAKE.test(keyName) &&
-      ENV_LINE_PREFIX.test(text.slice(lineStart, keyStart))
+      (newline >= 0 || windowStart === 0) &&
+      ENV_LINE_PREFIX.test(prefix.slice(newline + 1))
     if (isCodeShape(raw, { envLine, loose: !strong, quoted: read.quoted })) return
     if (!strong && upper && shannon(text.slice(read.start, end)) < 2.5) return
     secret(read.start, end)

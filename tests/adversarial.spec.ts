@@ -95,6 +95,18 @@ describe('pathological inputs', () => {
   })
 })
 
+describe('pathological inputs at 1 MB', () => {
+  // The env-line check once read back to the previous newline from every key,
+  // so one 1.28 MB line of `password=` took 21 s.
+  it.each(['password=', 'PASSWORD='])('masks 1 MB of %j within 2s of CPU time', async unit => {
+    const text = unit.repeat(Math.ceil(1024 * 1024 / unit.length))
+    const started = process.cpuUsage()
+    await maskAll([text])
+    const used = process.cpuUsage(started)
+    expect((used.user + used.system) / 1_000).toBeLessThan(2_000)
+  })
+})
+
 describe('pathological inputs to the international rules', () => {
   const SIZE = 200 * 1024
   it.each([
