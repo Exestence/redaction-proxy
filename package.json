@@ -6,6 +6,9 @@
   "type": "module",
   "main": "lib/core/index.js",
   "types": "lib/core/index.d.ts",
+  "bin": {
+    "redaction-proxy": "lib/cli.js"
+  },
   "exports": {
     ".": {
       "types": "./lib/core/index.d.ts",
@@ -19,15 +22,18 @@
   },
   "files": [
     "lib/**/*.js",
-    "lib/**/*.d.ts"
+    "lib/**/*.d.ts",
+    "NOTICE"
   ],
   "scripts": {
-    "build": "tsc -p tsconfig.build.json",
+    "build": "node -e \"fs.rmSync('lib',{recursive:true,force:true})\" && tsc -p tsconfig.build.json",
+    "prepare": "npm run build",
+    "prepublishOnly": "npm run typecheck && npm test",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "vitest run",
     "bench": "tsc -p tsconfig.build.json && node bench/false-positives.mjs",
     "start": "node lib/cli.js",
-    "demo": "tsc -p tsconfig.build.json && node bench/demo.mjs",
+    "demo": "tsc -p tsconfig.build.json && node lib/cli.js --demo",
     "bench:public": "node --experimental-transform-types --disable-warning=ExperimentalWarning bench/public/main.ts",
     "e2e:real": "node --experimental-transform-types --disable-warning=ExperimentalWarning e2e/real/main.ts",
     "bench:presidio:setup": "uv venv bench/presidio/.venv --python 3.12 --allow-existing && uv pip install --python bench/presidio/.venv/bin/python -r bench/presidio/requirements.txt"
@@ -52,5 +58,6 @@
     "@types/node": "^22.20.4",
     "typescript": "^6.0.3",
     "vitest": "^4.1.11"
-  }
+  },
+  "packageManager": "pnpm@11.7.0"
 }

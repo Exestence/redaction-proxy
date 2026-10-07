@@ -36,6 +36,28 @@ upstream received: 請寄信給 ⟦EMAIL_1⟧，身分證 ⟦TWID_1⟧，檔案�
 client receives:   I will email lin.fictional@example.test about /Users/fictional-user/notes.md (ID A123456789).
 ```
 
+### Docker
+
+Not yet built or tested; Docker was not available where this image was written.
+
+```sh
+docker build -t redaction-proxy .
+docker run --rm -p 127.0.0.1:8787:8787 redaction-proxy
+```
+
+> **Always publish with `-p 127.0.0.1:8787:8787`, never `-p 8787:8787`.** The proxy has no authentication. The image binds `0.0.0.0` inside the container, so the `127.0.0.1:` prefix is the only thing keeping the proxy, and the API keys your tools send through it, off your network.
+
+A config file: add `-v "$PWD/redaction.json:/redaction.json:ro"` and append `--config /redaction.json`. The name model: build with `--build-arg NAME_MODEL=1` and add `-v ~/models/nym:/models:ro -e REDACTION_PROXY_NAME_MODEL_DIR=/models`.
+
+### npx (after the first npm release)
+
+Not on npm yet. Once it is published:
+
+```sh
+npx redaction-proxy --demo
+npx redaction-proxy           # the proxy, on http://127.0.0.1:8787
+```
+
 ## Point your tool at it
 
 > **Untested with real clients.** Only `pnpm demo` and the tests against a fake upstream have run. A harness for real services exists ([e2e/real](e2e/real/README.md)) but has not been run yet.

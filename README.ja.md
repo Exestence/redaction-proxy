@@ -36,6 +36,28 @@ upstream received: 請寄信給 ⟦EMAIL_1⟧，身分證 ⟦TWID_1⟧，檔案�
 client receives:   I will email lin.fictional@example.test about /Users/fictional-user/notes.md (ID A123456789).
 ```
 
+### Docker
+
+まだビルドもテストもしていません。このイメージを書いた環境に Docker がありませんでした。
+
+```sh
+docker build -t redaction-proxy .
+docker run --rm -p 127.0.0.1:8787:8787 redaction-proxy
+```
+
+> **必ず `-p 127.0.0.1:8787:8787` で公開し、`-p 8787:8787` は使わないでください。** プロキシには認証がありません。イメージはコンテナ内で `0.0.0.0` で待ち受けるため、`127.0.0.1:` の接頭辞だけが、プロキシと、ツールがそれを通して送る API キーをネットワークから守ります。
+
+設定ファイル：`-v "$PWD/redaction.json:/redaction.json:ro"` を加え、末尾に `--config /redaction.json` を付けます。人名モデル：`--build-arg NAME_MODEL=1` でビルドし、`-v ~/models/nym:/models:ro -e REDACTION_PROXY_NAME_MODEL_DIR=/models` を加えます。
+
+### npx（npm への初回公開後）
+
+まだ npm には公開していません。公開後は次のとおりです。
+
+```sh
+npx redaction-proxy --demo
+npx redaction-proxy           # プロキシを http://127.0.0.1:8787 で起動
+```
+
 ## ツールの接続先を変える
 
 > **実際のクライアントでは未検証です。** 実行済みなのは `pnpm demo` とダミー上流に対するテストだけです。実サービス向けの検証ツール（[e2e/real](e2e/real/README.md)）は用意してありますが、まだ実行していません。
