@@ -17,7 +17,7 @@
 import { createServer } from 'node:http'
 import type { IncomingMessage, Server, ServerResponse } from 'node:http'
 import { RedactionError, RulesDetector, createStreamRestorer, emptyRedactionIndex, mask, screenText } from '../core/index.ts'
-import type { RedactionDetector, RedactionRegistry, StreamRestorer } from '../core/index.ts'
+import type { PlaceholderEvent, RedactionDetector, RedactionRegistry, StreamRestoreOptions, StreamRestorer } from '../core/index.ts'
 import { NameModelDetector, NameModelError, containsStandingAlone, isSearchedValue } from '../core/model/detector.ts'
 import type { NameModel } from '../core/model/name-model.ts'
 import { NAME_MODEL_CATEGORIES } from '../core/model/config.ts'
@@ -86,7 +86,7 @@ interface Slot {
   parent: Record<string, unknown> | unknown[]
   /** Key or index of the string in `parent`. */
   key: string | number
-  /** JSON pointer of the string, for diagnostics that never carry text. */
+  /** JSON pointer of the string, keys through {@link pointerSegment}, for diagnostics that never carry text. */
   path: string
 }
 
@@ -95,8 +95,27 @@ interface Stats {
   masked: Record<string, number>
   restored: number
   unknown: number
+  /** Placeholders left as written inside a URL in tool-call arguments. */
+  kept: number
   nameModelFailed: boolean
 }
+
+/** Keys a diagnostic names as written: the lower-case identifiers the three APIs and most tool schemas use. */
+const NAMEABLE_KEY = /^[a-z][a-z0-9_]{0,39}$/
+
+/**
+ * One JSON pointer segment for a refusal or a log line. Any other key is
+ * written `<key>`, since a key is request or model text that may hold
+ * personal data or forge a log line.
+ * @param key - object key, array index, or `undefined` for a key not yet read.
+ * @returns the segment.
+ */
+function pointerSegment(key: string | number | undefined): string {
+  return typeof key === 'number' ? String(key) : key !== undefined && NAMEABLE_KEY.test(key) ? key : '<key>'
+}
+
+/** Tool names a log line writes as given; any other is written `<tool>`. */
+const NAMEABLE_TOOL = /^[A-Za-z0-9_.:-]{1,64}$/
 
 /** One state of {@link containsAnyOf}: a prefix of some pattern. */
 interface TrieNode {
@@ -150,7 +169,7 @@ function collectSlots(value: unknown, path: string, out: Slot[]): void {
   for (const key of ordered) {
     if (SKIP_MASK.has(key)) continue
     const item = record[key]
-    const at = `${path}/${key.replaceAll('~', '~0').replaceAll('/', '~1')}`
+    const at = `${path}/${pointerSegment(key)}`
     if (typeof item === 'string') out.push({ parent: record, key, path: at })
     else collectSlots(item, at, out)
   }
@@ -244,9 +263,8 @@ function refuseLeaks(body: Json, registry: RedactionRegistry, modelValues: Reado
     if (typeof value === 'string' && leaks(value)) where.push(path)
     else if (value !== null && typeof value === 'object') {
       for (const [key, item] of Object.entries(value)) {
-        // A key that holds the value is named `<key>`, so the message never carries it.
         const leakyKey = leaks(key)
-        const at = `${path}/${leakyKey ? '<key>' : key}`
+        const at = `${path}/${leakyKey ? '<key>' : pointerSegment(key)}`
         if (leakyKey) where.push(at)
         walk(item, at)
       }
@@ -271,40 +289,129 @@ function replaceUnscreenable(text: string): string {
     .replaceAll('⟧', '⟫')
 }
 
+/** What restoring one response needs. */
+interface Restoring {
+  registry: RedactionRegistry
+  stats: Stats
+  /** Tool names by Responses item id, or by Chat `choice:tool:index` key, as the stream announces them. */
+  toolNames: Map<string, string>
+  /**
+   * Restorer options for one tool call's arguments: placeholders inside a URL
+   * are kept, and every bound placeholder is logged.
+   * @param tool - the tool's name, if known.
+   * @param json - whether the arguments are JSON text.
+   * @param base - JSON pointer segments of the string inside parsed arguments.
+   */
+  toolOptions(tool: unknown, json: boolean, base?: ReadonlyArray<string | number>): StreamRestoreOptions
+}
+
+/**
+ * Build the restoring context of one request.
+ * @param registry - bindings of the request's mask call.
+ * @param stats - counters.
+ * @param log - receives one line per placeholder met in tool arguments, written once per distinct line.
+ * @returns the context.
+ */
+function restoring(registry: RedactionRegistry, stats: Stats, log: (line: string) => void): Restoring {
+  const logged = new Set<string>()
+  return {
+    registry,
+    stats,
+    toolNames: new Map(),
+    toolOptions(tool, json, base = []) {
+      const name = typeof tool === 'string' && NAMEABLE_TOOL.test(tool) ? tool : '<tool>'
+      return {
+        json,
+        keepInUrls: true,
+        onPlaceholder: (event: PlaceholderEvent) => {
+          const pointer = [...base, ...event.path].map(segment => `/${pointerSegment(segment)}`).join('')
+          const line = `tool arguments: ${event.restored ? 'restored' : 'kept inside a URL'} ${event.id} in ${name}${pointer === '' ? '' : ` at ${pointer}`}`
+          if (logged.has(line)) return
+          logged.add(line)
+          log(line)
+        },
+      }
+    },
+  }
+}
+
+/**
+ * Add a finished restorer's counts to the request's counters.
+ * @param restorer - a restorer whose stream has ended.
+ * @param stats - counters.
+ */
+function count(restorer: StreamRestorer, stats: Stats): void {
+  stats.restored += restorer.restored
+  stats.unknown += restorer.unknown
+  stats.kept += restorer.kept
+}
+
 /**
  * Restore one response string and count what happened.
  * @param text - masked string from the upstream.
- * @param registry - bindings of the request's mask call.
- * @param json - whether the string is JSON text.
- * @param stats - counters.
+ * @param ctx - the request's restoring context.
+ * @param options - restorer options.
  * @returns the restored string.
  */
-function restoreString(text: string, registry: RedactionRegistry, json: boolean, stats: Stats): string {
-  const restorer = createStreamRestorer(registry, { json })
+function restoreString(text: string, ctx: Restoring, options: StreamRestoreOptions): string {
+  const restorer = createStreamRestorer(ctx.registry, options)
   const out = restorer.push(text) + restorer.end()
-  stats.restored += restorer.restored
-  stats.unknown += restorer.unknown
+  count(restorer, ctx.stats)
   return out
+}
+
+/**
+ * Whether `record[key]` holds tool-call arguments: `arguments` (Chat, Responses,
+ * and their events), or the `input` of an Anthropic `*tool_use` block or a
+ * Responses custom tool call.
+ * @param record - a response object.
+ * @param key - one of its keys.
+ * @returns whether the value is tool-call arguments.
+ */
+function holdsToolArguments(record: Json, key: string): boolean {
+  return key === 'arguments' || (key === 'input' && /tool_use$|custom_tool_call/.test(String(record.type ?? '')))
+}
+
+/**
+ * Restore tool-call arguments: JSON text, plain text, or a parsed object.
+ * @param value - the arguments.
+ * @param ctx - the request's restoring context.
+ * @param tool - the tool's name, if known.
+ * @param json - whether a string value is JSON text.
+ * @param base - JSON pointer segments of `value` inside parsed arguments.
+ * @returns the restored arguments.
+ */
+function restoreToolArguments(value: unknown, ctx: Restoring, tool: unknown, json: boolean, base: Array<string | number> = []): unknown {
+  if (typeof value === 'string') return restoreString(value, ctx, ctx.toolOptions(tool, json, base))
+  if (value !== null && typeof value === 'object') {
+    const record = value as Record<string, unknown>
+    for (const [key, item] of Object.entries(record)) {
+      record[key] = restoreToolArguments(item, ctx, tool, json, [...base, Array.isArray(value) ? Number(key) : key])
+    }
+  }
+  return value
 }
 
 /**
  * Restore every string of a parsed response value in place.
  * @param value - parsed JSON value.
- * @param registry - bindings of the request's mask call.
- * @param stats - counters.
+ * @param ctx - the request's restoring context.
  * @param key - the key holding `value`.
  * @returns the restored value.
  */
-function restoreDeep(value: unknown, registry: RedactionRegistry, stats: Stats, key = ''): unknown {
-  if (typeof value === 'string') return SKIP_RESTORE.has(key) ? value : restoreString(value, registry, JSON_TEXT.has(key), stats)
+function restoreDeep(value: unknown, ctx: Restoring, key = ''): unknown {
+  if (typeof value === 'string') return SKIP_RESTORE.has(key) ? value : restoreString(value, ctx, { json: JSON_TEXT.has(key) })
   if (Array.isArray(value)) {
-    for (let i = 0; i < value.length; i += 1) value[i] = restoreDeep(value[i], registry, stats, key)
+    for (let i = 0; i < value.length; i += 1) value[i] = restoreDeep(value[i], ctx, key)
     return value
   }
   if (value !== null && typeof value === 'object') {
-    const record = value as Record<string, unknown>
+    const record = value as Json
     for (const [name, item] of Object.entries(record)) {
-      if (!SKIP_RESTORE.has(name)) record[name] = restoreDeep(item, registry, stats, name)
+      if (SKIP_RESTORE.has(name)) continue
+      record[name] = holdsToolArguments(record, name)
+        ? restoreToolArguments(item, ctx, record.name ?? ctx.toolNames.get(record.item_id), JSON_TEXT.has(name))
+        : restoreDeep(item, ctx, name)
     }
   }
   return value
@@ -343,30 +450,31 @@ function formatEvent(lines: readonly string[], data: unknown): string {
 
 /**
  * Per-stream restorers keyed by the text field they restore.
- * @param registry - bindings of the request's mask call.
- * @param stats - counters.
+ * @param ctx - the request's restoring context.
  * @returns accessors that push a chunk into a keyed restorer and flush it.
  */
-function restorers(registry: RedactionRegistry, stats: Stats) {
+function restorers(ctx: Restoring) {
   const open = new Map<string, StreamRestorer>()
-  const get = (key: string, json: boolean): StreamRestorer => {
-    let restorer = open.get(key)
-    if (restorer === undefined) {
-      restorer = createStreamRestorer(registry, { json })
-      open.set(key, restorer)
-    }
-    return restorer
-  }
   return {
-    push(key: string, chunk: string, json = false): string {
-      return get(key, json).push(chunk)
+    /**
+     * @param key - the text field.
+     * @param chunk - its next chunk.
+     * @param options - restorer options, used when this pushes the field's first chunk.
+     * @returns restored text that is final.
+     */
+    push(key: string, chunk: string, options: StreamRestoreOptions = {}): string {
+      let restorer = open.get(key)
+      if (restorer === undefined) {
+        restorer = createStreamRestorer(ctx.registry, options)
+        open.set(key, restorer)
+      }
+      return restorer.push(chunk)
     },
     flush(key: string): string {
       const restorer = open.get(key)
       if (restorer === undefined) return ''
       open.delete(key)
-      stats.restored += restorer.restored
-      stats.unknown += restorer.unknown
+      count(restorer, ctx.stats)
       return restorer.end()
     },
     flushPrefix(prefix: string): Array<[string, string]> {
@@ -386,13 +494,12 @@ type Json = Record<string, any>
  * keyed stream restorers, writes any held tail as a synthetic delta just
  * before the event that closes its field, and restores every other event whole.
  * @param api - wire API of the stream.
- * @param registry - bindings of the request's mask call.
- * @param stats - counters.
+ * @param ctx - the request's restoring context.
  * @param onResponseId - receives the id of a completed Responses response.
  * @returns a function mapping one parsed event to the blocks to send.
  */
-function sseTransformer(api: Api, registry: RedactionRegistry, stats: Stats, onResponseId: (id: string) => void) {
-  const r = restorers(registry, stats)
+function sseTransformer(api: Api, ctx: Restoring, onResponseId: (id: string) => void) {
+  const r = restorers(ctx)
   const toolBlocks = new Set<string>()
   return (lines: string[], event: Json): string => {
     let before = ''
@@ -403,7 +510,9 @@ function sseTransformer(api: Api, registry: RedactionRegistry, stats: Stats, onR
         if (typeof delta.content === 'string') delta.content = r.push(`${at}content`, delta.content)
         if (typeof delta.reasoning_content === 'string') delta.reasoning_content = r.push(`${at}reasoning`, delta.reasoning_content)
         for (const call of (delta.tool_calls ?? []) as Json[]) {
-          if (typeof call.function?.arguments === 'string') call.function.arguments = r.push(`${at}tool:${call.index}`, call.function.arguments, true)
+          const key = `${at}tool:${call.index}`
+          if (typeof call.function?.name === 'string') ctx.toolNames.set(key, call.function.name)
+          if (typeof call.function?.arguments === 'string') call.function.arguments = r.push(key, call.function.arguments, ctx.toolOptions(ctx.toolNames.get(key), true))
         }
         if (choice.finish_reason == null) continue
         // The finishing chunk may carry text of its own, so a held tail is appended to it, not sent ahead.
@@ -426,15 +535,15 @@ function sseTransformer(api: Api, registry: RedactionRegistry, stats: Stats, onR
     }
     if (api === 'messages') {
       const at = `${event.index}`
-      if (event.type === 'content_block_start' && (event.content_block?.type === 'text' || event.content_block?.type === 'tool_use')) {
-        const block = event.content_block as Json
-        if (block.type === 'text') {
-          block.text = r.push(at, block.text ?? '')
-        } else {
-          toolBlocks.add(at)
-          r.push(at, '', true)
-          block.input = restoreDeep(block.input, registry, stats)
-        }
+      const block = event.content_block as Json | undefined
+      if (event.type === 'content_block_start' && block?.type === 'text') {
+        block.text = r.push(at, block.text ?? '')
+        return formatEvent(lines, event)
+      }
+      if (event.type === 'content_block_start' && /tool_use$/.test(String(block?.type))) {
+        toolBlocks.add(at)
+        r.push(at, '', ctx.toolOptions(block?.name, true))
+        event.content_block = restoreDeep(block, ctx)
         return formatEvent(lines, event)
       }
       if (event.type === 'content_block_delta' && event.delta?.type === 'text_delta') {
@@ -442,7 +551,7 @@ function sseTransformer(api: Api, registry: RedactionRegistry, stats: Stats, onR
         return formatEvent(lines, event)
       }
       if (event.type === 'content_block_delta' && event.delta?.type === 'input_json_delta') {
-        event.delta.partial_json = r.push(at, event.delta.partial_json, true)
+        event.delta.partial_json = r.push(at, event.delta.partial_json, { json: true })
         return formatEvent(lines, event)
       }
       if (event.type === 'content_block_delta') return formatEvent(lines, event)
@@ -452,22 +561,24 @@ function sseTransformer(api: Api, registry: RedactionRegistry, stats: Stats, onR
         if (tail !== '') before = formatEvent(['event: content_block_delta'], { type: 'content_block_delta', index: event.index, delta })
         return before + formatEvent(lines, event)
       }
-      return formatEvent(lines, restoreDeep(event, registry, stats))
+      return formatEvent(lines, restoreDeep(event, ctx))
     }
     // Responses
     const type = String(event.type ?? '')
+    if (type === 'response.output_item.added' && typeof event.item?.id === 'string' && typeof event.item.name === 'string') ctx.toolNames.set(event.item.id, event.item.name)
     const deltaKey = `${event.item_id}:${event.content_index ?? event.summary_index ?? ''}:${type.replace(/\.(delta|done)$/, '')}`
     const json = type.startsWith('response.function_call_arguments.')
+    const tool = json || type.startsWith('response.custom_tool_call_input.')
     if (type.endsWith('.delta') && typeof event.delta === 'string') {
-      event.delta = r.push(deltaKey, event.delta, json)
+      event.delta = r.push(deltaKey, event.delta, tool ? ctx.toolOptions(ctx.toolNames.get(event.item_id), json) : {})
       return formatEvent(lines, event)
     }
     if (type.endsWith('.done')) {
       const tail = r.flush(deltaKey)
-      if (tail !== '') before = formatEvent([`event: ${type.replace(/\.done$/, '.delta')}`], { ...event, type: type.replace(/\.done$/, '.delta'), delta: tail, text: undefined, arguments: undefined })
+      if (tail !== '') before = formatEvent([`event: ${type.replace(/\.done$/, '.delta')}`], { ...event, type: type.replace(/\.done$/, '.delta'), delta: tail, text: undefined, arguments: undefined, input: undefined })
     }
     if (type === 'response.completed' && typeof event.response?.id === 'string') onResponseId(event.response.id)
-    return before + formatEvent(lines, restoreDeep(event, registry, stats))
+    return before + formatEvent(lines, restoreDeep(event, ctx))
   }
 }
 
@@ -546,7 +657,7 @@ export function createProxyServer(
 
   const forward = async (req: IncomingMessage, res: ServerResponse, path: string, api: Api | undefined, body: Buffer | undefined): Promise<void> => {
     const started = Date.now()
-    const stats: Stats = { masked: {}, restored: 0, unknown: 0, nameModelFailed: false }
+    const stats: Stats = { masked: {}, restored: 0, unknown: 0, kept: 0, nameModelFailed: false }
     const anthropic = api === 'messages' || (api === undefined && (req.headers['x-api-key'] !== undefined || req.headers['anthropic-version'] !== undefined))
     const target = (anthropic ? config.anthropicUpstream : config.openaiUpstream) + (req.url ?? '/')
 
@@ -581,7 +692,7 @@ export function createProxyServer(
     }
     const done = (): void => {
       const counts = Object.entries(stats.masked).map(([category, n]) => `${category} ${n}`).join(', ')
-      log(`${req.method} ${path} -> ${upstream.status} masked ${Object.values(stats.masked).reduce((a, b) => a + b, 0)}${counts === '' ? '' : ` (${counts})`} restored ${stats.restored} unknown ${stats.unknown}${stats.nameModelFailed ? ' nameModel failed' : ''} ${Date.now() - started}ms`)
+      log(`${req.method} ${path} -> ${upstream.status} masked ${Object.values(stats.masked).reduce((a, b) => a + b, 0)}${counts === '' ? '' : ` (${counts})`} restored ${stats.restored}${stats.kept === 0 ? '' : ` kept ${stats.kept}`} unknown ${stats.unknown}${stats.nameModelFailed ? ' nameModel failed' : ''} ${Date.now() - started}ms`)
     }
 
     const registry = masked?.registry
@@ -591,11 +702,12 @@ export function createProxyServer(
       done()
       return
     }
+    const ctx = restoring(registry, stats, line => log(`${req.method} ${path} ${line}`))
     if (!(upstream.headers.get('content-type') ?? '').includes('text/event-stream')) {
       const text = await upstream.text()
       let payload = text
       try {
-        const parsed = restoreDeep(JSON.parse(text), registry, stats) as Json
+        const parsed = restoreDeep(JSON.parse(text), ctx) as Json
         if (api === 'responses' && typeof parsed.id === 'string' && upstream.ok) remember(parsed.id)
         payload = JSON.stringify(parsed)
       } catch {
@@ -608,7 +720,7 @@ export function createProxyServer(
     }
 
     res.writeHead(upstream.status, out)
-    const transform = sseTransformer(api!, registry, stats, remember)
+    const transform = sseTransformer(api!, ctx, remember)
     const decoder = new TextDecoder()
     let buffer = ''
     const drain = (final: boolean): void => {
