@@ -167,6 +167,7 @@ describe('national telephone formats', () => {
     ['ligue (11) 9 1234-5678', 'ligue ⟦PHONE_1⟧'],
     ['Ph: 0412 345 678, mob 0412 345 679, cel: 55 1234 5678', 'Ph: ⟦PHONE_1⟧, mob ⟦PHONE_2⟧, cel: ⟦PHONE_3⟧'],
     ['Tlf. 22 33 44 55, телефон 8 912 345-67-89', 'Tlf. ⟦PHONE_1⟧, телефон ⟦PHONE_2⟧'],
+    ['Contact:\n+44 20 7946 0958\n+44 (0)20 7946 0959\n+33 1 23 45 67 89', 'Contact:\n⟦PHONE_1⟧\n⟦PHONE_2⟧\n⟦PHONE_3⟧'],
     ['phone number is 9876543210, call me at 4155550132', 'phone number is ⟦PHONE_1⟧, call me at ⟦PHONE_2⟧'],
   ])('masks %j', async (text, expected) => {
     expect(await maskWith(phoneRules, text)).toBe(expected)
@@ -197,7 +198,7 @@ describe('national telephone formats', () => {
     ['a Japanese shape with too many digits', '03-1234-56789'],
     ['a UUID', '123e4567-e89b-12d3-a456-426614174000'],
     ['a CSV row', '2026,415,555,0132'],
-    ['an international number at the start of a line, a diff marker', '+44 20 7946 0958'],
+    ['an ungrouped number at the start of a line, behind a diff marker', '+1792055696732,1\n+2026-02-27 17:06:23\n+1 2 3 4 5 6 7 8\n+10.20.30.40.50'],
   ])('leaves %s alone', async (_name, text) => {
     expect(await maskWith(phoneRules, text)).toBe(text)
   })

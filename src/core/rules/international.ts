@@ -160,11 +160,13 @@ const E164_THREE_DIGIT_ZONES = new Set([
  * between them, where a bracketed area code (`(415)`, `(0)`) counts as one
  * step. Not after a letter, digit, `+`, `)`, `]`, or `.`, so `1e+10` and
  * `f(x)+12345678` are arithmetic, not a number; `offset=+86400000` has too
- * few digits to be one. Not at the start of a line, where `+` is a diff's
- * added-line marker (`+2026-02-27 17:06`, `+1792055696732,…`), and not a
- * date (`+2026-10-05 12`).
+ * few digits to be one. At the start of a line, where `+` may be a diff's
+ * added-line marker (`+2026-02-27 17:06`, `+1792055696732,…`), only a number
+ * whose groups after the country code are joined by spaces or hyphens and,
+ * after the first, have two or more digits counts (`+44 20 7946 0958`,
+ * `+33 1 23 45 67 89`, `+44 (0)20 7946 0958`). Never a date (`+2026-10-05 12`).
  */
-const E164 = /(?<=[^\n])(?<![A-Za-z0-9+)\].])\+(?!(?:19|20)\d\d[-/. ]\d\d[-/. ]\d\d)[1-9](?:[ .-]?(?:\(\d{1,4}\)|\d)){6,16}(?![A-Za-z0-9]|[.-]\d)/g
+const E164 = /(?:(?<=[^\n])|(?=\+[1-9]\d{0,2}(?:[ -]| ?\(\d{1,4}\) ?)\d+(?:[ -]\d{2,})+(?!\d)))(?<![A-Za-z0-9+)\].])\+(?!(?:19|20)\d\d[-/. ]\d\d[-/. ]\d\d)[1-9](?:[ .-]?(?:\(\d{1,4}\)|\d)){6,16}(?![A-Za-z0-9]|[.-]\d)/g
 
 /** En dash and minus sign, which word processors put between the groups of a telephone number in place of `-`. */
 const DASHES = '\\u2013\\u2212'
