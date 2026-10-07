@@ -168,6 +168,7 @@ describe('national telephone formats', () => {
     ['Ph: 0412 345 678, mob 0412 345 679, cel: 55 1234 5678', 'Ph: ⟦PHONE_1⟧, mob ⟦PHONE_2⟧, cel: ⟦PHONE_3⟧'],
     ['Tlf. 22 33 44 55, телефон 8 912 345-67-89', 'Tlf. ⟦PHONE_1⟧, телефон ⟦PHONE_2⟧'],
     ['Contact:\n+44 20 7946 0958\n+44 (0)20 7946 0959\n+33 1 23 45 67 89', 'Contact:\n⟦PHONE_1⟧\n⟦PHONE_2⟧\n⟦PHONE_3⟧'],
+    ['Tel. No. 030 12345678, Tel.-Nr.: 0151 23456789, Fax No. 030 12345679', 'Tel. No. ⟦PHONE_1⟧, Tel.-Nr.: ⟦PHONE_2⟧, Fax No. ⟦PHONE_3⟧'],
     ['phone number is 9876543210, call me at 4155550132', 'phone number is ⟦PHONE_1⟧, call me at ⟦PHONE_2⟧'],
   ])('masks %j', async (text, expected) => {
     expect(await maskWith(phoneRules, text)).toBe(expected)
@@ -178,7 +179,7 @@ describe('national telephone formats', () => {
     ['a number after a field that starts with a keyword', 'cell_id 123456789 tel_ext 12345678 mobile2 12345678'],
     ['a date after a keyword', 'phone: 2026-10-07 and mobile 2026/10/07, Tel. 2026 10 07'],
     ['an IPv4 address after a keyword', 'SIP phone 10.20.30.40, cell 192.168.100.200'],
-    ['a number after a keyword and another word', 'phone count 12345678, whatsapp group 12345678'],
+    ['a number after a keyword and another word', 'phone count 12345678, whatsapp group 12345678, Tel (office) 030 12345678'],
     ['a Korean shape with an unassigned area code', '07-123-4567 and 09-123-4567'],
     ['bare ten digits', 'order 4155550132'],
     ['space-separated groups without a keyword', 'row 415 555 0132'],

@@ -250,10 +250,11 @@ const PHONE_KEYWORD_VALUE = '(?<!\\d[ ./-])(?!(?:19|20)\\d{2}[-/. ]\\d{1,2}[-/. 
   + '(?:\\+\\d{1,3}[ .-]?)?(?:\\(\\d{1,5}\\)[ .-]?)?\\d{1,12}(?:[ ./-]\\d{1,8}){0,5}(?![ ./-]?\\d)'
 /**
  * Characters between a telephone keyword and its number: punctuation, spaces,
- * and characters outside ASCII (`番号は`), with at most one `is`, `at`, or `on`.
- * Any other ASCII word means the number is not the telephone's (`phone count 12345678`).
+ * and characters outside ASCII (`番号は`), with at most one `is`, `at`, `on`,
+ * `no`, or `nr` (`Tel. No. `, `Tel.-Nr.: `). Any other ASCII word means the
+ * number is not the telephone's (`phone count 12345678`, `Tel (office) …`).
  */
-const PHONE_KEYWORD_GAP = '[^\\n\\w]{0,8}?(?:(?:is|at|on)[^\\n\\w]{1,4}?)?'
+const PHONE_KEYWORD_GAP = `[^\\n\\w]{0,8}?(?:(?:${anyCase('is|at|on|no|nr')})[^\\n\\w]{1,4}?)?`
 /** Fewest and most digits a number after a telephone keyword is accepted with. */
 const PHONE_KEYWORD_DIGITS_MIN = 8
 const PHONE_KEYWORD_DIGITS_MAX = 15
