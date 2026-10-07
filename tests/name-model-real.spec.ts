@@ -3,7 +3,9 @@
 import { spawn } from 'node:child_process'
 import { fileURLToPath } from 'node:url'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
-import { RulesDetector, emptyRedactionIndex, mask } from '../src/core/index.ts'
+import { RulesDetector, emptyRedactionIndex, mask, restore } from '../src/core/index.ts'
+import { createRandom } from '../bench/public/random.ts'
+import type { Random } from '../bench/public/random.ts'
 import { resolveNameModelConfig } from '../src/core/model/config.ts'
 import { NameModelDetector } from '../src/core/model/detector.ts'
 import { loadNameModel } from '../src/core/model/name-model.ts'
@@ -35,6 +37,60 @@ function runCliUntilSigterm(dir: string): Promise<{ code: number | null; stderr:
       resolve({ code, stderr })
     })
   })
+}
+
+const LATIN_NAMES: Record<string, [string, string][]> = {
+  en: [['Jordan', 'Whitfield'], ['Emily', 'Carter'], ['Marcus', 'Lee'], ['Hannah', 'Brooks']],
+  de: [['Lukas', 'Becker'], ['Annika', 'Vogel'], ['Jürgen', 'Müller']],
+  fr: [['Camille', 'Dubois'], ['Théo', 'Lefèvre'], ['Élodie', 'Moreau']],
+}
+const CJK_NAMES: Record<string, { names: [string, string, string][]; honorifics: string[] }> = {
+  'zh-TW': { names: [['許', '雅雯', 'Hsu Ya-wen'], ['陳', '志明', 'Chen Chih-ming'], ['林', '佳蓉', 'Lin Chia-jung']], honorifics: ['先生', '經理', '小姐'] },
+  'zh-CN': { names: [['王', '晓燕', 'Wang Xiaoyan'], ['张', '伟', 'Zhang Wei'], ['刘', '芳', 'Liu Fang']], honorifics: ['先生', '经理', '女士'] },
+  ja: { names: [['田中', '美咲', 'Tanaka Misaki'], ['佐藤', '健太', 'Sato Kenta'], ['鈴木', '花子', 'Suzuki Hanako']], honorifics: ['さん', '様', '先生'] },
+  ko: { names: [['김', '민준', 'Kim Min-jun'], ['이', '서연', 'Lee Seo-yeon'], ['박', '지훈', 'Park Ji-hoon']], honorifics: ['님', '씨', ' 선생님'] },
+}
+const FRAMES: Record<string, string[]> = {
+  en: ['Please email {} about the invoice {e}.', 'Meeting with {} tomorrow {a}; call {p}.', 'Notes: {} said {} would join.', '{a} cc {} and {}'],
+  de: ['Bitte schreiben Sie {} wegen der Rechnung {a}.', 'Termin mit {} morgen; Telefon {p}.', '{} und {} kommen.'],
+  fr: ['Merci d’écrire à {} au sujet de la facture {a}.', 'Réunion avec {} demain, tél. {p}.', '{} et {} arrivent.'],
+  'zh-TW': ['請聯絡{}，電話{p}{a}。', '{}和{}明天開會。', '請轉告 {} 寄信到 {e}'],
+  'zh-CN': ['请联系{}，电话{p}{a}。', '{}和{}明天开会。', '请告诉 {} 发邮件到 {e}'],
+  ja: ['{}に連絡してください。電話{p}{a}', '{}と{}は明日会議です。', '{} から {e} へ'],
+  ko: ['{}에게 연락해 주세요 {p}{a}.', '{}와 {}는 내일 회의합니다.', '{} 메일 {e}'],
+}
+const fullWidth = (text: string): string => text.replace(/[0-9A-Za-z]/g, char => String.fromCharCode(char.charCodeAt(0) + 0xfee0))
+
+/**
+ * One synthetic prompt that names the same fictional people in several spellings: case, `Surname, Given`,
+ * honorifics, initials, nicknames, spaced and romanised CJK, full-width forms, and astral characters.
+ * @param random - the generator.
+ * @returns the prompt.
+ */
+function variantPrompt(random: Random): string {
+  const language = random.pick(Object.keys(FRAMES))
+  const spellings = (): string[] => {
+    const latin = LATIN_NAMES[language]
+    if (latin !== undefined) {
+      const [given, surname] = random.pick(latin)
+      const full = `${given} ${surname}`
+      return [full, full.toLowerCase(), full.toUpperCase(), `${surname}, ${given}`, `Dr. ${surname}`, `Mr. ${full}`, `${given.charAt(0)}. ${surname}`,
+        given, surname, surname.toUpperCase(), given.slice(0, 3), fullWidth(full)]
+    }
+    const { names, honorifics } = CJK_NAMES[language] as { names: [string, string, string][]; honorifics: string[] }
+    const [surname, given, roman] = random.pick(names)
+    const joined = `${surname}${language === 'ko' ? ' ' : ''}${given}`
+    const [romanSurname, ...romanGiven] = roman.split(' ')
+    return [joined, [...`${surname}${given}`].join(' '), `${surname}${random.pick(honorifics)}`, `${joined}${random.pick(honorifics)}`,
+      roman, roman.toUpperCase(), roman.toLowerCase(), `${romanSurname}, ${romanGiven.join(' ')}`, given]
+  }
+  const people = Array.from({ length: random.int(1, 2) }, spellings)
+  return Array.from({ length: random.int(1, 3) }, () => random.pick(FRAMES[language] as string[])
+    .replace(/\{\}/g, () => random.pick(random.pick(people)))
+    .replace('{a}', random.pick(['😀', '𠮷', '👩‍💻', '']))
+    .replace('{e}', random.pick(['ops@example.test', 'j.doe@example.org']))
+    .replace('{p}', random.pick(['+1 415 555 0134', '(02) 2345-6789', '０９０-１２３４-５６７８'])))
+    .join(random.pick(['\n', ' ']))
 }
 
 describe.skipIf(MODEL_DIR === undefined)('real name model', () => {
@@ -76,8 +132,22 @@ describe.skipIf(MODEL_DIR === undefined)('real name model', () => {
       { seq: 0, path: '', text: 'Ask 林佳蓉 to mail ops@example.test' },
       { seq: 1, path: '', text: 'Tool output: 林 佳 蓉 approved' },
     ], emptyRedactionIndex())
-    expect(result.masked).toEqual(['Ask ⟦NAME_1⟧ to mail ⟦EMAIL_1⟧', 'Tool output: ⟦NAME_1⟧ approved'])
+    expect(result.masked).toEqual(['Ask ⟦NAME_1⟧ to mail ⟦EMAIL_1⟧', 'Tool output: ⟦NAME_2⟧ approved'])
   })
+
+  it('restores every synthetic variant-spelling prompt exactly', async () => {
+    const random = createRandom(9)
+    const prompts = new Set(Array.from({ length: 3000 }, () => variantPrompt(random)))
+    const altered: string[] = []
+    for (const text of prompts) {
+      const detector = new NameModelDetector(new RulesDetector(), model).forRequest(new Set([text]), error => { throw error })
+      const result = await mask(detector, [{ seq: 0, path: '', text }], emptyRedactionIndex())
+      const restored = restore(result.masked[0] as string, result.registry)
+      if (!restored.ok || restored.text !== text) altered.push(text)
+    }
+    expect(prompts.size).toBeGreaterThan(500)
+    expect(altered).toEqual([])
+  }, 120_000)
 
   it('exits cleanly on SIGTERM after releasing the session', async () => {
     const { code, stderr } = await runCliUntilSigterm(MODEL_DIR as string)
