@@ -1,4 +1,4 @@
-// Captures real proxy output for the README media. Runs `bench/demo.mjs` and
+// Captures real proxy output for the README media. Runs `lib/cli.js --demo` and
 // one more streamed request through the built proxy against a local fake
 // upstream, then writes what the client sent, what the upstream received, and
 // what the client got back to docs/media/src/captured.json. All values are
@@ -13,7 +13,7 @@ import { createProxyServer, listen } from '../../../lib/proxy/server.js'
 
 const root = fileURLToPath(new URL('../../../', import.meta.url))
 
-const demo = execFileSync(process.execPath, ['bench/demo.mjs'], { cwd: root, encoding: 'utf8' })
+const demo = execFileSync(process.execPath, ['lib/cli.js', '--demo'], { cwd: root, encoding: 'utf8' })
   .trimEnd().split('\n')
 
 // The fake upstream answers with the placeholders it received, in order.

@@ -33,8 +33,8 @@
 | `src/core/rules/` | 規則偵測器 `RulesDetector`：各規則、需自行啟用的國際規則（`international.ts`）、檢查碼演算法（`checksum.ts`）、NFKC 投影、百分比解碼投影、同值擴散、輸入篩檢。 |
 | `src/proxy/config.ts` | 設定檔載入與驗證。 |
 | `src/proxy/server.ts` | HTTP 代理：收集可遮字串、遮罩、外洩檢查、轉送、JSON 與 SSE 還原。 |
-| `src/cli.ts` | 命令列 `node lib/cli.js [--config path]`。 |
-| `bench/` | 誤遮率量測（`pnpm bench`）與免金鑰示範（`pnpm demo`）。 |
+| `src/cli.ts` | 命令列 `redaction-proxy [--config path]`；`--demo` 跑免金鑰示範（`src/demo.ts`，即 `pnpm demo`）。 |
+| `bench/` | 誤遮率量測（`pnpm bench`）。 |
 
 DeepSeek Harness 透過 dsh-addons 的 redaction 套件以 git submodule（`dsh-addons/vendor/redaction-proxy`）使用這份核心；核心只在這個倉庫修改。[dsh-privacy-router](https://github.com/PersonalAssistanceHsin/dsh-privacy-router) 目前還有自己的串流還原器，未來預計統一到這裡的 `createStreamRestorer`。
 
@@ -527,7 +527,7 @@ README 的圖片與影片都放在 `docs/media/`，可重新產生：
 | --- | --- | --- |
 | `hero.svg` | 手繪 SVG | 直接編輯 |
 | `results.svg` | 評測結果 JSON | `node bench/results-chart.mjs`；預設讀 `bench/results/public-bench-held-out.json` 的英文提示，畫代理預設、加人名模型與 Presidio cutoff 0.4 三個系統；`--split allLanguages`、`--systems "名稱;名稱"`、`--input`、`--out`、`--label` 可改（見腳本開頭） |
-| `src/captured.json` | 真實代理輸出：`bench/demo.mjs`，以及另一個經代理送往本機假上游的串流請求 | `pnpm build && node docs/media/src/capture.mjs` |
+| `src/captured.json` | 真實代理輸出：`lib/cli.js --demo`，以及另一個經代理送往本機假上游的串流請求 | `pnpm build && node docs/media/src/capture.mjs` |
 | `before-after.png`、`intro.mp4`、`intro.gif` | `src/before-after.html`、`src/intro.html` 讀 `captured.json` | `PLAYWRIGHT=… FFMPEG=… node docs/media/src/render.mjs`（Playwright 與 ffmpeg 都不是倉庫依賴，取得方式見腳本開頭） |
 
 示範資料全是虛構的值（`example.test` 網域、虛構人名、假金鑰）。

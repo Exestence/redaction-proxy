@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 /**
- * Command line: `node lib/cli.js [--config path]`. The config path may also
+ * Command line: `redaction-proxy [--config path]`, or `redaction-proxy --demo`
+ * to run the keyless demo and exit. The config path may also
  * come from `REDACTION_PROXY_CONFIG`; `REDACTION_PROXY_*` variables override it.
  * A configured name model is loaded before the port opens, so a missing file
  * stops startup instead of failing the first request. SIGINT and SIGTERM
@@ -23,7 +24,12 @@ function exitWith(error: unknown): never {
   process.exit(1)
 }
 
-const { values } = parseArgs({ options: { config: { type: 'string', short: 'c' } } })
+const { values } = parseArgs({ options: { config: { type: 'string', short: 'c' }, demo: { type: 'boolean' } } })
+if (values.demo) {
+  const { runDemo } = await import('./demo.ts')
+  await runDemo()
+  process.exit(0)
+}
 let config
 try {
   config = loadConfig(values.config ?? process.env.REDACTION_PROXY_CONFIG, process.env)
