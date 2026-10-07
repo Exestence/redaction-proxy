@@ -51,7 +51,25 @@ const SECRET_KEYWORD = new RegExp([
 
 const IDENTIFIER_CHAR = /[A-Za-z0-9_.-]/
 const UPPER_SNAKE = /^[A-Z][A-Z0-9_]*$/
-const ENV_LINE_PREFIX = /^[ \t]*(?:export[ \t]+)?$/
+
+/**
+ * Whether only blanks and an optional `export ` stand between the start of
+ * the line and `at`, as in an env file. It reads back over that run only, not
+ * to the previous newline, so a long line of keys stays linear.
+ * @param text - the whole text.
+ * @param at - start of the key.
+ * @returns whether the key opens an env line.
+ */
+function startsEnvLine(text: string, at: number): boolean {
+  const blank = (i: number): boolean => text[i] === ' ' || text[i] === '\t'
+  let i = at
+  while (i > 0 && blank(i - 1)) i -= 1
+  if (i < at && i >= 6 && text.startsWith('export', i - 6)) {
+    i -= 6
+    while (i > 0 && blank(i - 1)) i -= 1
+  }
+  return i === 0 || text[i - 1] === '\n'
+}
 
 const STRONG_KEYS = new Set([
   'apikey', 'clientsecret', 'refreshtoken', 'accesstoken', 'authtoken', 'privatekey',
@@ -560,14 +578,7 @@ export function collectSecretCandidates(text: string, push: PushCandidate, after
     const raw = text.slice(read.start, read.end)
     const end = read.start + trimValueEnd(raw)
     if (end - read.start < 3) return
-    // The line prefix is read within KEY_SCAN_MAX too; a longer one is no env line.
-    const windowStart = Math.max(0, keyStart - KEY_SCAN_MAX)
-    const prefix = text.slice(windowStart, keyStart)
-    const newline = prefix.lastIndexOf('\n')
-    const envLine = assign === '=' &&
-      UPPER_SNAKE.test(keyName) &&
-      (newline >= 0 || windowStart === 0) &&
-      ENV_LINE_PREFIX.test(prefix.slice(newline + 1))
+    const envLine = assign === '=' && UPPER_SNAKE.test(keyName) && startsEnvLine(text, keyStart)
     if (isCodeShape(raw, { envLine, loose: !strong, quoted: read.quoted })) return
     if (!strong && upper && shannon(text.slice(read.start, end)) < 2.5) return
     secret(read.start, end)
