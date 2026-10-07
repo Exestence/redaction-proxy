@@ -1,7 +1,7 @@
 // End to end: a client talks to the proxy, the proxy talks to a fake upstream
 // on 127.0.0.1 that answers with the placeholders it received, split into
 // 3-character SSE chunks so every placeholder straddles chunk boundaries.
-import { createServer } from 'node:http'
+import { createServer, request } from 'node:http'
 import type { IncomingHttpHeaders, Server } from 'node:http'
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest'
 import { loadConfig } from '../src/proxy/config.ts'
@@ -373,6 +373,55 @@ describe('refusals and screening', () => {
     const res = await post('/v1/chat/completions', { model: 'm', metadata: { tag: 'Q' }, messages: [{ role: 'user', content: 'project Q is late' }] })
     expect(res.status).toBe(422)
     expect(seen).toHaveLength(0)
+  })
+
+  it('refuses a request from a browser origin or for a rebound host name, without forwarding it', async () => {
+    const send = (headers: Record<string, string>): Promise<number> => new Promise((resolve, reject) => {
+      const body = JSON.stringify({ model: 'm', messages: [{ role: 'user', content: 'hi' }] })
+      const req = request(`${base}/v1/chat/completions`, { method: 'POST', headers: { 'content-type': 'text/plain', ...headers } }, res => {
+        res.resume()
+        resolve(res.statusCode ?? 0)
+      })
+      req.on('error', reject)
+      req.end(body)
+    })
+    reply = () => ({ json: { choices: [] } })
+    expect(await send({ origin: 'https://evil.example' })).toBe(403)
+    expect(await send({ origin: 'null' })).toBe(403)
+    expect(await send({ host: 'rebound.example:8787' })).toBe(403)
+    expect(seen).toHaveLength(0)
+    expect(await send({ origin: 'http://localhost:3000' })).toBe(200)
+    expect(await send({ host: 'localhost:8787' })).toBe(200)
+  })
+
+  it('refuses a body over the size limit without forwarding it', async () => {
+    const res = await fetch(`${base}/v1/chat/completions`, { method: 'POST', body: Buffer.alloc(64 * 1024 * 1024 + 1, 32) })
+    expect(res.status).toBe(413)
+    expect(seen).toHaveLength(0)
+  })
+
+  it('refuses a continuation whose earlier texts it does not hold', async () => {
+    const res = await post('/v1/responses', { model: 'm', previous_response_id: 'resp_unknown', input: `mail ${EMAIL}` })
+    expect(res.status).toBe(422)
+    expect(seen).toHaveLength(0)
+  })
+
+  it('names a key that holds a detected value as <key>, in the reply and the log', async () => {
+    const res = await post('/v1/chat/completions', { model: 'm', metadata: { [EMAIL]: { note: EMAIL } }, messages: [{ role: 'user', content: `hi ${EMAIL}` }] })
+    expect(res.status).toBe(422)
+    const body = await res.text()
+    expect(body).toContain('/metadata/<key>')
+    expect(body).not.toContain(EMAIL)
+    expect(logs.join('\n')).not.toContain(EMAIL)
+  })
+
+  it('checks thousands of distinct values for leaks in one pass', async () => {
+    reply = () => ({ json: { choices: [] } })
+    const messages = Array.from({ length: 16_000 }, (_, i) => ({ role: 'user', content: `u${i}.fictional@example.test` }))
+    const started = process.cpuUsage()
+    expect((await post('/v1/chat/completions', { model: 'm', messages })).status).toBe(200)
+    const used = process.cpuUsage(started)
+    expect((used.user + used.system) / 1_000).toBeLessThan(2_000)
   })
 
   it('replaces control characters and stray delimiters by default, and refuses them on request', async () => {

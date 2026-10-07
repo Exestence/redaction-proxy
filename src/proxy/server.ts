@@ -74,6 +74,12 @@ const HOP = new Set([
 // ponytail: fixed-size FIFO of continuation texts; a restart forgets them (documented).
 const CONTINUATIONS_MAX = 256
 
+// ponytail: fixed cap above Anthropic's 32 MB request limit; make it a setting if a provider accepts more.
+const BODY_MAX_BYTES = 64 * 1024 * 1024
+
+/** Host names that reach the proxy without DNS: anything else in `Host` or `Origin` is a rebinding or cross-site request. */
+const LOOPBACK_HOSTS = new Set(['127.0.0.1', 'localhost', '[::1]'])
+
 /** One maskable string inside a request body. */
 interface Slot {
   /** Object or array holding the string. */
@@ -90,6 +96,15 @@ interface Stats {
   restored: number
   unknown: number
   nameModelFailed: boolean
+}
+
+/** One state of {@link containsAnyOf}: a prefix of some pattern. */
+interface TrieNode {
+  next: Map<number, TrieNode>
+  /** Longest proper suffix of this prefix that is also a prefix. */
+  fail: TrieNode
+  /** Whether this prefix ends with a whole pattern. */
+  terminal: boolean
 }
 
 /** Original texts of one request, kept for a Responses continuation. */
@@ -160,6 +175,52 @@ function isUserText(body: Json, path: string): boolean {
 }
 
 /**
+ * Build a test for whether a text contains any of the patterns, in one pass
+ * over the text (Aho-Corasick): checking each pattern against each string
+ * took seconds once a request carried thousands of distinct values.
+ * @param patterns - non-empty strings to look for.
+ * @returns a function telling whether a text contains at least one pattern.
+ */
+function containsAnyOf(patterns: readonly string[]): (text: string) => boolean {
+  const root = { next: new Map(), terminal: false } as TrieNode
+  root.fail = root
+  for (const pattern of patterns) {
+    let node = root
+    for (let i = 0; i < pattern.length; i += 1) {
+      const char = pattern.charCodeAt(i)
+      let child = node.next.get(char)
+      if (child === undefined) {
+        child = { next: new Map(), fail: root, terminal: false }
+        node.next.set(char, child)
+      }
+      node = child
+    }
+    node.terminal = true
+  }
+  const step = (from: TrieNode, char: number): TrieNode => {
+    let state = from
+    while (state !== root && !state.next.has(char)) state = state.fail
+    return state.next.get(char) ?? root
+  }
+  const queue = [root]
+  for (const node of queue) {
+    for (const [char, child] of node.next) {
+      child.fail = node === root ? root : step(node.fail, char)
+      child.terminal ||= child.fail.terminal
+      queue.push(child)
+    }
+  }
+  return text => {
+    let state = root
+    for (let i = 0; i < text.length; i += 1) {
+      state = step(state, text.charCodeAt(i))
+      if (state.terminal) return true
+    }
+    return false
+  }
+}
+
+/**
  * Refuse a masked body that still holds a detected value: in a field the
  * proxy does not rewrite (metadata, an image URL), or an occurrence masking
  * could not cover. A name-model value is matched as its propagation matches
@@ -176,17 +237,17 @@ function refuseLeaks(body: Json, registry: RedactionRegistry, modelValues: Reado
   // A value inside a JSON-text string (`arguments`) is written JSON-escaped.
   const forms = (original: string): string[] => [original, JSON.stringify(original).slice(1, -1)]
   const words = [...modelValues].filter(isSearchedValue).flatMap(forms)
-  const substrings = registry.originals().filter(original => !modelValues.has(original)).flatMap(forms)
+  const holdsSubstring = containsAnyOf(registry.originals().filter(original => !modelValues.has(original)).flatMap(forms))
+  const leaks = (text: string): boolean => holdsSubstring(text) || words.some(form => containsStandingAlone(text, form))
   const where: string[] = []
-  const check = (text: string, path: string): void => {
-    if (substrings.some(form => text.includes(form)) || words.some(form => containsStandingAlone(text, form))) where.push(path)
-  }
   const walk = (value: unknown, path: string): void => {
-    if (typeof value === 'string') check(value, path)
+    if (typeof value === 'string' && leaks(value)) where.push(path)
     else if (value !== null && typeof value === 'object') {
       for (const [key, item] of Object.entries(value)) {
-        const at = `${path}/${key}`
-        check(key, at)
+        // A key that holds the value is named `<key>`, so the message never carries it.
+        const leakyKey = leaks(key)
+        const at = `${path}/${leakyKey ? '<key>' : key}`
+        if (leakyKey) where.push(at)
         walk(item, at)
       }
     }
@@ -452,6 +513,10 @@ export function createProxyServer(
       return text
     })
     const prior = typeof parsed.previous_response_id === 'string' ? continuations.get(parsed.previous_response_id) : undefined
+    // Without the earlier texts, this request's numbering would bind the upstream's old placeholders to other values.
+    if (typeof parsed.previous_response_id === 'string' && prior === undefined) {
+      throw new Refusal(422, 'previous_response_id is unknown to this proxy (restarted, evicted, or never seen); start a new conversation or resend the full history')
+    }
     const priorTexts = prior?.texts ?? []
     const all = [...priorTexts, ...texts]
     const userTexts = new Set([...prior?.userTexts ?? [], ...texts.filter((_, i) => isUserText(parsed, (slots[i] as Slot).path))])
@@ -583,8 +648,13 @@ export function createProxyServer(
         res.destroy()
         return
       }
-      res.writeHead(status, { 'content-type': 'application/json' })
+      res.writeHead(status, { 'content-type': 'application/json', connection: 'close' })
       res.end(JSON.stringify({ error: { type: 'redaction_proxy_error', message } }))
+    }
+    if (!isLoopbackRequest(req)) {
+      fail(403, 'the proxy only serves requests addressed to a loopback host from no browser origin or a loopback one')
+      req.resume()
+      return
     }
     if (req.method === 'POST' ? api === undefined : req.method !== 'GET') {
       fail(404, `the proxy does not forward ${req.method} ${path}; only masked routes and GET are relayed`)
@@ -592,8 +662,17 @@ export function createProxyServer(
       return
     }
     const chunks: Buffer[] = []
-    req.on('data', (chunk: Buffer) => chunks.push(chunk))
+    let size = 0
+    req.on('data', (chunk: Buffer) => {
+      if (size > BODY_MAX_BYTES) return
+      size += chunk.length
+      if (size <= BODY_MAX_BYTES) return void chunks.push(chunk)
+      chunks.length = 0
+      fail(413, `request body exceeds ${BODY_MAX_BYTES} bytes; it was not forwarded`)
+      res.once('finish', () => req.destroy())
+    })
     req.on('end', () => {
+      if (size > BODY_MAX_BYTES) return
       forward(req, res, path, api, Buffer.concat(chunks)).catch((error: unknown) => {
         if (error instanceof Refusal) fail(error.status, error.message)
         else if (abortedByClient(error)) res.destroy()
@@ -601,6 +680,29 @@ export function createProxyServer(
       })
     })
   })
+}
+
+/**
+ * Whether a request names a loopback host and, if a browser sent it, comes
+ * from a loopback origin. A web page can reach 127.0.0.1 with a simple POST
+ * or through DNS rebinding; its `Origin`, or the rebound name in `Host`, gives
+ * it away. Clients that are not browsers send no `Origin`.
+ * @param req - incoming request.
+ * @returns whether the request may be served.
+ */
+function isLoopbackRequest(req: IncomingMessage): boolean {
+  const hostname = (value: string): string | undefined => {
+    try {
+      return new URL(value).hostname
+    } catch {
+      // A malformed Host or Origin is refused like a foreign one.
+      return undefined
+    }
+  }
+  const host = hostname(`http://${req.headers.host ?? ''}`)
+  if (host === undefined || !LOOPBACK_HOSTS.has(host)) return false
+  const origin = req.headers.origin
+  return origin === undefined || LOOPBACK_HOSTS.has(hostname(origin) ?? '')
 }
 
 /**
