@@ -69,7 +69,7 @@ Pass a JSON file with `node lib/cli.js --config redaction.json`; environment var
 | `redaction.terms` | none | Names and other words to mask, case-insensitive. |
 | `redaction.projectNames` | none | Project code names to mask. |
 | `redaction.allowlist` | `git@github.com`, `noreply@github.com` | Values never masked. |
-| `redaction.rules` | all but `e164-phone` | Built-in rules to enable. `e164-phone` is off because it masks numeric diff lines. |
+| `redaction.rules` | all but `card` and `entropy` | Built-in rules to enable. `card-strict` and `entropy-strict` replace `card` and `entropy`: they never cut a digit run in half and skip file-keyed digests. |
 | `nameModel` | none | Turns on the [experimental name model](#optional-name-model-experimental). |
 | `screen` | `replace` | On control characters: replace them with visible stand-ins (`replace`) or refuse the request (`refuse`). |
 | `debugMasked` | `false` | Log each masked request body. |
@@ -94,9 +94,10 @@ Environment variables and every option: [technical details §12](docs/DETAILS.md
 | Category | Example | The cloud sees |
 | --- | --- | --- |
 | Email | `lin@example.test` | `⟦EMAIL_1⟧` |
-| API keys and credentials | `sk-…`, `ghp_…`, `AKIA…`, JWT, `Bearer …`, `password=…` | `⟦KEY_1⟧` |
+| API keys and credentials | `sk-…`, `ghp_…`, `AKIA…`, `glpat-…`, `sk_live_…`, JWT, `Bearer …`, `password=…`, `the token is …` | `⟦KEY_1⟧` |
 | Home-directory path (prefix only) | `/Users/lin/notes.md` | `⟦PATH_1⟧/notes.md` |
-| Private IP, internal host | `192.168.1.20`, `nas.local` | `⟦IP_1⟧`, `⟦HOST_1⟧` |
+| Private IP, internal host | `192.168.1.20`, `nas.local`, `git.corp` | `⟦IP_1⟧`, `⟦HOST_1⟧` |
+| Phone numbers in national formats or after a phone word | `(415) 555-0132`, `020 7946 0958`, `Telefon: 030 12345678` | `⟦PHONE_1⟧` |
 | Card number (Luhn checked) | 13–19 digits | `⟦CARD_1⟧` |
 | Taiwan ID, mobile, business number | `A123456789`, `0912-345-678` | `⟦TWID_1⟧`, `⟦PHONE_1⟧` |
 | IDs from 10 more countries and regions, IBAN | US SSN, UK NINO, Chinese resident ID, My Number, … | `⟦NATID_1⟧`, `⟦IBAN_1⟧` |
@@ -150,11 +151,13 @@ Self-check, not a score: in every prompt, restoring the masked text gave the ori
 
 Where it is weak:
 
-- **Phone numbers.** 95% of English phone numbers are left untouched with the proxy default (the international `e164-phone` rule is opt-in); Presidio fully masks 82–85%.
+- **Phone numbers.** 95% of English phone numbers are left untouched with the proxy default (measured while `e164-phone` was opt-in); Presidio fully masks 82–85%.
 - **Paths** are mostly only partly masked: the user name is masked, the rest of the path is kept.
 - **Hosts and secrets.** About 30% of hosts and 26–28% of secrets are left untouched.
 - **Addresses.** There is no address rule.
 - **The name model** fully masks 65–70% of names, and it also masks user-agent strings.
+
+These numbers are for `rules-6+intl-1`. The phone, host, and credential rules and the strict card and entropy rules added since then (`intl-2`, `ext-1`) target these weaknesses and have not been measured on a held-out set yet.
 
 The dev set scored much higher (77.8% English macro average for the proxy default) because it was written alongside the rules; it is kept only as a development check.
 

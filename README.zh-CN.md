@@ -69,7 +69,7 @@ curl http://127.0.0.1:8787/v1/chat/completions \
 | `redaction.terms` | 无 | 需要脱敏的人名等词语，不区分大小写。 |
 | `redaction.projectNames` | 无 | 需要脱敏的项目代号。 |
 | `redaction.allowlist` | `git@github.com`、`noreply@github.com` | 永不脱敏的值。 |
-| `redaction.rules` | 除 `e164-phone` 外全部 | 启用的内置规则。`e164-phone` 默认关闭，因为它会把以数字开头的 diff 新增行当成电话号码。 |
+| `redaction.rules` | 除 `card`、`entropy` 外全部 | 启用的内置规则。以 `card-strict`、`entropy-strict` 取代 `card`、`entropy`：不会把一串数字切成两半，也放过以文件名为键的哈希。 |
 | `nameModel` | 无 | 开启[实验性的人名模型](#可选的人名模型实验性)。 |
 | `screen` | `replace` | 遇到控制字符时替换成可见字符（`replace`）或拒绝请求（`refuse`）。 |
 | `debugMasked` | `false` | 在日志里记录脱敏后的请求体。 |
@@ -94,9 +94,10 @@ curl http://127.0.0.1:8787/v1/chat/completions \
 | 类别 | 示例 | 云端看到 |
 | --- | --- | --- |
 | 邮箱 | `lin@example.test` | `⟦EMAIL_1⟧` |
-| API 密钥和凭据 | `sk-…`、`ghp_…`、`AKIA…`、JWT、`Bearer …`、`password=…` | `⟦KEY_1⟧` |
+| API 密钥和凭据 | `sk-…`、`ghp_…`、`AKIA…`、`glpat-…`、`sk_live_…`、JWT、`Bearer …`、`password=…`、`the token is …` | `⟦KEY_1⟧` |
 | 用户目录路径（只遮前缀） | `/Users/lin/notes.md` | `⟦PATH_1⟧/notes.md` |
-| 内网 IP、内部主机名 | `192.168.1.20`、`nas.local` | `⟦IP_1⟧`、`⟦HOST_1⟧` |
+| 内网 IP、内部主机名 | `192.168.1.20`、`nas.local`、`git.corp` | `⟦IP_1⟧`、`⟦HOST_1⟧` |
+| 各国国内格式或电话字眼后的电话号码 | `(415) 555-0132`、`020 7946 0958`、`Telefon: 030 12345678` | `⟦PHONE_1⟧` |
 | 银行卡号（Luhn 校验） | 13–19 位 | `⟦CARD_1⟧` |
 | 中国台湾身份证号、手机号、统一编号 | `A123456789`、`0912-345-678` | `⟦TWID_1⟧`、`⟦PHONE_1⟧` |
 | 另外 10 个国家和地区的证件号、IBAN | 中国大陆居民身份证号、美国 SSN、英国 NINO、日本个人编号等 | `⟦NATID_1⟧`、`⟦IBAN_1⟧` |
@@ -151,11 +152,13 @@ REDACTION_PROXY_NAME_MODEL_DIR=$HOME/models/nym node lib/cli.js
 
 薄弱之处：
 
-- **电话号码。** 使用代理默认配置时，95% 的英文电话号码完全没有被遮（国际电话规则 `e164-phone` 需要手动开启）；Presidio 能完整脱敏 82–85%。
+- **电话号码。** 使用代理默认配置时，95% 的英文电话号码完全没有被遮（测量时国际电话规则 `e164-phone` 需要手动开启）；Presidio 能完整脱敏 82–85%。
 - **路径**大多只遮掉一部分：用户名会被遮，路径其余部分保留。
 - **主机和密钥。** 约 30% 的主机和 26–28% 的密钥完全没有被遮。
 - **地址。** 没有地址规则。
 - **人名模型**能完整脱敏 65–70% 的人名，而且会误遮 user-agent 字符串。
+
+这些数字测量的是 `rules-6+intl-1`。之后针对这些弱点加入的电话、主机、密钥规则以及严格版卡号、高熵规则（`intl-2`、`ext-1`）还没有在保留集上测量。
 
 开发集（dev set）的分数高得多（代理默认配置的英文宏平均为 77.8%），因为它是和规则一起编写的；现在只作为开发时的检查。
 

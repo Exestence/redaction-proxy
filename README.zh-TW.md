@@ -69,7 +69,7 @@ curl http://127.0.0.1:8787/v1/chat/completions \
 | `redaction.terms` | 無 | 要遮的人名等字詞，不分大小寫。 |
 | `redaction.projectNames` | 無 | 要遮的專案代號。 |
 | `redaction.allowlist` | `git@github.com`、`noreply@github.com` | 永遠不遮的值。 |
-| `redaction.rules` | `e164-phone` 以外全部 | 要啟用的內建規則。`e164-phone` 預設關閉，因為它會把數字開頭的 diff 新增行當成電話。 |
+| `redaction.rules` | `card`、`entropy` 以外全部 | 要啟用的內建規則。以 `card-strict`、`entropy-strict` 取代 `card`、`entropy`：不會把一串數字切成兩半，也放過以檔名為鍵的雜湊。 |
 | `nameModel` | 無 | 開啟[實驗性的人名模型](#選用的人名模型實驗性)。 |
 | `screen` | `replace` | 遇到控制字元時改成可見字元（`replace`）或拒絕請求（`refuse`）。 |
 | `debugMasked` | `false` | 在日誌中記錄遮罩後的請求本文。 |
@@ -94,9 +94,10 @@ curl http://127.0.0.1:8787/v1/chat/completions \
 | 類別 | 範例 | 雲端看到 |
 | --- | --- | --- |
 | Email | `lin@example.test` | `⟦EMAIL_1⟧` |
-| API 金鑰與憑證 | `sk-…`、`ghp_…`、`AKIA…`、JWT、`Bearer …`、`password=…` | `⟦KEY_1⟧` |
+| API 金鑰與憑證 | `sk-…`、`ghp_…`、`AKIA…`、`glpat-…`、`sk_live_…`、JWT、`Bearer …`、`password=…`、`the token is …` | `⟦KEY_1⟧` |
 | 家目錄路徑（只遮前綴） | `/Users/lin/notes.md` | `⟦PATH_1⟧/notes.md` |
-| 私有 IP、內部主機名 | `192.168.1.20`、`nas.local` | `⟦IP_1⟧`、`⟦HOST_1⟧` |
+| 私有 IP、內部主機名 | `192.168.1.20`、`nas.local`、`git.corp` | `⟦IP_1⟧`、`⟦HOST_1⟧` |
+| 各國國內格式或電話字眼後的電話號碼 | `(415) 555-0132`、`020 7946 0958`、`Telefon: 030 12345678` | `⟦PHONE_1⟧` |
 | 信用卡號（Luhn 驗證） | 13–19 碼 | `⟦CARD_1⟧` |
 | 身分證、手機、統一編號 | `A123456789`、`0912-345-678` | `⟦TWID_1⟧`、`⟦PHONE_1⟧` |
 | 另外 10 個國家與地區的證號、IBAN | 美國 SSN、英國 NINO、中國身分證、日本個人番號等 | `⟦NATID_1⟧`、`⟦IBAN_1⟧` |
@@ -150,11 +151,13 @@ REDACTION_PROXY_NAME_MODEL_DIR=$HOME/models/nym node lib/cli.js
 
 弱點：
 
-- **電話號碼。** 用代理預設時，95% 的英文電話號碼完全沒被遮（國際電話規則 `e164-phone` 需自行開啟）；Presidio 完全遮蔽 82–85%。
+- **電話號碼。** 用代理預設時，95% 的英文電話號碼完全沒被遮（量測時國際電話規則 `e164-phone` 需自行開啟）；Presidio 完全遮蔽 82–85%。
 - **路徑**大多只遮掉一部分：使用者名稱會被遮，路徑其餘部分保留。
 - **主機與金鑰。** 約 30% 的主機與 26–28% 的金鑰完全沒被遮。
 - **地址。** 沒有地址規則。
 - **人名模型**完全遮蔽 65–70% 的人名，而且會誤遮 user-agent 字串。
+
+這些數字量測的是 `rules-6+intl-1`。之後針對這些弱點加入的電話、主機、金鑰規則與嚴格版卡號、高熵規則（`intl-2`、`ext-1`）還沒有在保留集上量測。
 
 開發集（dev set）的分數高得多（代理預設的英文宏平均為 77.8%），因為它是和規則一起寫的；現在只當開發時的檢查。
 
