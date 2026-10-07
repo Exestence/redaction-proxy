@@ -7,6 +7,7 @@
  *   masked (a detection overlaps it but leaves part of it), or untouched (no
  *   detection overlaps it);
  * - core: a value with a `core` span counts when detections cover its identifying part;
+ * - spelling: when a set names each value's `style`, values are also scored per category as standard or non-standard spellings, and per style;
  * - macro average: the mean of the per-category rates, each category weighted equally;
  * - region precision: a masked region (overlapping detections merged) counts when it overlaps any sensitive value;
  * - negative hits: a hard negative counts when any detection overlaps it;
@@ -50,6 +51,14 @@ export interface Latency {
   p95: number
 }
 
+/** Scores of one category's values split by spelling. */
+export interface SpellingScore {
+  standard: ValueScore
+  nonStandard: ValueScore
+  /** One entry per style, in order of first appearance. */
+  byStyle: Record<string, ValueScore>
+}
+
 /** Every score of one system over one group of samples. */
 export interface SystemReport {
   name: string
@@ -58,6 +67,8 @@ export interface SystemReport {
   englishAnalyzerOnly?: true
   /** One entry per category of the scored set, in its report order. */
   byCategory: Record<string, ValueScore>
+  /** Per category, standard against non-standard spellings; absent when the set names no styles. */
+  bySpelling?: Record<string, SpellingScore>
   /** Mean of the per-category rates over the categories present, each weighted equally. */
   macroAverage: { categories: number; outcomes: Record<MaskOutcome, number> }
   overall: Scorecard
@@ -83,6 +94,8 @@ interface Judgement {
   negativeHit: boolean[]
 }
 
+// heldout-v2 MANIFEST.md counts `ipv4` host literals as standard spellings beside `std`.
+const STANDARD_STYLES: ReadonlySet<string> = new Set(['std', 'ipv4'])
 const MEDIAN_PERCENT = 50
 const TAIL_PERCENT = 95
 
@@ -99,11 +112,13 @@ export function scoreSystem(run: SystemRun, samples: readonly Sample[], categori
   const allValues = judgements.flatMap(j => j.values)
   const byCategory = tabulate(categories, category => scoreValues(allValues.filter(value => value.gold.category === category)))
   const milliseconds = judgements.map(j => j.outcome.milliseconds)
+  const bySpelling = allValues.some(value => value.gold.style !== undefined) ? scoreSpelling(categories, allValues) : undefined
   return {
     name: run.name,
     ...(run.note === undefined ? {} : { note: run.note }),
     ...(run.englishAnalyzerOnly === undefined ? {} : { englishAnalyzerOnly: run.englishAnalyzerOnly }),
     byCategory,
+    ...(bySpelling === undefined ? {} : { bySpelling }),
     macroAverage: macroAverage(Object.values(byCategory)),
     overall: scoreJudgements(judgements),
     byLanguage: scoreGroups(judgements, sample => sample.language),
@@ -149,6 +164,19 @@ function scoreValues(values: readonly JudgedValue[]): ValueScore {
     outcomes: tabulate(MASK_OUTCOMES, outcome => countTrue(values.map(value => value.outcome === outcome))),
     coreFullyMasked: countTrue(values.flatMap(value => value.coreFullyMasked ?? [])),
   }
+}
+
+function scoreSpelling(categories: readonly string[], values: readonly JudgedValue[]): Record<string, SpellingScore> {
+  return tabulate(categories, category => {
+    const inCategory = values.filter(value => value.gold.category === category)
+    const isStandard = (value: JudgedValue): boolean => STANDARD_STYLES.has(value.gold.style ?? '')
+    const styles = distinct(inCategory.flatMap(value => value.gold.style ?? []))
+    return {
+      standard: scoreValues(inCategory.filter(isStandard)),
+      nonStandard: scoreValues(inCategory.filter(value => !isStandard(value))),
+      byStyle: tabulate(styles, style => scoreValues(inCategory.filter(value => value.gold.style === style))),
+    }
+  })
 }
 
 function macroAverage(categories: readonly ValueScore[]): SystemReport['macroAverage'] {

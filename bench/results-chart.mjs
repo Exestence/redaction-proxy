@@ -5,7 +5,7 @@
 //   node bench/results-chart.mjs [--input results.json] [--out out.svg]
 //     [--split english|allLanguages] [--systems "name;name;name"] [--label text]
 //
-// Defaults: the held-out JSON, docs/media/results.svg, English prompts, and the
+// Defaults: the held-out v2 JSON, docs/media/results.svg, English prompts, and the
 // three systems the README compares. --systems takes exact names from the JSON,
 // separated by ";" because the names contain commas; at most three.
 
@@ -17,7 +17,11 @@ const DEFAULT_SYSTEMS = [
   'rules + name model (experimental)',
   'Presidio 2.2.364 (en_core_web_lg, cutoff 0.4)',
 ]
-const SET_LABELS = { dev: 'dev set (preliminary)', 'held-out': 'held-out set (written blind, run once)' }
+const SET_LABELS = {
+  dev: 'dev set (preliminary)',
+  'held-out': 'held-out set v1 (written blind, run once)',
+  'held-out-v2': 'held-out set v2 (written blind, run once)',
+}
 const SPLIT_LABELS = { english: 'English prompts', allLanguages: 'all languages' }
 const SYSTEM_NOTES = {
   'rules, core default': "rules, core default: the core library's default rules (no international rules, no terms, no name model).",
@@ -28,7 +32,7 @@ const COLORS = ['#2f81f7', '#bf8700', '#a475f9']
 
 const { values: args } = parseArgs({
   options: {
-    input: { type: 'string', default: 'bench/results/public-bench-held-out.json' },
+    input: { type: 'string', default: 'bench/results/public-bench-held-out-v2.json' },
     out: { type: 'string', default: 'docs/media/results.svg' },
     split: { type: 'string', default: 'english' },
     systems: { type: 'string', default: DEFAULT_SYSTEMS.join(';') },
