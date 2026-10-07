@@ -217,9 +217,12 @@ const PHONE_KEYWORD_WORDS = [
  * A telephone number in any national format: an optional `+` and country
  * code, an optional bracketed area code, then digit groups joined by one
  * space, dot, slash, or hyphen each, ending where no further group follows.
- * Not a date. Separators are required between groups, so the match is linear.
+ * Not a date, an IPv4 address, or the later groups of either (the keyword gap
+ * may skip characters). Separators are required between groups, so the match
+ * is linear.
  */
-const PHONE_KEYWORD_VALUE = '(?!(?:19|20)\\d{2}[-/.]\\d{1,2}[-/.]\\d{1,2}(?!\\d))'
+const PHONE_KEYWORD_VALUE = '(?<!\\d[ ./-])(?!(?:19|20)\\d{2}[-/. ]\\d{1,2}[-/. ]\\d{1,2}(?!\\d))'
+  + '(?!\\d{1,3}(?:\\.\\d{1,3}){3}(?!\\d))'
   + '(?:\\+\\d{1,3}[ .-]?)?(?:\\(\\d{1,5}\\)[ .-]?)?\\d{1,12}(?:[ ./-]\\d{1,8}){0,5}(?![ ./-]?\\d)'
 /** Fewest and most digits a number after a telephone keyword is accepted with. */
 const PHONE_KEYWORD_DIGITS_MIN = 8

@@ -95,7 +95,7 @@ const AZURE_KEY = /(?<![A-Za-z0-9])(?:AccountKey|SharedAccessKey|sig)=([A-Za-z0-
 
 /**
  * A credential word in prose, an optional `is`, `was`, or `:`, and the word
- * after it: `the secret is X`, `here is my key: X`, `use token X`. `key = X`
+ * after it, quoted or not: `the secret is X`, `here is my key: X`, `use token 'X'`. `key = X`
  * assignments are the `api-key` rule's. Not a shell variable (`$PWD`), a
  * member (`this.key`), or a flag (`--password`), and the value ends at a
  * list separator, a placeholder, or the next query parameter (`&next=`).
@@ -104,7 +104,7 @@ const CREDENTIAL_PHRASE = new RegExp(
   '(?<![A-Za-z0-9_$.-])(?<word>api[ _-]?key|access[ _-]?key|secret[ _-]?key|access[ _-]?token|auth[ _-]?token'
   + '|token|secret|key|password|passphrase|passcode|passwd|pwd|pw)(?![A-Za-z0-9_])'
   + '(?:[ \\t]{1,4}(?:is|was)[ \\t]{1,4}|[ \\t]{0,4}:[ \\t]{0,4}|[ \\t]{1,4})'
-  + '(?<value>[^\\s\'"`<>()[\\]{},;⟦]{6,128})',
+  + '[\'"`]?(?<value>[^\\s\'"`<>()[\\]{},;⟦]{6,128})',
   'gid',
 )
 /** A member chain such as `process.env.TOKEN_2`, which names a value rather than being one. */
@@ -117,6 +117,8 @@ const PASSWORD_WORDS = /^(?:password|passphrase|passcode|passwd|pwd|pw)$/i
 const GENERAL_VALUE_MIN = 16
 /** Lowest Shannon entropy, in bits per character, of a value after a general credential word. */
 const GENERAL_ENTROPY_MIN = 3.5
+/** A value of printable ASCII only; a password word followed by prose in another script has no value. */
+const PRINTABLE_ASCII = /^[!-~]+$/
 /** Shortest value a password word is read with. */
 const PASSWORD_VALUE_MIN = 6
 
@@ -161,10 +163,11 @@ function collectTokenFormatCandidates(text: string, push: PushCandidate): void {
 
 /**
  * Whether a value after a credential word reads as a credential. After a
- * password word any value with a letter and a digit or symbol does; after a
- * general word only a long random-looking one does: mixed case and digits, or
- * hexadecimal with letters and digits, and high entropy. A URL, a path, a
- * number, an identifier, and code are never credentials here.
+ * password word any printable ASCII value with a digit or symbol does, a
+ * numeric passcode included; after a general word only a long random-looking
+ * one does: mixed case and digits, or hexadecimal with letters and digits,
+ * and high entropy.
+ * A URL, a path, an identifier, and code are never credentials here.
  * @param value - the value without trailing punctuation.
  * @param password - whether the word names a password.
  * @returns whether to mask the value.
@@ -173,9 +176,9 @@ function isPhraseCredential(value: string, password: boolean): boolean {
   if (value.includes('://') || /^[/~.$%]/.test(value) || /^0x/i.test(value)) return false
   if (DOTTED_IDENTIFIER.test(value)) return false
   if ((value.match(/\//g)?.length ?? 0) > 1) return false
-  if (!/[A-Za-z]/.test(value) || isCodeShape(value, { loose: true })) return false
-  if (password) return value.length >= PASSWORD_VALUE_MIN && /[^A-Za-z]/.test(value)
-  if (value.length < GENERAL_VALUE_MIN || value.includes(':') || shannon(value) < GENERAL_ENTROPY_MIN) return false
+  if (isCodeShape(value, { loose: true })) return false
+  if (password) return value.length >= PASSWORD_VALUE_MIN && PRINTABLE_ASCII.test(value) && /[^A-Za-z]/.test(value)
+  if (!/[A-Za-z]/.test(value) || value.length < GENERAL_VALUE_MIN || value.includes(':') || shannon(value) < GENERAL_ENTROPY_MIN) return false
   const mixed = /[a-z]/.test(value) && /[A-Z]/.test(value) && /\d/.test(value)
   const hexadecimal = /^[0-9a-f]+$/i.test(value) && /\d/.test(value)
   return mixed || hexadecimal

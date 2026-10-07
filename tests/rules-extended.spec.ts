@@ -62,6 +62,7 @@ describe('card-strict', () => {
     ['a card grouping extended by one more group', '4111 1111 1111 1111 1230'],
     ['the run the default rule slides a window over', 'id 14111111111111111 here'],
     ['a nanosecond timestamp', 'ts=1758000000000000000 level=info'],
+    ['the fraction of a decimal number', '{"x":1432.4982166290283,"y":93.78770156095185}'],
   ])('leaves %s alone', async (_name, text) => {
     expect(await maskWith(['card-strict'], text)).toBe(text)
   })
@@ -170,6 +171,8 @@ describe('credential-phrase', () => {
     ['access token 0123456789abcdef0123', 'access token ⟦KEY_1⟧'],
     ['the password is hunter2!x', 'the password is ⟦KEY_1⟧'],
     ['pw: Tr0ub4dor&3', 'pw: ⟦KEY_1⟧'],
+    ["the password is 'Hunter22!'", "the password is '⟦KEY_1⟧'"],
+    ['the passcode is 482913', 'the passcode is ⟦KEY_1⟧'],
   ])('masks %j', async (text, expected) => {
     expect(await maskWith(['credential-phrase'], text)).toBe(expected)
   })
@@ -188,6 +191,7 @@ describe('credential-phrase', () => {
     ['an assignment, which the api-key rule reads', 'token=Zq8xT2vK9mN4pL7wR3sYuB1'],
     ['a short value after a general word', 'token Ab3dEf9h'],
     ['a URL', 'key https://example.com/Zq8xT2vK9mN4pL7wR3sYuB1'],
+    ['prose in another script after a password word', 'Token Password 以静态形式被读取。passwd 条目解析沙箱用户的登录主目录，以'],
   ])('leaves %s alone', async (_name, text) => {
     expect(await maskWith(['credential-phrase'], text)).toBe(text)
   })

@@ -166,7 +166,8 @@ describe('national telephone formats', () => {
   it.each([
     ['a number after a keyword that is too short', 'Phone: 3 retries, tel 1234567'],
     ['a number after a field that starts with a keyword', 'cell_id 123456789 tel_ext 12345678 mobile2 12345678'],
-    ['a date after a keyword', 'phone: 2026-10-07 and mobile 2026/10/07'],
+    ['a date after a keyword', 'phone: 2026-10-07 and mobile 2026/10/07, Tel. 2026 10 07'],
+    ['an IPv4 address after a keyword', 'SIP phone 10.20.30.40, cell 192.168.100.200'],
     ['bare ten digits', 'order 4155550132'],
     ['space-separated groups without a keyword', 'row 415 555 0132'],
     ['a North American shape with a 0 or 1 area code', '015-555-0132 115-555-0132'],

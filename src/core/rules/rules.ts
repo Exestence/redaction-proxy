@@ -115,6 +115,8 @@ const PRIVATE_IP_AFTER_ESCAPE = afterHighEscape(PRIVATE_IP, '(?<![\\d.])')
 const CARD_GROUPING = /^4(?:,4){2,3}(?:,[34])?$|^4,6,[45]$/
 /** A character that glues a digit run to a longer token: a letter or `_`. */
 const TOKEN_CHAR = /[A-Za-z_]/
+/** The two characters before a digit run that opens a revision range (`a1b2..`) or is the fraction of a decimal number. */
+const RANGE_OR_DECIMAL_POINT = /^[.\d]\.$/
 const HOST_SUFFIX = /\.(?:local|lan|internal)(?![a-z0-9-])/gi
 const HOST_CHAR = /[A-Za-z0-9.-]/
 const HOST_FIRST_WORD = /^[A-Za-z0-9_$]+/
@@ -407,7 +409,8 @@ export function collectCardCandidates(text: string, push: PushCandidate, afterEs
  * grouping joined by one separator that no further group with that separator
  * extends. A mask therefore never ends inside a digit group, and
  * `8000 5259-6589 0921-9030` or a numeric UUID is not cut into a card. A run
- * glued to a letter or `_`, or opened by a `..` revision range, is not read.
+ * glued to a letter or `_`, opened by a `..` revision range, or the fraction of
+ * a decimal number (`1432.4982166290283`) is not read.
  * @param text - text to scan.
  * @param push - candidate sink.
  * @param afterEscape - whether `text` holds a high escape, which then also counts as a left boundary.
@@ -421,7 +424,7 @@ export function collectStrictCardCandidates(text: string, push: PushCandidate, a
     runAll(pattern, text, (match) => {
       const end = match.index + match[0].length
       if (TOKEN_CHAR.test(text.charAt(match.index - 1)) && !endsHighEscape(text, match.index)) return
-      if (TOKEN_CHAR.test(text.charAt(end)) || text.slice(match.index - 2, match.index) === '..') return
+      if (TOKEN_CHAR.test(text.charAt(end)) || RANGE_OR_DECIMAL_POINT.test(text.slice(match.index - 2, match.index))) return
       // Splitting on a captured separator alternates groups (even indexes) and separators (odd).
       const parts = match[0].split(/([ -])/)
       const groups = parts.filter((_, i) => i % 2 === 0)
