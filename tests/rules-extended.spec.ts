@@ -44,6 +44,13 @@ describe('card-strict', () => {
     'pay 3782 822463 10005 now',
     'pay 04111111111111111 now',
     'card 4111 1111 1111 1111 exp 2026',
+    'pay 41 1111 111 1111 111 now',
+    'pay 41111-11111-111111 now',
+    'pay 4111.1111.1111.1111 now',
+    'pay 4111 1111-1111.1111 now',
+    'pay 4111 - 1111 - 1111 - 1111 now',
+    'pay 4111 1111\n    1111 1111 now',
+    'pay 41111111\n11111111 now',
   ])('masks the card in %j', async (text) => {
     expect(await maskWith(['card-strict'], text)).toContain('⟦CARD_1⟧')
   })
@@ -63,12 +70,21 @@ describe('card-strict', () => {
     ['the run the default rule slides a window over', 'id 14111111111111111 here'],
     ['a nanosecond timestamp', 'ts=1758000000000000000 level=info'],
     ['the fraction of a decimal number', '{"x":1432.4982166290283,"y":93.78770156095185}'],
+    // 4432.1234567890129 is Luhn-valid as one 17-digit run.
+    ['a decimal number with a card prefix', '{"x":4432.1234567890129}'],
+    ['a version with a one-digit part', 'release 4.1.11111111111111'],
+    ['a column of numbers over more than one line break', '4111\n1111\n1111\n1111'],
   ])('leaves %s alone', async (_name, text) => {
     expect(await maskWith(['card-strict'], text)).toBe(text)
   })
 
   it('reads a card right after a high escape', async () => {
     expect(await maskWith(['card-strict'], '?q=%E65454-5454-5454-5454')).toBe('?q=%E6⟦CARD_1⟧')
+    expect(await maskWith(['card-strict'], '?q=%E65454.5454.5454.5454')).toBe('?q=%E6⟦CARD_1⟧')
+  })
+
+  it('masks a regrouped card as one whole run', async () => {
+    expect(await maskWith(['card-strict'], 'pay 4111 1111\n1111 1111 now')).toBe('pay ⟦CARD_1⟧ now')
   })
 
   it('leaves the default card rule as it was', async () => {
