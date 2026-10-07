@@ -85,13 +85,15 @@ describe('entropy-strict', () => {
     `  docs/guide.zh.md: "${sha256}"`,
     `+README.ja.md: ${sha1}`,
     `-docs/x.md: ${sha1}`,
-  ])('leaves a digest keyed by a file name alone in %j', async (text) => {
+    `uses: actions/checkout@${sha1} # v4`,
+  ])('leaves a digest keyed by a file name or pinned after @ alone in %j', async (text) => {
     expect(await maskWith(['entropy-strict'], text)).toBe(text)
   })
 
   it('masks a bare run, a run keyed by anything else, and a run beside a credential word', async () => {
     expect(await maskWith(['entropy-strict'], `value ${sha1} end`)).toBe('value ⟦ENTROPY_1⟧ end')
     expect(await maskWith(['entropy-strict'], `build: ${sha1}`)).toBe('build: ⟦ENTROPY_1⟧')
+    expect(await maskWith(['entropy-strict'], `x@${sha256}`)).toBe('x@⟦ENTROPY_1⟧')
     expect(await maskWith(['entropy-strict'], `token.txt: ${sha1}`)).toBe('token.txt: ⟦KEY_1⟧')
   })
 

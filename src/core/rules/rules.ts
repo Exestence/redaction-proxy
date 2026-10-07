@@ -125,6 +125,8 @@ const BASE64_RUN = /[A-Za-z0-9+/]{32,}={0,2}/g
 const SUBRESOURCE_PREFIX = /sha\d{3}-$/
 /** Hexadecimal lengths of SHA-1 and SHA-256 digests, which git object ids and content hashes have. */
 const DIGEST_HEX_LENGTHS = [40, 64]
+/** Hexadecimal length of a SHA-1 commit id, which pins a dependency after `@` (`actions/checkout@<sha>`). */
+const GIT_COMMIT_HEX_LENGTH = 40
 /**
  * Line text before a value keyed by a file name, as translation catalogs
  * record source hashes: `README.md: `, `  docs/x.zh.md: "`, and the same
@@ -530,8 +532,9 @@ function isFileNameKeyed(text: string, at: number): boolean {
  * @param text - text to scan.
  * @param push - candidate sink.
  * @param fileDigests - whether a 40 or 64 digit hexadecimal run keyed by a file
- *   name (`README.md: <sha>`, as translation catalogs record source hashes) is
- *   a digest too; the opt-in `entropy-strict` rule sets it.
+ *   name (`README.md: <sha>`, as translation catalogs record source hashes),
+ *   and a 40 digit run right after `@` (`actions/checkout@<sha>`), is a digest
+ *   too; the opt-in `entropy-strict` rule sets it.
  */
 export function collectEntropyCandidates(text: string, push: PushCandidate, fileDigests = false): void {
   const contextAround = (start: number, end: number): string =>
@@ -547,6 +550,7 @@ export function collectEntropyCandidates(text: string, push: PushCandidate, file
     }
     if ([32, 40, 64].includes(match[0].length) && SHA_CONTEXT.test(context)) return
     if (fileDigests && DIGEST_HEX_LENGTHS.includes(match[0].length) && isFileNameKeyed(text, match.index)) return
+    if (fileDigests && match[0].length === GIT_COMMIT_HEX_LENGTH && text.charAt(match.index - 1) === '@') return
     push(match.index, end, 'ENTROPY', PRIORITY_ENTROPY)
   })
 
