@@ -140,7 +140,7 @@ describe('international rules', () => {
 // Numbers in the 555-01xx range, Ofcom drama ranges, and sequential digits: none is assigned to anyone.
 describe('national telephone formats', () => {
   const phoneRules = new RulesDetector({
-    rules: ['e164-phone', 'us-phone', 'uk-phone', 'fr-phone', 'jp-phone', 'kr-mobile', 'br-phone', 'phone-keyword'],
+    rules: ['e164-phone', 'us-phone', 'uk-phone', 'fr-phone', 'jp-phone', 'kr-mobile', 'kr-phone', 'br-phone', 'phone-keyword'],
   })
 
   it.each([
@@ -160,6 +160,14 @@ describe('national telephone formats', () => {
     ['電話 02 2345 6789', '電話 ⟦PHONE_1⟧'],
     ['WhatsApp +55 11 91234-5678', 'WhatsApp ⟦PHONE_1⟧'],
     ['tel 02.123.45.67', 'tel ⟦PHONE_1⟧'],
+    ['reach (415)-555-0132 or 415\u2013555\u20130199', 'reach ⟦PHONE_1⟧ or ⟦PHONE_2⟧'],
+    ['office 0207 946 0958', 'office ⟦PHONE_1⟧'],
+    ['東京 (03) 1234-5678、03\u22121234\u22125678', '東京 ⟦PHONE_1⟧、⟦PHONE_2⟧'],
+    ['서울 02-123-4567, 경기 031-1234-5678', '서울 ⟦PHONE_1⟧, 경기 ⟦PHONE_2⟧'],
+    ['ligue (11) 9 1234-5678', 'ligue ⟦PHONE_1⟧'],
+    ['Ph: 0412 345 678, mob 0412 345 679, cel: 55 1234 5678', 'Ph: ⟦PHONE_1⟧, mob ⟦PHONE_2⟧, cel: ⟦PHONE_3⟧'],
+    ['Tlf. 22 33 44 55, телефон 8 912 345-67-89', 'Tlf. ⟦PHONE_1⟧, телефон ⟦PHONE_2⟧'],
+    ['phone number is 9876543210, call me at 4155550132', 'phone number is ⟦PHONE_1⟧, call me at ⟦PHONE_2⟧'],
   ])('masks %j', async (text, expected) => {
     expect(await maskWith(phoneRules, text)).toBe(expected)
   })
@@ -169,6 +177,8 @@ describe('national telephone formats', () => {
     ['a number after a field that starts with a keyword', 'cell_id 123456789 tel_ext 12345678 mobile2 12345678'],
     ['a date after a keyword', 'phone: 2026-10-07 and mobile 2026/10/07, Tel. 2026 10 07'],
     ['an IPv4 address after a keyword', 'SIP phone 10.20.30.40, cell 192.168.100.200'],
+    ['a number after a keyword and another word', 'phone count 12345678, whatsapp group 12345678'],
+    ['a Korean shape with an unassigned area code', '07-123-4567 and 09-123-4567'],
     ['bare ten digits', 'order 4155550132'],
     ['space-separated groups without a keyword', 'row 415 555 0132'],
     ['a North American shape with a 0 or 1 area code', '015-555-0132 115-555-0132'],
