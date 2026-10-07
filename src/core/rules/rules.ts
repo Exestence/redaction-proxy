@@ -94,6 +94,8 @@ const CARD_RUN = /(?<!\d)\d{4,}(?:[ -]\d{3,})*/g
  * a person regroups, dots, mixes, or wraps it.
  */
 const CARD_SPELLED_RUN = /(?<!\d)\d+(?:(?: ?[-.] ?| |[ \t]*\r?\n[ \t]*)\d+)+/g
+/** Most digit groups a regrouped card is read from; `hexdump` rows and IPv4 pairs have eight. */
+const CARD_SPELLED_GROUPS_MAX = 6
 const PRIVATE_IP = new RegExp(
   '(?<![\\d.])(?:10\\.\\d{1,3}\\.\\d{1,3}\\.\\d{1,3}'
   + '|192\\.168\\.\\d{1,3}\\.\\d{1,3}'
@@ -421,9 +423,10 @@ export function collectCardCandidates(text: string, push: PushCandidate, afterEs
  * glued to a letter or `_`, opened by a `..` revision range, or the fraction of
  * a decimal number (`1432.4982166290283`) is not read. A whole run of two or
  * more groups of at least two digits in any other grouping, joined by spaces,
- * `-`, `.` (three groups or more), or one line break, is read as one number:
- * `41 1111 111 1111 111`, `4111.1111.1111.1111`, `4111 1111-1111.1111`, and a
- * card wrapped after its second group.
+ * `-`, or one line break, or by `.` alone in three to six groups, is read as one
+ * number: `41 1111 111 1111 111`, `4111.1111.1111.1111`, `4111 1111-1111 111`,
+ * and a card wrapped after its second group. A run of more than six groups, or
+ * one mixing `.` with another separator, is not read.
  * @param text - text to scan.
  * @param push - candidate sink.
  * @param afterEscape - whether `text` holds a high escape, which then also counts as a left boundary.
@@ -478,7 +481,9 @@ export function collectStrictCardCandidates(text: string, push: PushCandidate, a
       const separators = match[0].split(/\d+/).join('')
       // A one-digit group is a list item or a version part; two dotted groups are a decimal number.
       if (groups.some(group => group.length < 2) || separators.split('\n').length > 2) return
-      if (separators.includes('.') && groups.length < 3) return
+      // Dots mixed with other separators are coordinates, IPs, money, or dates; more than six groups are a byte dump.
+      if (separators.includes('.') && (groups.length < 3 || /[^.]/.test(separators))) return
+      if (groups.length > CARD_SPELLED_GROUPS_MAX) return
       pushCard(groups.join(''), match.index, end)
     })
   }
