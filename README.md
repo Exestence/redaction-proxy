@@ -95,7 +95,7 @@ Pass a JSON file with `node lib/cli.js --config redaction.json`; environment var
 | `openaiUpstream` | `https://api.openai.com` | Upstream for Chat Completions and Responses. |
 | `anthropicUpstream` | `https://api.anthropic.com` | Upstream for Anthropic Messages. |
 | `allowInsecureUpstream` | `false` | Allow plain `http://` to an upstream that is not loopback, which sends API keys in cleartext. |
-| `redaction.terms` | none | Names and other words to mask, case-insensitive. |
+| `redaction.terms` | none | Names and other words to mask, case-insensitive; a term starting or ending with a Latin letter or digit matches only as a whole word (`Lin` skips `Linux`), a CJK term matches inside text. |
 | `redaction.projectNames` | none | Project code names to mask. |
 | `redaction.allowlist` | `git@github.com`, `noreply@github.com` | Values never masked. |
 | `redaction.rules` | all but `card` and `entropy` | Built-in rules to enable. `card-strict` and `entropy-strict` replace `card` and `entropy`: they never cut a digit run in half and skip file-keyed digests. |

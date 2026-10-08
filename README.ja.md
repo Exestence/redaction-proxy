@@ -95,7 +95,7 @@ curl http://127.0.0.1:8787/v1/chat/completions \
 | `openaiUpstream` | `https://api.openai.com` | Chat Completions と Responses の上流。 |
 | `anthropicUpstream` | `https://api.anthropic.com` | Anthropic Messages の上流。 |
 | `allowInsecureUpstream` | `false` | ループバック以外の上流への平文の `http://` を許可します。API キーが平文で流れます。 |
-| `redaction.terms` | なし | マスクしたい人名などの語句。大文字小文字は区別しません。 |
+| `redaction.terms` | なし | マスクしたい人名などの語句。大文字小文字は区別しません。先頭または末尾が英字か数字の語句は単語全体でのみ一致し（`Lin` は `Linux` に一致しません）、CJK の語句は文中でも一致します。 |
 | `redaction.projectNames` | なし | マスクしたいプロジェクトのコードネーム。 |
 | `redaction.allowlist` | `git@github.com`、`noreply@github.com` | 決してマスクしない値。 |
 | `redaction.rules` | `card`、`entropy` 以外すべて | 有効にする組み込みルール。`card`、`entropy` の代わりに `card-strict`、`entropy-strict` を使います。数字列を途中で切らず、ファイル名をキーにしたハッシュはマスクしません。 |

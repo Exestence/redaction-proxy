@@ -118,9 +118,53 @@ describe('high-entropy runs', () => {
 describe('overlap resolution', () => {
   it('covers the union of overlapping ranges instead of the first by start order', async () => {
     // The literal starts before the credential value and ends inside it; resolving
-    // by start order alone would mask only the literal and send `2xyz` verbatim.
+    // by start order alone would mask only the literal and send `-2xyz` verbatim.
     const overlapping = new RulesRedactionService(new Context(), { terms: ['secret=hunter'] })
-    expect(await mask('my-secret=hunter2xyz', overlapping)).toBe('my-⟦TERM_1⟧')
+    expect(await mask('my-secret=hunter-2xyz', overlapping)).toBe('my-⟦TERM_1⟧')
+  })
+})
+
+describe('configured term boundaries', () => {
+  const named = new RulesRedactionService(new Context(), {
+    terms: ['Lin', 'Hsin', 'Kai', 'Whitlock', '林小姐'],
+    projectNames: ['Orion', 'NIMBUS-7'],
+  })
+
+  it.each([
+    'the server is online',
+    'install Linux',
+    'I live in Hsinchu',
+    'the Orionids meteor shower',
+    'Kaiser',
+    'nimbus70 and xnimbus-7',
+    'Lin9 and LinＡ',
+    'the Whitlocks arrived',
+    '%4Cinux',
+  ])('leaves a Latin term inside a longer word: %s', async (text) => {
+    expect(await mask(text, named)).toBe(text)
+  })
+
+  it.each([
+    ['Lin went home', '⟦TERM_1⟧ went home'],
+    ["Lin's", "⟦TERM_1⟧'s"],
+    ['(Lin)', '(⟦TERM_1⟧)'],
+    ['Lin, again', '⟦TERM_1⟧, again'],
+    ['Lin林', '⟦TERM_1⟧林'],
+    ['run nimbus-7-cli', 'run ⟦PROJECT_1⟧-cli'],
+    ['nimbus7.', '⟦PROJECT_1⟧.'],
+    ['a%20Lin', 'a%20⟦TERM_1⟧'],
+    ['林小姐姐', '⟦TERM_1⟧姐'],
+    ['王林小姐好', '王⟦TERM_1⟧好'],
+  ])('masks a term whose Latin edges stand free, and a CJK term inside text: %s', async (text, expected) => {
+    expect(await mask(text, named)).toBe(expected)
+  })
+
+  it('propagates a bound term only where its edges stand free', async () => {
+    const result = await named.mask([
+      { seq: SessionSeq(1), path: '/content/0/text', text: 'Whitlock' },
+      { seq: SessionSeq(2), path: '/content/0/text', text: 'Whitlock and the Whitlocks' },
+    ], emptyRedactionIndex())
+    expect(result.masked).toEqual(['⟦TERM_1⟧', '⟦TERM_1⟧ and the Whitlocks'])
   })
 })
 

@@ -95,7 +95,7 @@ curl http://127.0.0.1:8787/v1/chat/completions \
 | `openaiUpstream` | `https://api.openai.com` | Chat Completions 與 Responses 的上游。 |
 | `anthropicUpstream` | `https://api.anthropic.com` | Anthropic Messages 的上游。 |
 | `allowInsecureUpstream` | `false` | 允許以明文 `http://` 連到非本機的上游；API 金鑰會以明文傳送。 |
-| `redaction.terms` | 無 | 要遮的人名等字詞，不分大小寫。 |
+| `redaction.terms` | 無 | 要遮的人名等字詞，不分大小寫；首尾是英文字母或數字的字詞只比對完整的詞（`Lin` 不遮 `Linux`），中日韓字詞在文字中照常比對。 |
 | `redaction.projectNames` | 無 | 要遮的專案代號。 |
 | `redaction.allowlist` | `git@github.com`、`noreply@github.com` | 永遠不遮的值。 |
 | `redaction.rules` | `card`、`entropy` 以外全部 | 要啟用的內建規則。以 `card-strict`、`entropy-strict` 取代 `card`、`entropy`：不會把一串數字切成兩半，也放過以檔名為鍵的雜湊。 |
