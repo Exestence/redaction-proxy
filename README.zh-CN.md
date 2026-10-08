@@ -165,7 +165,7 @@ REDACTION_PROXY_NAME_MODEL_DIR=$HOME/models/nym node lib/cli.js
 ## 实测结果
 
 <!-- RESULTS:START -->
-**held-out set v2 (written blind, run once)，保留集第 2 版（盲写、只跑一次）。** 7 种语言（英文、繁中、简中、日文、韩文、德文、法文）共 1,617 条合成提示词、10,268 个敏感值、2,997 个困难反例。编写者没看过规则和评测代码；约 60% 的值是非标准写法（用点分隔的卡号、小写 IBAN、`name at example dot com`、带分机的电话）。用 SHA-256 冻结后只评分一次，测量的是 commit `01489cd`；两版保留集及其哈希在 [bench/heldout/](bench/heldout/)。
+**held-out set v2 (written blind, run once)，保留集第 2 版（盲写、只跑一次）。** 7 种语言（英文、繁中、简中、日文、韩文、德文、法文）共 1,617 条合成提示词、10,268 个敏感值、2,997 个困难反例。编写者没看过规则和评测代码；约 60% 的值是非标准写法（用点分隔的卡号、小写 IBAN、`name at example dot com`、带分机的电话）。用 SHA-256 冻结后只评分一次，测量的是 commit `01489cd`；两版保留集及其哈希在 [bench/heldout/](bench/heldout/)。其中所有形似凭证的字符串（`ghp_`、`AKIA`、`npm_`、PEM 块）都是合成的、无法使用，密钥扫描工具标出它们是预期之中的。
 
 ![柱状图：英文保留集第 2 版提示词中各类别被完整脱敏的比例，代理默认规则、规则加人名模型与 Presidio（cutoff 0.4）对比。](docs/media/results.svg)
 
