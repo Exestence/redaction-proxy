@@ -54,7 +54,7 @@ docker run --rm -p 127.0.0.1:8787:8787 -e REDACTION_PROXY_AUTH_TOKEN redaction-p
 
 ### npx（npm への初回公開後）
 
-まだ npm には公開していません。公開後は次のとおりです。
+まだ npm には公開していません。それまでは[クイックスタート](#30-秒クイックスタート)のとおりクローンから実行してください。公開後は次のとおりです。
 
 ```sh
 npx redaction-proxy --demo

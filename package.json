@@ -3,6 +3,24 @@
   "version": "0.1.0",
   "private": true,
   "description": "Local proxy that masks PII and secrets in LLM API requests and restores them in responses, plus the redaction core it is built on",
+  "keywords": [
+    "llm",
+    "proxy",
+    "redaction",
+    "pii",
+    "privacy",
+    "secrets",
+    "openai",
+    "anthropic"
+  ],
+  "homepage": "https://github.com/PersonalAssistanceHsin/redaction-proxy#readme",
+  "bugs": {
+    "url": "https://github.com/PersonalAssistanceHsin/redaction-proxy/issues"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/PersonalAssistanceHsin/redaction-proxy.git"
+  },
   "type": "module",
   "main": "lib/core/index.js",
   "types": "lib/core/index.d.ts",

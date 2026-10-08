@@ -54,7 +54,7 @@ docker run --rm -p 127.0.0.1:8787:8787 -e REDACTION_PROXY_AUTH_TOKEN redaction-p
 
 ### npx（第一次發布到 npm 之後）
 
-目前還沒上 npm。發布之後：
+目前還沒上 npm，在那之前請照[快速開始](#30-秒快速開始)從 clone 執行。發布之後：
 
 ```sh
 npx redaction-proxy --demo

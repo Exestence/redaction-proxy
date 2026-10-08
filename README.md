@@ -54,7 +54,7 @@ A config file: add `-v "$PWD/redaction.json:/redaction.json:ro"` and append `--c
 
 ### npx (after the first npm release)
 
-Not on npm yet. Once it is published:
+Not on npm yet; until then, run it from a clone as in the [quick start](#quick-start-30-seconds). Once it is published:
 
 ```sh
 npx redaction-proxy --demo
