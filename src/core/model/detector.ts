@@ -20,7 +20,7 @@ import { RedactionPolicyDigest } from '../engine.ts'
 import type { RulesDetector } from '../rules/index.ts'
 import type { Candidate } from '../rules/candidate.ts'
 import { mergeCandidates } from '../rules/candidate.ts'
-import { collectTermCandidates } from '../rules/rules.ts'
+import { collectTermCandidates, standsAlone } from '../rules/rules.ts'
 import type { RedactionDetection, RedactionDetector, RedactionPropagation } from '../types.ts'
 import type { NameModel } from './name-model.ts'
 import { NAME_MODEL_CATEGORIES } from './config.ts'
@@ -41,24 +41,6 @@ export class NameModelError extends Error {
  * @param error - the failure.
  */
 export type NameModelFailureHandler = (error: unknown) => void
-
-/** A letter or digit of a script that separates words with spaces. CJK scripts do not. */
-const SPACED_WORD_CHAR = /^(?![\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}\p{Script=Hangul}])[\p{L}\p{N}\p{M}]$/u
-
-/**
- * Whether an occurrence is a whole word at both ends. An end is cut only when
- * the occurrence's character there and its neighbour outside are both letters
- * or digits of a spaced script, so `Lee` stands alone in `Lee's` but not in
- * `Leeds`, and `鴻遠科技` stands alone anywhere.
- * @param text - the text holding the occurrence.
- * @param start - inclusive UTF-16 start.
- * @param end - exclusive UTF-16 end.
- * @returns whether neither end cuts a word.
- */
-function standsAlone(text: string, start: number, end: number): boolean {
-  const cuts = (inside: string, outside: string): boolean => SPACED_WORD_CHAR.test(inside) && SPACED_WORD_CHAR.test(outside)
-  return !cuts(text.charAt(start), text.charAt(start - 1)) && !cuts(text.charAt(end - 1), text.charAt(end))
-}
 
 /**
  * Whether a value is long enough to search for: a shorter model value is not

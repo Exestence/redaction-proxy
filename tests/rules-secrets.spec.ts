@@ -247,8 +247,12 @@ describe('credential rule', () => {
     ['password=hunter2}', 'password=⟦KEY_1⟧}'],
     // Under a general key word the value ends at a query-string separator.
     ['token=abc123&x=1', 'token=⟦KEY_1⟧&x=1'],
-    // A quote followed by a letter or digit is part of the value; any other closes the enclosing string.
+    // A quote followed by a letter, digit, or non-ASCII symbol is part of the value; any other closes the enclosing string.
     ['password: ab"cd12ef', 'password: ⟦KEY_1⟧'],
+    ['password: p@ss"🔑x12', 'password: ⟦KEY_1⟧'],
+    ['password: p@ss"密碼x12', 'password: ⟦KEY_1⟧'],
+    ['"password: hunter2x"，然後', '"password: ⟦KEY_1⟧"，然後'],
+    ['"password: hunter2x"+x', '"password: ⟦KEY_1⟧"+x'],
     ['"password=hunter2"', '"password=⟦KEY_1⟧"'],
     ['{"cmd":"login --password hunter2"}', '{"cmd":"login --password ⟦KEY_1⟧"}'],
     ['url?token=abcd1234&next=/home', 'url?token=⟦KEY_1⟧&next=/home'],

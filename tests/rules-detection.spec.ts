@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { Context } from './shim.ts'
 import { RedactionError, emptyRedactionIndex } from '../src/core/index.ts'
+import { containsStandingAlone } from '../src/core/model/detector.ts'
 import RulesRedactionService from './shim.ts'
 import { SessionSeq } from './shim.ts'
 
@@ -158,6 +159,38 @@ describe('configured term boundaries', () => {
   ])('masks a term whose Latin edges stand free, and a CJK term inside text: %s', async (text, expected) => {
     expect(await mask(text, named)).toBe(expected)
   })
+
+  // A compatibility symbol that folds to letters (`™` → `tm`) or a zero-width
+  // character the projection drops leaves the term a whole word in the text,
+  // which is what the proxy's leak scan reads.
+  const symbols = new RulesRedactionService(new Context(), { terms: ['Lin'], projectNames: ['Orion', 'Nimbus'] })
+
+  it.each([
+    ['Orion™ ships in Q3', '⟦PROJECT_1⟧™ ships in Q3'],
+    ['Nimbus™ ships in Q3', '⟦PROJECT_1⟧™ ships in Q3'],
+    ['Orion ships Orion™', '⟦PROJECT_1⟧ ships ⟦PROJECT_1⟧™'],
+    ['Lin™', '⟦TERM_1⟧™'],
+    ['Lin№5', '⟦TERM_1⟧№5'],
+    ['Lin™x', '⟦TERM_1⟧™x'],
+    ['5㎏Lin', '5㎏⟦TERM_1⟧'],
+    ['Orion​cloud', '⟦PROJECT_1⟧cloud'],
+    ['Lin­ux', '⟦TERM_1⟧ux'],
+    ['x​Lin', 'x​⟦TERM_1⟧'],
+  ])('masks a term the text shows as a whole word although its projection does not: %j', async (text, expected) => {
+    expect(await mask(text, symbols)).toBe(expected)
+  })
+
+  it.each(['ＡLin', 'Lin１', 'Linux', 'Liń'])('leaves a term glued to a letter or digit in the text: %j', async (text) => {
+    expect(await mask(text, symbols)).toBe(text)
+  })
+
+  it.each(['Orion™ ships', 'Orion ships Orion™', 'Lin№5', 'Lin™x', 'a%20Lin', 'Orion​cloud', 'Lin﻿', 'ＡLin', 'Linux'])(
+    'leaves no occurrence the leak scan would flag: %j',
+    async (text) => {
+      const masked = await mask(text, symbols)
+      for (const term of ['Lin', 'Orion', 'Nimbus']) expect(containsStandingAlone(masked, term)).toBe(false)
+    },
+  )
 
   it('propagates a bound term only where its edges stand free', async () => {
     const result = await named.mask([
