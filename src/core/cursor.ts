@@ -3,27 +3,38 @@
  * boundaries never matter: whether the next character is inside a URL and,
  * for JSON text, which JSON pointer it belongs to.
  *
- * Inside a URL means: after a `scheme://` (any letter, digit, `+`, `.`, or `-`
- * right before `://`), a protocol-relative `//` (at the start of a token or
- * after a character that is not a {@link PATH_CHAR}, as in `![](//host/…)`),
- * or a `www.` that starts a token, and before the next
- * whitespace, quote (`"`, `'`, `` ` ``), `<`, or `>`. Query, fragment, and
- * userinfo are part of the URL. JSON text is read as the string values it
- * encodes: `\/` is `/`, `:` is `:`, `\n` and `\"` end the URL, and
- * anything outside a string literal ends it. `mailto:` and `tel:` have no
- * `//` and do not count.
+ * Inside a URL means: after two slashes, where a backslash counts as a slash
+ * as WHATWG URL parsing reads it (`//`, `\\`, `/\`, `\/`), at the start of
+ * a token or after a character that is not a {@link PATH_CHAR} (`https://`,
+ * `git+ssh://`, `![](//host/…)`, `\\host\…`), or after a `www.` that starts
+ * a token, and before the next whitespace. Outside a URL a quote (`"`, `'`,
+ * `` ` ``), `<`, or `>` also ends a token. A URL that starts its token right
+ * after a quote or `<` (a scheme may come first) also ends at the same quote
+ * or at `>` (`href="…"`, `<https://…>`); every other quote or bracket is part
+ * of the URL, as browsers and CommonMark keep it. Placeholders inside a UNC
+ * path (`\\host\share\…`) or after an escaped `C:\\` therefore stay
+ * unrestored, while `C:\Users\…` is not a URL. Query, fragment, and userinfo
+ * are part of the URL. JSON text is read as the string values it encodes:
+ * `\/` is `/`, `\u003a` is `:`, `\n` ends the URL, and anything outside a
+ * string literal ends it. `mailto:` and `tel:` have no `//` and do not count.
  *
  * @module redaction-proxy/core/cursor
  */
 
-/** Characters that end a URL. */
+/** Characters that end a token outside a URL. */
 const URL_END = /[\s"'`<>]/
 
-/** A character that can sit right before `://`, the tail of a scheme. */
-const SCHEME_CHAR = /[A-Za-z0-9+.-]/
+/** The character that ends a URL starting right after each delimiter. */
+const CLOSER: Partial<Record<string, string>> = { '"': '"', "'": "'", '`': '`', '<': '>' }
+
+/** A slash or a backslash, which URL parsing reads as a slash. */
+const SLASH = /[/\\]/
+
+/** A character of a scheme or its colon, which may come before a URL's slashes. */
+const SCHEME_CHAR = /[A-Za-z0-9+.:-]/
 
 /** A character that can sit right before `//` inside a path (`/Users/x//y`), where it starts no URL. */
-const PATH_CHAR = /[A-Za-z0-9+._~%/-]/
+const PATH_CHAR = /[A-Za-z0-9+._~%/\\-]/
 
 /** A character of a host name, which a `www.` must not follow to start a URL. */
 const HOST_CHAR = /[A-Za-z0-9.-]/
@@ -39,7 +50,11 @@ export class TextCursor {
   /** Last few characters of the current token, enough to see `://` or `www.` end. */
   private tail = ''
   private tokenLength = 0
+  /** How many characters the token starts with that are {@link SCHEME_CHAR}s. */
+  private schemeLength = 0
   private url = false
+  /** The character that ends the current URL besides whitespace, if any. */
+  private closer: string | undefined
   private readonly frames: Frame[] = []
   private inString = false
   private inKey = false
@@ -132,21 +147,30 @@ export class TextCursor {
   /** Read one character of string content. */
   private readChar(char: string): void {
     if (this.inKey && this.key.length < KEY_KEPT) this.key += char
-    if (URL_END.test(char)) {
-      this.endToken()
+    if (this.url ? char === this.closer || /\s/.test(char) : URL_END.test(char)) {
+      this.endToken(CLOSER[char])
       return
     }
     this.tail = (this.tail + char).slice(-5)
     this.tokenLength += 1
     if (this.url) return
-    if (this.tail.endsWith('://') && SCHEME_CHAR.test(this.tail.at(-4) ?? '')) this.url = true
-    else if (this.tail.endsWith('//') && !PATH_CHAR.test(this.tail.at(-3) ?? '')) this.url = true
-    else if (this.tail.slice(-4).toLowerCase() === 'www.' && (this.tokenLength === 4 || !HOST_CHAR.test(this.tail.at(-5) ?? ''))) this.url = true
+    if (this.schemeLength === this.tokenLength - 1 && SCHEME_CHAR.test(char)) this.schemeLength = this.tokenLength
+    if (SLASH.test(char) && SLASH.test(this.tail.at(-2) ?? '') && !PATH_CHAR.test(this.tail.at(-3) ?? '')) this.startUrl(this.schemeLength === this.tokenLength - 2)
+    else if (this.tail.slice(-4).toLowerCase() === 'www.' && (this.tokenLength === 4 || !HOST_CHAR.test(this.tail.at(-5) ?? ''))) this.startUrl(this.tokenLength === 4)
   }
 
-  private endToken(): void {
+  /** @param tokenStart - whether the URL starts the token, so the delimiter before the token closes it. */
+  private startUrl(tokenStart: boolean): void {
+    this.url = true
+    if (!tokenStart) this.closer = undefined
+  }
+
+  /** @param closer - the character that ends a URL starting the next token. */
+  private endToken(closer?: string): void {
     this.tail = ''
     this.tokenLength = 0
+    this.schemeLength = 0
     this.url = false
+    this.closer = closer
   }
 }

