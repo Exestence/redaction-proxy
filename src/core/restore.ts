@@ -28,8 +28,8 @@ export interface StreamRestoreOptions {
   json?: boolean
   /**
    * Leave a bound placeholder as written when it sits inside a URL, as
-   * {@link TextCursor} defines it, in the text restored so far. For tool-call
-   * arguments: a URL the client fetches would carry the original to its host.
+   * {@link TextCursor} defines it, in the text restored so far: a URL the
+   * client fetches, renders, or follows would carry the original to its host.
    */
   keepInUrls?: boolean
   /** Receives each bound placeholder after it is restored or kept; never the original. */

