@@ -410,13 +410,13 @@ describe('state kept per client credential', () => {
     expect(seen[1]!.body.messages[0].content).toBe('please set max_tokens higher in data_store')
   })
 
-  it('names the category of a leaked value and whether an earlier request bound it, never the value', async () => {
+  it('names the category of a value this request detected that is still unmasked, never the value, and does not count a remembered one', async () => {
     const client = { authorization: 'Bearer client-leak' }
     await post('/v1/chat/completions', { model: 'm', messages: [{ role: 'user', content: `password: ${PASS}` }] }, client)
     const res = await post('/v1/chat/completions', { model: 'm', metadata: { note: PASS, owner: EMAIL }, messages: [{ role: 'user', content: `echo ${PASS} to ${EMAIL}` }] }, client)
     expect(res.status).toBe(422)
     const { message } = (await res.json() as any).error
-    expect(message).toBe('a detected value is still unmasked at /metadata/note (KEY, remembered from an earlier request), /metadata/owner (EMAIL); the request was not forwarded')
+    expect(message).toBe('a detected value is still unmasked at /metadata/owner (EMAIL); the request was not forwarded')
     expect(seen).toHaveLength(1)
   })
 
@@ -552,31 +552,22 @@ describe('state kept per client credential', () => {
     expect((await res.json() as any).error.message).toContain('/messages/1/content/0/input/type (KEY)')
   })
 
-  it('refuses a remembered credential that propagation misses: glued, suffixed, or upper-cased and JSON-escaped', async () => {
+  it('masks a remembered value only where it stands alone, and forwards it glued, suffixed, upper-cased and JSON-escaped, or in metadata', async () => {
     const client = { authorization: 'Bearer client-glued' }
     const pw = 'p@ss\\word12'
-    await post('/v1/chat/completions', { model: 'm', messages: [{ role: 'user', content: `password: ${PASS} and password: ${pw}` }] }, client)
+    await post('/v1/chat/completions', { model: 'm', messages: [{ role: 'user', content: `password: football and password: ${PASS} and password: ${pw}` }] }, client)
     const call = (args: string) => [{ role: 'user', content: 'go' }, { role: 'assistant', tool_calls: [{ id: 'c', type: 'function', function: { name: 'bash', arguments: args } }] }, { role: 'tool', tool_call_id: 'c', content: 'ok' }]
-    for (const messages of [[{ role: 'user', content: `is it x${PASS}y?` }], [{ role: 'user', content: `maybe ${PASS}2` }], call('{"cmd":"echo P@SS\\\\WORD12"}')]) {
-      const res = await post('/v1/chat/completions', { model: 'm', messages }, client)
-      expect(res.status).toBe(422)
-      expect((await res.json() as any).error.message).toContain('(KEY, remembered from an earlier request)')
+    const send = async (messages: unknown[], extra: Record<string, unknown> = {}): Promise<string> => {
+      seen = []
+      expect((await post('/v1/chat/completions', { model: 'm', messages, ...extra }, client)).status).toBe(200)
+      return seen[0]!.raw
     }
-    expect(seen).toHaveLength(1)
-  })
-
-  it('refuses a remembered value shorter than 8 characters glued to a word only when it is a credential', async () => {
-    await start({ redaction: { terms: ['Nimbus'] } })
-    try {
-      const client = { authorization: 'Bearer client-short-glued' }
-      await post('/v1/chat/completions', { model: 'm', messages: [{ role: 'user', content: 'project Nimbus, password: ab1234' }] }, client)
-      const send = async (metadata: Record<string, string>) => (await post('/v1/chat/completions', { model: 'm', metadata, messages: [{ role: 'user', content: 'hi' }] }, client)).status
-      expect(await send({ note: 'Nimbusx' })).toBe(200)
-      expect(await send({ note: 'the Nimbus plan' })).toBe(422)
-      expect(await send({ note: 'id ab12345' })).toBe(422)
-    } finally {
-      await start()
-    }
+    expect(await send([{ role: 'user', content: 'football scores; the footballer scored' }])).toMatch(/"⟦KEY_\d+⟧ scores; the footballer scored"/)
+    expect(await send([{ role: 'user', content: `is it x${PASS}y or ${PASS}2?` }])).toContain(`is it x${PASS}y or ${PASS}2?`)
+    expect(await send([{ role: 'user', content: `${PASS.toUpperCase()} or x${PASS.toUpperCase()}y` }])).toMatch(new RegExp(`"⟦KEY_\\d+⟧ or x${PASS.toUpperCase()}y"`))
+    expect(await send(call('{"cmd":"echo P@SS\\\\WORD12"}'))).toContain('P@SS')
+    expect(await send([{ role: 'user', content: `use ${PASS}` }], { metadata: { note: PASS } })).toMatch(/"use ⟦KEY_\d+⟧"/)
+    expect(seen[0]!.body.metadata.note).toBe(PASS)
   })
 
   it('keeps two credentials apart when one is the other\'s JSON-escaped spelling', async () => {
