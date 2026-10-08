@@ -594,6 +594,16 @@ describe('state kept per client credential', () => {
     expect(await resend('{"path":"\\u002fUsers\\u002Ffictional-user","q":"\\"\\u0022\\u0001\\ud83d\\ude00"}')).toBe('{"path":"⟦PATH_1⟧","q":"\\"\\u0022\\u0001\\ud83d\\ude00"}')
     expect(await resend('{"cmd":"a\\\\u0026b \\\\/"}')).toBe('{"cmd":"a\\\\u0026b \\\\/"}')
   })
+
+  it('keeps a credential from the system prompt through a flood of tool output', async () => {
+    reply = () => ({ json: { choices: [] } })
+    const client = { authorization: 'Bearer flood-system' }
+    const cookies = Array.from({ length: 4200 }, (_, i) => `Cookie: sessionid=s${String(i).padStart(5, '0')}f8a9c2d1e4b7a6c3`).join('\n')
+    await post('/v1/chat/completions', { model: 'm', messages: [{ role: 'system', content: `Use password: ${PASS} for the db` }, { role: 'user', content: 'hi' }] }, client)
+    await post('/v1/chat/completions', { model: 'm', messages: [{ role: 'user', content: 'dump' }, { role: 'tool', tool_call_id: 't', content: cookies }] }, client)
+    await post('/v1/chat/completions', { model: 'm', messages: [{ role: 'user', content: `Noted ${PASS}.` }] }, client)
+    expect(seen[2]!.body.messages[0].content).toMatch(/^Noted ⟦KEY_\d+⟧\.$/)
+  })
 })
 
 describe('tool-call arguments', () => {

@@ -356,21 +356,42 @@ function isToolInput(record: Record<string, unknown>, key: string): boolean {
 }
 
 /**
- * Whether a request string is text the user wrote: a user message's string
- * content or one of its text parts, or a Responses string `input`. Tool
- * results, system prompts, and assistant turns are not.
+ * Whether a request string is message text of one of the given roles: a
+ * message's string content or one of its text parts, or a Responses string
+ * `input`, which is the user's. Tool results are not.
  * @param body - the parsed request body.
  * @param path - JSON pointer of the string.
- * @returns whether the name model reads it.
+ * @param roles - the message roles that count.
+ * @returns whether the string is such text.
  */
-function isUserText(body: Json, path: string): boolean {
+function isRoleText(body: Json, path: string, roles: ReadonlySet<string>): boolean {
   if (path === '/input') return true
   const match = MESSAGE_TEXT_PATH.exec(path)
   if (match === null) return false
   const [, list, message, part] = match
   const item = (body[list as string] as Json[] | undefined)?.[Number(message)]
-  if (item?.role !== 'user') return false
+  if (item === undefined || !roles.has(item.role)) return false
   return part === undefined || USER_TEXT_PARTS.has((item.content as Json[])[Number(part)]?.type)
+}
+
+/** The role whose text the name model reads. */
+const USER_ROLE: ReadonlySet<string> = new Set(['user'])
+
+/** Roles whose text the client itself wrote: the user's messages and the system or developer prompt. */
+const CLIENT_ROLES: ReadonlySet<string> = new Set(['user', 'system', 'developer'])
+
+/** The top-level system prompt: Anthropic `system` as a string or text blocks, Responses `instructions`. */
+const SYSTEM_PATH = /^\/(system(\/\d+\/text)?|instructions)$/
+
+/**
+ * Whether a request string is text the client itself wrote rather than tool
+ * output or a model turn: user text ({@link isRoleText}) or a system or developer prompt.
+ * @param body - the parsed request body.
+ * @param path - JSON pointer of the string.
+ * @returns whether a value bound in it is remembered apart from tool output.
+ */
+function isClientText(body: Json, path: string): boolean {
+  return SYSTEM_PATH.test(path) || isRoleText(body, path, CLIENT_ROLES)
 }
 
 /**
@@ -912,8 +933,8 @@ export function createProxyServer(
   /**
    * Originals each client scope bound, by bucket, each mapped to its category, oldest first.
    * One bucket per category, so a bulk tool result of emails cannot evict a remembered credential,
-   * and per category one more for values bound in text the user wrote, so a tool result full of
-   * cookies cannot evict the password the user typed.
+   * and per category one more for values bound in text the client wrote (its user messages and
+   * system prompt), so a tool result full of cookies cannot evict the password the user typed.
    */
   const knownOriginals = new Map<string, Map<string, Map<string, string>>>()
   const tokenDigest = config.authToken === undefined ? undefined : createHash('sha256').update(config.authToken).digest()
@@ -923,16 +944,16 @@ export function createProxyServer(
    * Remember every {@link isRememberable} original a request bound, for the client's later requests.
    * @param client - the client scope.
    * @param registry - bindings of the request's mask call.
-   * @param userBound - the identities bound in text the user wrote.
+   * @param clientBound - the identities bound in text the client wrote ({@link isClientText}).
    */
-  const rememberOriginals = (client: string, registry: RedactionRegistry, userBound: ReadonlySet<RedactionId>): void => {
+  const rememberOriginals = (client: string, registry: RedactionRegistry, clientBound: ReadonlySet<RedactionId>): void => {
     const known = knownOriginals.get(client) ?? new Map<string, Map<string, string>>()
     for (const id of registry.ids()) {
       // oxlint-disable-next-line typescript/no-non-null-assertion -- every listed identity is bound.
       const original = registry.original(id)!
       if (!isRememberable(original)) continue
       const category = categoryOf(id)
-      const name = userBound.has(id) ? `user ${category}` : category
+      const name = clientBound.has(id) ? `client ${category}` : category
       const bucket = known.get(name) ?? new Map<string, string>()
       known.set(name, bucket)
       setNewest(bucket, original, category, KNOWN_ORIGINALS_MAX)
@@ -982,7 +1003,8 @@ export function createProxyServer(
     }
     const priorTexts = prior?.texts ?? []
     const all = [...priorTexts, ...texts]
-    const userTexts = new Set([...prior?.userTexts ?? [], ...texts.filter((_, i) => isUserText(parsed, (slots[i] as Slot).path))])
+    const userTexts = new Set([...prior?.userTexts ?? [], ...texts.filter((_, i) => isRoleText(parsed, (slots[i] as Slot).path, USER_ROLE))])
+    const clientTexts = new Set([...userTexts, ...texts.filter((_, i) => isClientText(parsed, (slots[i] as Slot).path))])
     const known = knownTo(client)
     const escaped = new Map<string, string>()
     let result
@@ -1001,18 +1023,18 @@ export function createProxyServer(
     })
     const modelValues = new Set<string>()
     const bound = new Map<string, string>()
-    const userBound = new Set<RedactionId>()
+    const clientBound = new Set<RedactionId>()
     for (const span of result.applied) {
       const category = categoryOf(span.id)
       const original = (all[span.seq] as string).slice(span.start, span.end)
       bound.set(original, category)
-      if (userTexts.has(all[span.seq] as string)) userBound.add(span.id)
+      if (clientTexts.has(all[span.seq] as string)) clientBound.add(span.id)
       if (MODEL_CATEGORIES.has(category)) modelValues.add(original)
       if (span.seq >= priorTexts.length) stats.masked[category] = (stats.masked[category] ?? 0) + 1
     }
     refuseLeaks(parsed, bound, modelValues, known)
     const registry = unescaping(result.registry, escaped)
-    rememberOriginals(client, registry, userBound)
+    rememberOriginals(client, registry, clientBound)
     return { outgoing: JSON.stringify(parsed), registry, texts: all, userTexts }
   }
 
