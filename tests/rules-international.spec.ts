@@ -19,8 +19,8 @@ import {
 } from '../src/core/index.ts'
 import { loadConfig } from '../src/proxy/config.ts'
 
-/** Policy digest of the default rules before the international rules existed. */
-const LEGACY_DEFAULT_DIGEST = 'sha256:49cba7ce69b8961ec8f8e056240beb401c8b8eba1d2f98a4a4e16460712239ff'
+/** Policy digest of the default rules, which the international rules leave alone. */
+const DEFAULT_DIGEST = 'sha256:52d3676648dbe5c2e97bd8d115f76122ca8f3395c57aa03008ef3118f9f37fe2'
 
 const everyRule = new RulesDetector({ rules: [...RULE_NAMES] })
 
@@ -206,17 +206,17 @@ describe('national telephone formats', () => {
 })
 
 describe('international rule configuration', () => {
-  it('keeps the default rules, detector version, and policy digest of detectors built before the international rules', () => {
+  it('keeps the international rules out of the default rules, detector version, and policy digest', () => {
     const detector = new RulesDetector()
     expect(resolveRulesConfig().rules).toEqual([...DEFAULT_RULE_NAMES])
     expect(detector.detectorVersion).toBe(DETECTOR_VERSION)
-    expect(detector.policyDigest).toBe(LEGACY_DEFAULT_DIGEST)
+    expect(detector.policyDigest).toBe(DEFAULT_DIGEST)
   })
 
   it('versions and digests a detector with any international rule apart from the default', () => {
     const withIban = new RulesDetector({ rules: [...DEFAULT_RULE_NAMES, 'iban'] })
     expect(withIban.detectorVersion).toBe(`${DETECTOR_VERSION}+intl-2`)
-    expect(withIban.policyDigest).not.toBe(LEGACY_DEFAULT_DIGEST)
+    expect(withIban.policyDigest).not.toBe(DEFAULT_DIGEST)
     expect(withIban.categories).toContain('IBAN')
   })
 

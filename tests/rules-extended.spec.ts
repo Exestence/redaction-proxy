@@ -15,7 +15,7 @@ import {
 import type { RedactionRuleName } from '../src/core/index.ts'
 
 /** Policy digest of the default rules, which hosts persist with their span index. */
-const DEFAULT_DIGEST = 'sha256:49cba7ce69b8961ec8f8e056240beb401c8b8eba1d2f98a4a4e16460712239ff'
+const DEFAULT_DIGEST = 'sha256:52d3676648dbe5c2e97bd8d115f76122ca8f3395c57aa03008ef3118f9f37fe2'
 
 async function maskWith(rules: RedactionRuleName[], text: string): Promise<string> {
   const result = await mask(new RulesDetector({ rules }), [{ seq: 1, path: '', text }], emptyRedactionIndex())
@@ -268,6 +268,9 @@ describe('tw-passport-nhi', () => {
   it.each([
     ['護照 312345678', '護照 ⟦TWID_1⟧'],
     ['Passport No. 312345678', 'Passport No. ⟦TWID_1⟧'],
+    ['passport number is 312345678', 'passport number is ⟦TWID_1⟧'],
+    ['passport #: 312345678', 'passport #: ⟦TWID_1⟧'],
+    ['passport_number=312345678', 'passport_number=⟦TWID_1⟧'],
     ['健保卡號：0000 1234 5678', '健保卡號：⟦TWID_1⟧'],
     ['健保卡 000012345678', '健保卡 ⟦TWID_1⟧'],
   ])('masks %j', async (text, expected) => {
@@ -289,6 +292,9 @@ describe('tw-mobile-loose', () => {
     ['打 0912／345／678', '打 ⟦PHONE_1⟧'],
     ['打 ０９１２．３４５．６７８', '打 ⟦PHONE_1⟧'],
     ['call 0912/345/678.', 'call ⟦PHONE_1⟧.'],
+    ['打 0912_345_678', '打 ⟦PHONE_1⟧'],
+    ['打 (0912)345678', '打 ⟦PHONE_1⟧'],
+    ['打 (0912) 345-678', '打 ⟦PHONE_1⟧'],
   ])('masks %j', async (text, expected) => {
     expect(await maskWith(['tw-mobile-loose'], text)).toBe(expected)
   })
@@ -297,6 +303,8 @@ describe('tw-mobile-loose', () => {
     ['versions, dates, and addresses', 'v1.2.3 on 2026.10.08 at 10.0.0.1'],
     ['a longer dotted run', '0912.345.678.9 and 10912.345.678'],
     ['mixed separators', '0912.345/678'],
+    ['snake-case identifiers and longer underscored runs', 'v1_2_3 x_0912_345_678 0912_345_678_9 0912_345_6789'],
+    ['a longer bracketed run', '(0912)3456789'],
   ])('leaves %s alone', async (_name, text) => {
     expect(await maskWith(['tw-mobile-loose'], text)).toBe(text)
   })
@@ -334,6 +342,7 @@ describe('ip-cgnat-ula', () => {
     ['a MAC address', 'mac fd:12:34:56:78:9a'],
     ['a public IPv6 address', '2001:db8::1'],
     ['a hash holding fd12', 'sha 0afd1234abcd'],
+    ['a network prefix', 'ULAs live in fc00::/7; ours is fd12:3456:789a::/48'],
   ])('leaves %s alone', async (_name, text) => {
     expect(await maskWith(['ip-cgnat-ula'], text)).toBe(text)
   })
