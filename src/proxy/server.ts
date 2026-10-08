@@ -93,7 +93,7 @@ const HOP = new Set([
 // ponytail: fixed-size FIFO of continuation texts; a restart forgets them (documented).
 const CONTINUATIONS_MAX = 256
 
-// ponytail: fixed-size FIFOs of known originals per category, by size only; add a time limit if a long-lived proxy must forget sooner.
+// ponytail: fixed-size FIFOs of known originals per bucket, by size only; add a time limit if a long-lived proxy must forget sooner.
 const KNOWN_ORIGINALS_MAX = 4096
 const KNOWN_CLIENTS_MAX = 64
 
@@ -826,8 +826,10 @@ export function createProxyServer(
   /** Continuation texts by client scope and response id. */
   const continuations = new Map<string, RequestTexts>()
   /**
-   * Originals each client scope bound, by category, each mapped to its category, oldest first.
-   * One bucket per category, so a bulk tool result of emails cannot evict a remembered credential.
+   * Originals each client scope bound, by bucket, each mapped to its category, oldest first.
+   * One bucket per category, so a bulk tool result of emails cannot evict a remembered credential,
+   * and per category one more for values bound in text the user wrote, so a tool result full of
+   * cookies cannot evict the password the user typed.
    */
   const knownOriginals = new Map<string, Map<string, Map<string, string>>>()
   const tokenDigest = config.authToken === undefined ? undefined : createHash('sha256').update(config.authToken).digest()
@@ -837,16 +839,18 @@ export function createProxyServer(
    * Remember every {@link isRememberable} original a request bound, for the client's later requests.
    * @param client - the client scope.
    * @param registry - bindings of the request's mask call.
+   * @param userBound - the identities bound in text the user wrote.
    */
-  const rememberOriginals = (client: string, registry: RedactionRegistry): void => {
+  const rememberOriginals = (client: string, registry: RedactionRegistry, userBound: ReadonlySet<RedactionId>): void => {
     const known = knownOriginals.get(client) ?? new Map<string, Map<string, string>>()
     for (const id of registry.ids()) {
       // oxlint-disable-next-line typescript/no-non-null-assertion -- every listed identity is bound.
       const original = registry.original(id)!
       if (!isRememberable(original)) continue
       const category = categoryOf(id)
-      const bucket = known.get(category) ?? new Map<string, string>()
-      known.set(category, bucket)
+      const name = userBound.has(id) ? `user ${category}` : category
+      const bucket = known.get(name) ?? new Map<string, string>()
+      known.set(name, bucket)
       setNewest(bucket, original, category, KNOWN_ORIGINALS_MAX)
     }
     setNewest(knownOriginals, client, known, KNOWN_CLIENTS_MAX)
@@ -911,15 +915,17 @@ export function createProxyServer(
     })
     const modelValues = new Set<string>()
     const bound = new Map<string, string>()
+    const userBound = new Set<RedactionId>()
     for (const span of result.applied) {
       const category = categoryOf(span.id)
       const original = (all[span.seq] as string).slice(span.start, span.end)
       bound.set(original, category)
+      if (userTexts.has(all[span.seq] as string)) userBound.add(span.id)
       if (MODEL_CATEGORIES.has(category)) modelValues.add(original)
       if (span.seq >= priorTexts.length) stats.masked[category] = (stats.masked[category] ?? 0) + 1
     }
     refuseLeaks(parsed, bound, modelValues, known)
-    rememberOriginals(client, result.registry)
+    rememberOriginals(client, result.registry, userBound)
     return { outgoing: JSON.stringify(parsed), registry: result.registry, texts: all, userTexts }
   }
 

@@ -447,20 +447,24 @@ describe('state kept per client credential', () => {
     expect(seen).toHaveLength(0)
   })
 
-  it('keeps remembered credentials through a flood of another category, and forgets the oldest beyond 4096 of one category', async () => {
+  it('keeps remembered credentials through a flood of another category or from a tool result, and forgets the oldest beyond 4096 the user wrote', async () => {
     reply = () => ({ json: { choices: [] } })
     const flood = (count: number, line: (i: number) => string): string => Array.from({ length: count }, (_, i) => line(i)).join('\n')
-    const echoed = async (client: Record<string, string>, tool: string): Promise<string> => {
+    const echoed = async (client: Record<string, string>, message: Record<string, string>): Promise<string> => {
       seen = []
       await post('/v1/chat/completions', { model: 'm', messages: [{ role: 'user', content: `password: ${PASS}` }] }, client)
-      await post('/v1/chat/completions', { model: 'm', messages: [{ role: 'user', content: 'dump' }, { role: 'tool', tool_call_id: 't', content: tool }] }, client)
+      await post('/v1/chat/completions', { model: 'm', messages: [{ role: 'user', content: 'dump' }, message] }, client)
       await post('/v1/chat/completions', { model: 'm', messages: [{ role: 'assistant', content: `Noted ${PASS}.` }, { role: 'user', content: 'and?' }] }, client)
       return seen[2]!.body.messages[0].content
     }
-    expect(await echoed({ authorization: 'Bearer flood-mail' }, flood(4100, i => `user${i}@example.test`))).toMatch(/^Noted ⟦KEY_\d+⟧\.$/)
-    expect(await echoed({ authorization: 'Bearer flood-keys-4095' }, flood(4095, i => `password: fake${i}zzzz`))).toMatch(/^Noted ⟦KEY_\d+⟧\.$/)
-    expect(await echoed({ authorization: 'Bearer flood-keys-4096' }, flood(4096, i => `password: fake${i}zzzz`))).toBe(`Noted ${PASS}.`)
+    const tool = (content: string) => ({ role: 'tool', tool_call_id: 't', content })
+    const cookies = flood(4200, i => `GET /api/x HTTP/1.1\nCookie: sessionid=s${String(i).padStart(5, '0')}f8a9c2d1e4b7a6c3\n`)
+    expect(await echoed({ authorization: 'Bearer flood-mail' }, tool(flood(4100, i => `user${i}@example.test`)))).toMatch(/^Noted ⟦KEY_\d+⟧\.$/)
+    expect(await echoed({ authorization: 'Bearer flood-cookies' }, tool(cookies))).toMatch(/^Noted ⟦KEY_\d+⟧\.$/)
+    expect(await echoed({ authorization: 'Bearer flood-keys-4095' }, { role: 'user', content: flood(4095, i => `password: fake${i}zzzz`) })).toMatch(/^Noted ⟦KEY_\d+⟧\.$/)
+    expect(await echoed({ authorization: 'Bearer flood-keys-4096' }, { role: 'user', content: flood(4096, i => `password: fake${i}zzzz`) })).toBe(`Noted ${PASS}.`)
   })
+
 })
 
 describe('tool-call arguments', () => {
