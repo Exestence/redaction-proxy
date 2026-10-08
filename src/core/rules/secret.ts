@@ -384,6 +384,9 @@ interface ValueRead {
   quoted: boolean
 }
 
+/** A character that keeps an unquoted value going after a quote: an ASCII letter or digit, or a non-ASCII letter, digit, or symbol. */
+const VALUE_AFTER_QUOTE = /^(?:[A-Za-z0-9]|(?![\0-\x7f])[\p{L}\p{N}\p{S}])/u
+
 /**
  * Read the value an assignment gives, starting after the assignment operator.
  * A template placeholder is read whole, spaces included.
@@ -415,9 +418,10 @@ function readAssignmentValue(text: string, from: number, weak: boolean): ValueRe
   while (i < text.length && i - start < VALUE_MAX) {
     const char = text.charAt(i)
     if (char === ' ' || char === '\t' || char === '\n' || char === '\r') break
-    // A quote followed by a letter or digit is part of the value (`ab"cd12ef`);
-    // any other quote closes the string the assignment sits in.
-    if ((char === '"' || char === "'" || char === '`') && !/[A-Za-z0-9]/.test(text.charAt(i + 1))) break
+    // A quote followed by a letter, digit, or non-ASCII symbol is part of the
+    // value (`ab"cd12ef`, `p@ss"🔑x12`); any other quote closes the string the
+    // assignment sits in.
+    if ((char === '"' || char === "'" || char === '`') && !VALUE_AFTER_QUOTE.test(text.slice(i + 1, i + 3))) break
     if (char === ';') break
     if (weak && char === '&') break
     i += 1
