@@ -4,7 +4,9 @@
  * for JSON text, which JSON pointer it belongs to.
  *
  * Inside a URL means: after a `scheme://` (any letter, digit, `+`, `.`, or `-`
- * right before `://`) or a `www.` that starts a token, and before the next
+ * right before `://`), a protocol-relative `//` (at the start of a token or
+ * after a character that is not a {@link PATH_CHAR}, as in `![](//host/…)`),
+ * or a `www.` that starts a token, and before the next
  * whitespace, quote (`"`, `'`, `` ` ``), `<`, or `>`. Query, fragment, and
  * userinfo are part of the URL. JSON text is read as the string values it
  * encodes: `\/` is `/`, `:` is `:`, `\n` and `\"` end the URL, and
@@ -19,6 +21,9 @@ const URL_END = /[\s"'`<>]/
 
 /** A character that can sit right before `://`, the tail of a scheme. */
 const SCHEME_CHAR = /[A-Za-z0-9+.-]/
+
+/** A character that can sit right before `//` inside a path (`/Users/x//y`), where it starts no URL. */
+const PATH_CHAR = /[A-Za-z0-9+._~%/-]/
 
 /** A character of a host name, which a `www.` must not follow to start a URL. */
 const HOST_CHAR = /[A-Za-z0-9.-]/
@@ -135,6 +140,7 @@ export class TextCursor {
     this.tokenLength += 1
     if (this.url) return
     if (this.tail.endsWith('://') && SCHEME_CHAR.test(this.tail.at(-4) ?? '')) this.url = true
+    else if (this.tail.endsWith('//') && !PATH_CHAR.test(this.tail.at(-3) ?? '')) this.url = true
     else if (this.tail.slice(-4).toLowerCase() === 'www.' && (this.tokenLength === 4 || !HOST_CHAR.test(this.tail.at(-5) ?? ''))) this.url = true
   }
 
