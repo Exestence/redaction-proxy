@@ -201,7 +201,7 @@ const TW_NHI_CARD = new RegExp(
  * `0912_345_678`, `(0912)345678`. Not a part of a longer dotted, slashed, or
  * underscored run such as a version, a date, or an identifier.
  */
-const TW_MOBILE_LOOSE = /(?<![A-Za-z0-9./_])(?:09\d{2}([./_])\d{3}\1\d{3}|\(09\d{2}\)[ -]?\d{3}[ -]?\d{3})(?![A-Za-z0-9_]|[./_]\d)/g
+const TW_MOBILE_LOOSE = /(?<![A-Za-z0-9./_])(?:09\d{2}([./_])\d{3}\1\d{3}|\(09\d{2}\)[ -]?\d{3}[ -]?\d{3}(?![ -]\d))(?![A-Za-z0-9_]|[./_]\d)/g
 /** An `@` escaped as an HTML character reference or a JSON escape: `&#64;`, `&#x40;`, `&commat;`, `\u0040`. */
 const ESCAPED_AT = /&#0*64;|&#x0*40;|&commat;|\\u0040/gi
 /** An address in the shared address space 100.64.0.0/10 (RFC 6598), used by carrier-grade NAT and Tailscale. */

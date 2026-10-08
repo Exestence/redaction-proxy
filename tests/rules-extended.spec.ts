@@ -309,7 +309,7 @@ describe('tw-mobile-loose', () => {
     ['mixed separators', '0912.345/678'],
     ['snake-case identifiers and longer underscored runs', 'v1_2_3 x_0912_345_678 0912_345_678_9 0912_345_6789'],
     ['a longer bracketed run', '(0912)3456789'],
-    ['a bracketed run of other lengths', '(0912) 345 6789 (0912) 2026'],
+    ['a bracketed run of other lengths', '(0912) 345 6789 (0912) 2026 (0912) 345 678 9'],
   ])('leaves %s alone', async (_name, text) => {
     expect(await maskWith(['tw-mobile-loose'], text)).toBe(text)
   })

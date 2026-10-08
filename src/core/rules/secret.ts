@@ -153,7 +153,7 @@ const PROTOCOL_FIELD_WORDS = new Set([
   'penalty', 'seed', 'stream', 'options', 'usage', 'cache', 'control', 'creation', 'read', 'id', 'type',
   'url', 'function', 'arguments', 'name', 'message', 'json', 'schema', 'object', 'thinking', 'budget',
   'reasoning', 'effort', 'encrypted', 'signature', 'metadata', 'previous', 'media', 'mime', 'source',
-  'data', 'file', 'audio', 'refusal', 'result', 'use', 'server', 'search', 'web', 'temperature', 'auto',
+  'data', 'file', 'audio', 'refusal', 'result', 'use', 'server', 'search', 'web', 'temperature',
   'document', 'citations', 'annotations', 'item', 'items', 'store', 'instructions', 'detail',
 ])
 
@@ -348,6 +348,7 @@ interface ValueRead {
 
 /**
  * Read the value an assignment gives, starting after the assignment operator.
+ * A template placeholder is read whole, spaces included.
  * @param text - text being scanned.
  * @param from - offset just past the operator.
  * @param weak - whether `&` ends the value, as it does in a query string under a general key.
