@@ -544,6 +544,39 @@ describe('refusals and screening', () => {
     expect(logs.join('\n')).not.toContain(EMAIL)
   })
 
+  it('names an array index in a refusal as the index', async () => {
+    const res = await post('/v1/chat/completions', { model: 'm', messages: [{ role: 'user', content: `id ${TWID}` }, { role: 'tool', tool_call_id: 't', content: `ref${TWID}` }] })
+    expect(res.status).toBe(422)
+    expect(await res.text()).toContain('/messages/1/content')
+  })
+
+  it('refuses an ASCII case variant of a detected value, but not ordinary text beside it', async () => {
+    reply = () => ({ json: { choices: [] } })
+    const variant = await post('/v1/chat/completions', { model: 'm', metadata: { owner: EMAIL.toUpperCase() }, messages: [{ role: 'user', content: `hi ${EMAIL}` }] })
+    expect(variant.status).toBe(422)
+    expect(seen).toHaveLength(0)
+    const ordinary = await post('/v1/chat/completions', { model: 'm', metadata: { topic: 'Example Test notes' }, messages: [{ role: 'user', content: `hi ${EMAIL}, see the Example.Test docs` }] })
+    expect(ordinary.status).toBe(200)
+  })
+
+  it('refuses a detected value written JSON-escaped in a field it does not rewrite', async () => {
+    await start()
+    const res = await post('/v1/chat/completions', { model: 'm', metadata: { args: JSON.stringify({ p: QUOTED }) }, messages: [{ role: 'user', content: USER_TEXT }] })
+    expect(res.status).toBe(422)
+    expect(seen).toHaveLength(0)
+  })
+
+  it('refuses a value that ends inside a longer overlapping value', async () => {
+    await start({ redaction: { terms: ['ab', 'xabc'] } })
+    try {
+      const res = await post('/v1/chat/completions', { model: 'm', metadata: { tag: 'xab' }, messages: [{ role: 'user', content: 'ab and xabc' }] })
+      expect(res.status).toBe(422)
+      expect(seen).toHaveLength(0)
+    } finally {
+      await start()
+    }
+  })
+
   it('checks thousands of distinct values for leaks in one pass', async () => {
     reply = () => ({ json: { choices: [] } })
     const messages = Array.from({ length: 16_000 }, (_, i) => ({ role: 'user', content: `u${i}.fictional@example.test` }))

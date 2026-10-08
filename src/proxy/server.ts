@@ -196,9 +196,19 @@ function isUserText(body: Json, path: string): boolean {
 }
 
 /**
- * Build a test for whether a text contains any of the patterns, in one pass
- * over the text (Aho-Corasick): checking each pattern against each string
- * took seconds once a request carried thousands of distinct values.
+ * Lower-case one ASCII letter's code unit; any other code unit is returned as is.
+ * @param code - a UTF-16 code unit.
+ * @returns the folded code unit.
+ */
+function foldAscii(code: number): number {
+  return code >= 0x41 && code <= 0x5a ? code + 0x20 : code
+}
+
+/**
+ * Build a test for whether a text contains any of the patterns, ignoring
+ * ASCII case, in one pass over the text (Aho-Corasick): checking each
+ * pattern against each string took seconds once a request carried thousands
+ * of distinct values.
  * @param patterns - non-empty strings to look for.
  * @returns a function telling whether a text contains at least one pattern.
  */
@@ -208,7 +218,7 @@ function containsAnyOf(patterns: readonly string[]): (text: string) => boolean {
   for (const pattern of patterns) {
     let node = root
     for (let i = 0; i < pattern.length; i += 1) {
-      const char = pattern.charCodeAt(i)
+      const char = foldAscii(pattern.charCodeAt(i))
       let child = node.next.get(char)
       if (child === undefined) {
         child = { next: new Map(), fail: root, terminal: false }
@@ -234,7 +244,7 @@ function containsAnyOf(patterns: readonly string[]): (text: string) => boolean {
   return text => {
     let state = root
     for (let i = 0; i < text.length; i += 1) {
-      state = step(state, text.charCodeAt(i))
+      state = step(state, foldAscii(text.charCodeAt(i)))
       if (state.terminal) return true
     }
     return false
@@ -247,8 +257,8 @@ function containsAnyOf(patterns: readonly string[]): (text: string) => boolean {
  * could not cover. A name-model value is matched as its propagation matches
  * it, as a whole word for spaced scripts (`Lee` inside `Leeds` is no leak),
  * and only from two code points. Every other value counts anywhere, at any
- * length, so a rules value glued to other characters (`tel0912345678`)
- * still fails closed. Keys are checked too.
+ * length and in any ASCII case, so a rules value glued to other characters
+ * (`tel0912345678`) or upper-cased still fails closed. Keys are checked too.
  * @param body - the masked request body.
  * @param registry - bindings of the mask call.
  * @param modelValues - the originals the name model bound.
@@ -266,7 +276,7 @@ function refuseLeaks(body: Json, registry: RedactionRegistry, modelValues: Reado
     else if (value !== null && typeof value === 'object') {
       for (const [key, item] of Object.entries(value)) {
         const leakyKey = leaks(key)
-        const at = `${path}/${leakyKey ? '<key>' : pointerSegment(key)}`
+        const at = `${path}/${leakyKey ? '<key>' : pointerSegment(Array.isArray(value) ? Number(key) : key)}`
         if (leakyKey) where.push(at)
         walk(item, at)
       }
