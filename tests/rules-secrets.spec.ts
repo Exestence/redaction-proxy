@@ -28,6 +28,14 @@ const mustMask = [
   'api_key=KEY_1234567890AB',
   'DB_PASSWORD=$DB_PASSWORD_PROD',
   'password: my&pass',
+  // A quote followed by a letter or digit belongs to the value.
+  'password: ab"cd12ef',
+  "password: ab'cd12ef",
+  // A snake_case passphrase is not a protocol field name.
+  'password: blue_horse_battery',
+  'password: tool_horse_battery',
+  // A digit makes a braced value a literal, not a template.
+  'password: {hunter2}',
   'API_KEY=MyToken123',
   'password=Summer2026!',
   'apikey: "Zm9vYmFyMTIzNA"',
@@ -195,6 +203,11 @@ const mustKeep = [
     'required', 'Optional', 'example', 'placeholder', 'none', 'None', 'text', 'index', 'system', 'user',
     'assistant', 'tool', 'image', 'messages', 'content', 'str', 'int', 'float', '***', '********', 'xxx', 'XXXXXXXX', '<redacted>',
     '[REDACTED]', 'your-password', 'your_password', '...',
+    // Chat-API field names.
+    'max_tokens', 'tool_calls', 'stop_sequences', 'content_block', 'input_text', 'tool_choice',
+    'response_format', 'finish_reason',
+    // Template placeholders.
+    '<your secret>', '{password}', '{{ secrets.DB_PW }}',
   ].flatMap(value => [
     `password: ${value}`, `{"password":"${value}"}`, `PASSWORD=${value}`, `Authorization: ${value}`, `密碼：${value}`,
   ]),
@@ -218,6 +231,10 @@ describe('credential rule', () => {
     ['password=hunter2}', 'password=⟦KEY_1⟧}'],
     // Under a general key word the value ends at a query-string separator.
     ['token=abc123&x=1', 'token=⟦KEY_1⟧&x=1'],
+    // A quote followed by a letter or digit is part of the value; any other closes the enclosing string.
+    ['password: ab"cd12ef', 'password: ⟦KEY_1⟧'],
+    ['"password=hunter2"', '"password=⟦KEY_1⟧"'],
+    ['{"cmd":"login --password hunter2"}', '{"cmd":"login --password ⟦KEY_1⟧"}'],
     ['url?token=abcd1234&next=/home', 'url?token=⟦KEY_1⟧&next=/home'],
     // The webhook URL is the credential; the scheme is not part of it.
     [

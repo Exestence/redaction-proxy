@@ -11,13 +11,13 @@ import { loadNameModel } from '../src/core/model/name-model.ts'
 import { loadConfig } from '../src/proxy/config.ts'
 import { fakeNameModel } from './name-model-fake.ts'
 
-const RULES_ONLY_DIGEST = 'sha256:52d3676648dbe5c2e97bd8d115f76122ca8f3395c57aa03008ef3118f9f37fe2'
+const RULES_ONLY_DIGEST = 'sha256:fe993f02ae7edfba0fa724cd2a5f9613f090335953a7f69af937339e1816ef9c'
 
 describe('nameModel configuration', () => {
-  it('is absent by default, and the core rules detector keeps rules-7 and its digest', () => {
+  it('is absent by default, and the core rules detector keeps rules-8 and its digest', () => {
     expect(loadConfig(undefined, {}).nameModel).toBeUndefined()
     const rules = new RulesDetector({})
-    expect(rules.detectorVersion).toBe('rules-7')
+    expect(rules.detectorVersion).toBe('rules-8')
     expect(rules.policyDigest).toBe(RULES_ONLY_DIGEST)
   })
 
@@ -79,7 +79,7 @@ describe('policy digest with the name model', () => {
     const { model } = fakeNameModel({})
     const detector = new NameModelDetector(rules, model)
     expect(detector.policyDigest).not.toBe(RULES_ONLY_DIGEST)
-    expect(detector.detectorVersion).toBe('rules-7+nym-edge-int8-3')
+    expect(detector.detectorVersion).toBe('rules-8+nym-edge-int8-3')
     expect(detector.categories).toEqual([...rules.categories, 'NAME', 'ORG', 'LOC', 'ADDR'])
   })
 

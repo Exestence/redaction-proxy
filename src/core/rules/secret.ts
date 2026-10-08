@@ -140,8 +140,30 @@ const PLACEHOLDER_VALUE_WORDS = new Set([
   'content', 'role', 'model',
 ])
 
+/**
+ * Words chat-API field names are built from: `max_tokens`, `tool_calls`,
+ * `stop_sequences`, `content_block`, `finish_reason`. A snake_case value made
+ * only of these and {@link PLACEHOLDER_VALUE_WORDS} is a field name, while
+ * `blue_horse_battery` is a passphrase.
+ */
+const PROTOCOL_FIELD_WORDS = new Set([
+  'max', 'min', 'tokens', 'token', 'calls', 'call', 'choice', 'choices', 'stop', 'sequence', 'sequences',
+  'block', 'blocks', 'delta', 'input', 'output', 'response', 'request', 'format', 'finish', 'reason',
+  'completion', 'completions', 'prompt', 'top', 'p', 'k', 'logprobs', 'parallel', 'frequency', 'presence',
+  'penalty', 'seed', 'stream', 'options', 'usage', 'cache', 'control', 'creation', 'read', 'id', 'type',
+  'url', 'function', 'arguments', 'name', 'message', 'json', 'schema', 'object', 'thinking', 'budget',
+  'reasoning', 'effort', 'encrypted', 'signature', 'metadata', 'previous', 'media', 'mime', 'source',
+  'data', 'file', 'audio', 'refusal', 'result', 'use', 'server', 'search', 'web', 'temperature',
+  'document', 'citations', 'annotations', 'item', 'items', 'store', 'instructions', 'detail',
+])
+
 /** A masked or placeholder spelling: `***`, `xxx`, `<redacted>`, `[hidden]`, `your-password`. */
 const MASKED_VALUE = /^(?:\*+|x+|<[A-Za-z _-]+>|\[[A-Za-z _-]+\]|your[-_][A-Za-z_-]+)$/i
+
+/** A template placeholder, which may hold spaces: `<your secret>`, `{password}`, `${{ secrets.DB_PW }}`. */
+const TEMPLATE = '(?:<[A-Za-z][A-Za-z_ .-]*>|\\$?\\{\\{?[ \\t]*[A-Za-z][A-Za-z_ .-]*\\}\\}?)'
+const TEMPLATE_VALUE = new RegExp(`^${TEMPLATE}$`)
+const TEMPLATE_PREFIX = new RegExp(`^${TEMPLATE}(?![^\\s,.;:)\\]}&"'\`])`)
 
 /**
  * Words that describe an attribute of a credential rather than the credential:
@@ -280,6 +302,10 @@ export function isCodeShape(raw: string, options: CodeShapeOptions = {}): boolea
   if (TYPE_WORDS.has(value)) return true
   if (/^[A-Za-z]+$/.test(value) && (RESERVED_VALUE_WORDS.has(value.toLowerCase()) || PLACEHOLDER_VALUE_WORDS.has(value.toLowerCase()))) return true
   if (MASKED_VALUE.test(value)) return true
+  if (TEMPLATE_VALUE.test(value)) return true
+  if (/^[a-z]+(?:_[a-z]+)+$/.test(value) && value.split('_').every(word => PROTOCOL_FIELD_WORDS.has(word) || PLACEHOLDER_VALUE_WORDS.has(word))) {
+    return true
+  }
   if (/^\$\{[^{}]*\}$/.test(value)) return true
   // A call with arguments can carry a literal secret, so only an empty argument list counts.
   if (/^[A-Za-z_$][\w$]*(?:\??\.[A-Za-z_$][\w$]*)*\(\s*\)$/.test(value)) return true
@@ -322,6 +348,7 @@ interface ValueRead {
 
 /**
  * Read the value an assignment gives, starting after the assignment operator.
+ * A template placeholder is read whole, spaces included.
  * @param text - text being scanned.
  * @param from - offset just past the operator.
  * @param weak - whether `&` ends the value, as it does in a query string under a general key.
@@ -344,11 +371,16 @@ function readAssignmentValue(text: string, from: number, weak: boolean): ValueRe
     if (close >= text.length || text.charAt(close) !== quote) return undefined
     return { start: i + 1, end: close, quoted: true }
   }
+  const template = TEMPLATE_PREFIX.exec(text.slice(i, i + VALUE_MAX))
+  if (template !== null) return { start: i, end: i + template[0].length, quoted: false }
   const start = i
   while (i < text.length && i - start < VALUE_MAX) {
     const char = text.charAt(i)
     if (char === ' ' || char === '\t' || char === '\n' || char === '\r') break
-    if (char === '"' || char === "'" || char === '`' || char === ';') break
+    // A quote followed by a letter or digit is part of the value (`ab"cd12ef`);
+    // any other quote closes the string the assignment sits in.
+    if ((char === '"' || char === "'" || char === '`') && !/[A-Za-z0-9]/.test(text.charAt(i + 1))) break
+    if (char === ';') break
     if (weak && char === '&') break
     i += 1
   }
