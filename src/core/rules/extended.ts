@@ -183,19 +183,24 @@ const TWID_LOOSE = new RegExp(`(?<![A-Za-z0-9])[A-Za-z](?:${NARROW_SPACE}?\\d){9
 /**
  * A Taiwan passport number (nine digits) or National Health Insurance card
  * number (twelve digits, optionally grouped 4-4-4) right after its keyword.
- * Neither has a check digit, so neither is read without the keyword.
+ * Neither has a check digit, so neither is read without the keyword. The
+ * English keyword may carry `number`, `no.`, or `#`, as `號碼` follows `護照`.
  */
-const TW_PASSPORT = new RegExp(`(?:護照|护照|passport)${KEYWORD_GAP}(?<![A-Za-z0-9])(?<value>\\d{9})(?![A-Za-z0-9])`, 'gid')
+const TW_PASSPORT = new RegExp(
+  `(?:護照|护照|passport(?:[ _-]?(?:number|no\\.?|#))?)${KEYWORD_GAP}(?<![A-Za-z0-9])(?<value>\\d{9})(?![A-Za-z0-9])`,
+  'gid',
+)
 const TW_NHI_CARD = new RegExp(
   `(?:健保卡|nhi card)${KEYWORD_GAP}(?<![A-Za-z0-9])(?<value>\\d{4}([- ]?)\\d{4}\\2\\d{4})(?![A-Za-z0-9]|[- ]\\d)`,
   'gid',
 )
 /**
- * A Taiwan mobile number grouped 4-3-3 by one `.` or `/` (a full-width `／`
- * folds to `/`): `0912.345.678`. Not a part of a longer dotted or slashed run
- * such as a version or a date.
+ * A Taiwan mobile number grouped 4-3-3 by one `.`, `/`, or `_` (a full-width
+ * `／` folds to `/`), or with its prefix in brackets: `0912.345.678`,
+ * `0912_345_678`, `(0912)345678`. Not a part of a longer dotted, slashed, or
+ * underscored run such as a version, a date, or an identifier.
  */
-const TW_MOBILE_LOOSE = /(?<![A-Za-z0-9./])09\d{2}([./])\d{3}\1\d{3}(?![A-Za-z0-9]|[./]\d)/g
+const TW_MOBILE_LOOSE = /(?<![A-Za-z0-9./_])(?:09\d{2}([./_])\d{3}\1\d{3}|\(09\d{2}\) ?\d{3}-?\d{3})(?![A-Za-z0-9_]|[./_]\d)/g
 /** An `@` escaped as an HTML character reference or a JSON escape: `&#64;`, `&#x40;`, `&commat;`, `\u0040`. */
 const ESCAPED_AT = /&#0*64;|&#x0*40;|&commat;|\\u0040/gi
 /** An address in the shared address space 100.64.0.0/10 (RFC 6598), used by carrier-grade NAT and Tailscale. */
@@ -381,7 +386,10 @@ function collectSharedAndUniqueLocalCandidates(text: string, push: PushCandidate
     push(match.index, match.index + match[0].length, 'IP', PRIORITY_PII)
   })
   runAll(ULA_IPV6, text, (match) => {
-    if (isIPv6(match[0])) push(match.index, match.index + match[0].length, 'IP', PRIORITY_PII)
+    const end = match.index + match[0].length
+    // `fc00::/7` and `fd12:3456::/48` name a network prefix, not an address.
+    if (match[0].endsWith('::') && text.charAt(end) === '/') return
+    if (isIPv6(match[0])) push(match.index, end, 'IP', PRIORITY_PII)
   })
 }
 
