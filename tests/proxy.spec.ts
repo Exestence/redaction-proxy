@@ -411,15 +411,40 @@ describe('state kept per client credential', () => {
     expect(seen).toHaveLength(1)
   })
 
-  it('does not count a detected value written in a protocol enum field such as role', async () => {
-    await start({ redaction: { terms: ['assistant'] } })
+  it('does not count a detected value written in a protocol enum field such as role or type', async () => {
+    await start({ redaction: { terms: ['assistant', 'json_object'] } })
     try {
-      const res = await post('/v1/chat/completions', { model: 'm', messages: [{ role: 'user', content: 'what did the assistant say?' }, { role: 'assistant', content: 'nothing' }] })
+      const res = await post('/v1/chat/completions', {
+        model: 'm',
+        response_format: { type: 'json_object' },
+        messages: [{ role: 'user', content: 'what did the assistant say, as json_object?' }, { role: 'assistant', content: 'nothing' }],
+      })
       expect(res.status).toBe(200)
-      expect(seen[0]!.body.messages[0].content).toMatch(/^what did the ⟦TERM_\d+⟧ say\?$/)
+      expect(seen[0]!.body.messages[0].content).toMatch(/^what did the ⟦TERM_\d+⟧ say, as ⟦TERM_\d+⟧\?$/)
+      const inMetadata = await post('/v1/chat/completions', { model: 'm', metadata: { status: 'json_object' }, messages: [{ role: 'user', content: 'as json_object' }] })
+      expect(inMetadata.status).toBe(422)
     } finally {
       await start()
     }
+  })
+
+  it('refuses a detected value in an enum-named field when it is no enum value, or sits in metadata or tool input', async () => {
+    const user = { role: 'user', content: `password: ${PASS} mail ${EMAIL} file ${HOME}/notes.md` }
+    for (const extra of [{ metadata: { status: PASS } }, { metadata: { user: { type: PASS } } }, { tool_choice: PASS }, { reasoning_effort: PASS }, { service_tier: EMAIL }]) {
+      expect((await post('/v1/chat/completions', { model: 'm', messages: [user], ...extra })).status).toBe(422)
+    }
+    const resent = await post('/v1/messages', {
+      model: 'c',
+      max_tokens: 1,
+      messages: [
+        user,
+        { role: 'assistant', content: [{ type: 'tool_use', id: 't1', name: 'assign', input: { role: EMAIL, status: `${HOME}/notes.md` } }] },
+        { role: 'user', content: [{ type: 'tool_result', tool_use_id: 't1', content: 'ok' }] },
+      ],
+    }, { 'x-api-key': 'k' })
+    expect(resent.status).toBe(422)
+    expect((await resent.json() as any).error.message).toContain('/messages/1/content/0/input/role (EMAIL), /messages/1/content/0/input/status (PATH)')
+    expect(seen).toHaveLength(0)
   })
 
   it('keeps remembered credentials through a flood of another category, and forgets the oldest beyond 4096 of one category', async () => {

@@ -72,10 +72,14 @@ const MESSAGE_TEXT_PATH = /^\/(messages|input)\/(\d+)\/content(?:\/(\d+)\/text)?
 
 /**
  * Request keys whose string values the API accepts only from a fixed
- * list, so they hold no private data; the leak scan skips them, or a value
- * such as a term `assistant` would refuse every request with an assistant turn.
+ * list, so they hold no private data; the leak scan skips an {@link ENUM_VALUE}
+ * under one of them outside client data, or a value such as a term
+ * `assistant` would refuse every request with an assistant turn.
  */
 const ENUM_FIELDS = new Set(['type', 'role', 'object', 'status', 'finish_reason', 'stop_reason', 'service_tier', 'reasoning_effort', 'tool_choice'])
+
+/** What an API enum value looks like: `assistant`, `input_text`, `json_object`, `flex`. */
+const ENUM_VALUE = /^[a-z][a-z0-9_.:-]{0,63}$/
 
 /** Categories the name model binds; the leak scan matches their values as whole words. */
 const MODEL_CATEGORIES: ReadonlySet<string> = new Set(NAME_MODEL_CATEGORIES)
@@ -297,6 +301,17 @@ function isTextSource(record: Record<string, unknown>, key: string): boolean {
 }
 
 /**
+ * Whether `record[key]` is an Anthropic tool call's input, such as a resent
+ * `tool_use` block's `input`, whose keys and values the tool defines.
+ * @param record - a request object.
+ * @param key - one of its keys.
+ * @returns whether the value is tool input.
+ */
+function isToolInput(record: Record<string, unknown>, key: string): boolean {
+  return key === 'input' && /tool_use$/.test(String(record.type))
+}
+
+/**
  * Whether a request string is text the user wrote: a user message's string
  * content or one of its text parts, or a Responses string `input`. Tool
  * results, system prompts, and assistant turns are not.
@@ -378,7 +393,8 @@ function containsAnyOf(patterns: readonly string[]): (text: string) => boolean {
  * and only from two code points. Every other value counts anywhere, at any
  * length and in any ASCII case, so a rules value glued to other characters
  * (`tel0912345678`) or upper-cased still fails closed. Keys are checked too;
- * {@link ENUM_FIELDS} are not.
+ * an {@link ENUM_VALUE} under one of the {@link ENUM_FIELDS} is not, except in
+ * client data: `metadata`, `stop`, and tool input.
  * @param body - the masked request body.
  * @param bound - every spelling the mask call bound, mapped to its category.
  * @param modelValues - the originals the name model bound.
@@ -392,18 +408,20 @@ function refuseLeaks(body: Json, bound: ReadonlyMap<string, string>, modelValues
   const holdsSubstring = containsAnyOf([...bound.keys()].filter(original => !modelValues.has(original)).flatMap(forms))
   const leaks = (text: string): boolean => holdsSubstring(text) || words.some(form => containsStandingAlone(text, form))
   const where: Array<[path: string, text: string]> = []
-  const walk = (value: unknown, path: string, key: string): void => {
-    if (typeof value === 'string' && !ENUM_FIELDS.has(key) && leaks(value)) where.push([path, value])
-    else if (value !== null && typeof value === 'object') {
+  const walk = (value: unknown, path: string, key: string, data: boolean): void => {
+    if (typeof value === 'string') {
+      const isEnum = !data && ENUM_FIELDS.has(key) && ENUM_VALUE.test(value)
+      if (!isEnum && leaks(value)) where.push([path, value])
+    } else if (value !== null && typeof value === 'object') {
       for (const [name, item] of Object.entries(value)) {
         const leakyKey = leaks(name)
         const at = `${path}/${leakyKey ? '<key>' : pointerSegment(Array.isArray(value) ? Number(name) : name)}`
         if (leakyKey) where.push([at, name])
-        walk(item, at, name)
+        walk(item, at, name, data || SKIP_SUBTREE.has(name) || isToolInput(value as Record<string, unknown>, name))
       }
     }
   }
-  walk(body, '', '')
+  walk(body, '', '', false)
   if (where.length === 0) return
   // The refusal path alone looks up which value each text holds, the way `leaks` matches it.
   const holds = (text: string, original: string): boolean => modelValues.has(original)
