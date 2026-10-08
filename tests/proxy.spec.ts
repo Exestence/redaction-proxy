@@ -670,6 +670,22 @@ describe('state kept per client credential', () => {
     expect(seen[1]!.raw).not.toContain('0912345678')
     expect((await post('/v1/chat/completions', { model: 'm', messages: [{ role: 'user', content: 'password: pw-0912345678' }, split] })).status).toBe(200)
     expect(seen[2]!.raw).not.toContain('0912345678')
+    const upper = { role: 'user', content: 'call PW-0912345678 today; the pw-reset flow is broken' }
+    expect((await post('/v1/chat/completions', { model: 'm', messages: [upper] }, client)).status).toBe(200)
+    expect(seen[3]!.raw).not.toContain('0912345678')
+    expect((await post('/v1/chat/completions', { model: 'm', messages: [upper], metadata: { note: 'PW-' } }, client)).status).toBe(200)
+  })
+
+  it('still refuses a detected value inside a split remembered value, and a whole value split in the same request, but not that value\'s part', async () => {
+    reply = () => ({ json: { choices: [] } })
+    const client = { authorization: 'Bearer client-split-scan' }
+    await post('/v1/chat/completions', { model: 'm', messages: [{ role: 'user', content: 'password: pw-0912345678' }] }, client)
+    const remembered = { model: 'm', messages: [{ role: 'user', content: 'call pw-0912345678 today' }] }
+    expect((await post('/v1/chat/completions', { ...remembered, metadata: { note: '0912345678' } }, client)).status).toBe(422)
+    const same = { model: 'm', messages: [{ role: 'user', content: 'password: hunter2zz-0912345678; call hunter2zz-0912345678 later' }] }
+    expect((await post('/v1/chat/completions', { ...same, metadata: { note: 'hunter2zz-0912345678' } })).status).toBe(422)
+    // Documented in DETAILS §8: a part of a value detected in the same request is not refused.
+    expect((await post('/v1/chat/completions', { ...same, metadata: { note: 'hunter2zz-' } })).status).toBe(200)
   })
 
   it('keeps two credentials apart when one is the other\'s JSON-escaped spelling', async () => {

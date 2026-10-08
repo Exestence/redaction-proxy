@@ -1080,16 +1080,26 @@ export function createProxyServer(
       return !detected.has(plain) && (known?.has(plain) === true || rememberedKeys.has(foldAsciiCase(plain)))
     }
     // A value repeated where another detection splits it binds each uncovered part on its own (`pw-` of `pw-0912345678`, a phone number inside); such a part is never refused.
+    // A remembered credential's part is found in any ASCII case, as the credential itself is.
     const values = [...detected, ...known?.keys() ?? [], ...escaped.keys()]
+    const folded = new Map<string, string>()
+    const within = (text: string, part: string, start: number, value: string): boolean => {
+      if (value.length <= part.length) return false
+      for (let at = value.indexOf(part); at >= 0 && at <= start; at = value.indexOf(part, at + 1)) {
+        if (text.startsWith(value, start - at)) return true
+      }
+      return false
+    }
     const isPart = (text: string, start: number, end: number): boolean => {
       const part = text.slice(start, end)
-      return !detected.has(part) && values.some(value => {
-        if (value.length <= part.length) return false
-        for (let at = value.indexOf(part); at >= 0 && at <= start; at = value.indexOf(part, at + 1)) {
-          if (text.startsWith(value, start - at)) return true
-        }
-        return false
-      })
+      if (detected.has(part)) return false
+      if (values.some(value => within(text, part, start, value))) return true
+      if (rememberedKeys.size === 0) return false
+      let lower = folded.get(text)
+      if (lower === undefined) folded.set(text, lower = foldAsciiCase(text))
+      const lowerPart = foldAsciiCase(part)
+      for (const value of rememberedKeys) if (within(lower, lowerPart, start, value)) return true
+      return false
     }
     const modelValues = new Set<string>()
     const bound = new Map<string, string>()
