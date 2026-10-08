@@ -964,7 +964,8 @@ export function createProxyServer(
 
   /**
    * Remember every {@link isRememberable} original a request detected, for the client's later requests.
-   * A value only memory supplied is not remembered again, so its time to live runs from its last detection.
+   * A value only memory supplied keeps its time to live, which runs from its last detection; bound in
+   * text the client wrote, it also moves into the client's bucket, so tool output cannot evict it.
    * @param client - the client scope.
    * @param registry - bindings of the request's mask call.
    * @param clientBound - the identities bound in text the client wrote ({@link isClientText}).
@@ -976,12 +977,16 @@ export function createProxyServer(
     for (const id of registry.ids()) {
       // oxlint-disable-next-line typescript/no-non-null-assertion -- every listed identity is bound.
       const original = registry.original(id)!
-      if (!detected.has(original) || !isRememberable(original)) continue
+      if (!isRememberable(original)) continue
       const category = categoryOf(id)
-      const name = clientBound.has(id) ? `client ${category}` : category
+      const fromClient = clientBound.has(id)
+      const kept = Math.max(0, ...[category, `client ${category}`].map(name => known.get(name)?.get(original)?.expires ?? 0))
+      const until = detected.has(original) ? expires : fromClient ? kept : 0
+      if (until === 0) continue
+      const name = fromClient ? `client ${category}` : category
       const bucket = known.get(name) ?? new Map<string, KnownOriginal>()
       known.set(name, bucket)
-      setNewest(bucket, original, { category, expires }, KNOWN_ORIGINALS_MAX)
+      setNewest(bucket, original, { category, expires: until }, KNOWN_ORIGINALS_MAX)
     }
     setNewest(knownOriginals, client, known, KNOWN_CLIENTS_MAX)
   }
@@ -1062,15 +1067,28 @@ export function createProxyServer(
       const plain = escaped.get(original) ?? original
       return !detected.has(plain) && (known?.has(plain) === true || rememberedKeys.has(foldAsciiCase(plain)))
     }
+    // A value repeated where another detection splits it binds each uncovered part on its own (`pw-` of `pw-0912345678`, a phone number inside); such a part is never refused.
+    const values = [...detected, ...known?.keys() ?? [], ...escaped.keys()]
+    const isPart = (text: string, start: number, end: number): boolean => {
+      const part = text.slice(start, end)
+      return !detected.has(part) && values.some(value => {
+        if (value.length <= part.length) return false
+        for (let at = value.indexOf(part); at >= 0 && at <= start; at = value.indexOf(part, at + 1)) {
+          if (text.startsWith(value, start - at)) return true
+        }
+        return false
+      })
+    }
     const modelValues = new Set<string>()
     const bound = new Map<string, string>()
     const clientBound = new Set<RedactionId>()
     for (const span of result.applied) {
       const category = categoryOf(span.id)
-      const original = (all[span.seq] as string).slice(span.start, span.end)
-      if (clientTexts.has(all[span.seq] as string)) clientBound.add(span.id)
+      const text = all[span.seq] as string
+      const original = text.slice(span.start, span.end)
+      if (clientTexts.has(text)) clientBound.add(span.id)
       if (span.seq >= priorTexts.length) stats.masked[category] = (stats.masked[category] ?? 0) + 1
-      if (onlyRemembered(original)) continue
+      if (onlyRemembered(original) || isPart(text, span.start, span.end)) continue
       bound.set(original, category)
       if (MODEL_CATEGORIES.has(category)) modelValues.add(original)
     }
