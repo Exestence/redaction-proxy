@@ -30,7 +30,6 @@ import {
   collectPathCandidates,
   collectStrictCardCandidates,
   collectTermCandidates,
-  termIdentityKey,
 } from './rules.ts'
 import { collectSecretCandidates } from './secret.ts'
 import type { InternationalRuleName } from './international.ts'
@@ -107,8 +106,6 @@ export const DEFAULT_RULE_NAMES: readonly DefaultRuleName[] = [
  * `card-strict`, or `entropy` with `entropy-strict`, masks what either masks.
  */
 export const RULE_NAMES: readonly RedactionRuleName[] = [...DEFAULT_RULE_NAMES, ...INTERNATIONAL_RULE_NAMES, ...EXTENDED_RULE_NAMES]
-
-const PERCENT_ESCAPE = /%[0-9A-Fa-f]{2}/
 
 const CONFIG_KEYS: ReadonlySet<string> = new Set(['rules', 'terms', 'projectNames', 'allowlist'])
 
@@ -342,17 +339,14 @@ export class RulesDetector implements RedactionDetector {
   }
 
   /**
-   * Identity key of one value: every spelling of a configured term shares one
-   * key, and so one placeholder; any other value is its own key.
+   * Identity key of one value: every spelling, including each spelling of a
+   * configured term, is its own identity and restores byte for byte.
    * @param value - one detected original.
-   * @param category - the category it is masked under.
-   * @returns the key its identity is allocated by.
+   * @param _category - the category it is masked under.
+   * @returns the value itself.
    */
-  identityKey(value: string, category: string): string {
-    // A percent-encoded spelling keeps its own identity so restore writes it back byte for byte.
-    return (category === 'TERM' || category === 'PROJECT') && !PERCENT_ESCAPE.test(value)
-      ? termIdentityKey(value, category)
-      : value
+  identityKey(value: string, _category: string): string {
+    return value
   }
 
   /**

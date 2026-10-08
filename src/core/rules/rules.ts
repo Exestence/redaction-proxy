@@ -207,18 +207,6 @@ function termPattern(value: string): RegExp | undefined {
 }
 
 /**
- * Identity key of a configured term's spelling: its projection, lower-cased,
- * with every separator removed, so `星河計畫`, `星河 計畫`, and `星河-計畫`
- * share one placeholder.
- * @param value - one spelling.
- * @param category - `TERM` or `PROJECT`.
- * @returns the key, prefixed so it never equals another category's raw value.
- */
-export function termIdentityKey(value: string, category: string): string {
-  return `\u0000${category}\u0000${projectNfkc(value).lower.replaceAll(TERM_SEPARATORS, '')}`
-}
-
-/**
  * Whether a digit run opens with an issuer prefix a payment card uses.
  * @param digits - decimal digits only.
  * @returns whether the run starts with 3 to 6, or with 2221 through 2720.
