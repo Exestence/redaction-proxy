@@ -465,6 +465,22 @@ describe('state kept per client credential', () => {
     expect(await echoed({ authorization: 'Bearer flood-keys-4096' }, { role: 'user', content: flood(4096, i => `password: fake${i}zzzz`) })).toBe(`Noted ${PASS}.`)
   })
 
+  it('masks a remembered credential that a tool call resends JSON-escaped, under the identity of its plain spelling', async () => {
+    const client = { authorization: 'Bearer client-escaped' }
+    const pw = 'p@ss\\word12'
+    reply = entry => ({ json: { choices: [{ index: 0, message: { role: 'assistant', tool_calls: [{ id: 'c', type: 'function', function: { name: 'bash', arguments: JSON.stringify({ cmd: `echo ${placeholders(entry.raw)[0]}` }) } }] } }] } })
+    const first = await (await post('/v1/chat/completions', { model: 'm', messages: [{ role: 'user', content: `password: ${pw}` }] }, client)).json() as any
+    const call = first.choices[0].message
+    expect(JSON.parse(call.tool_calls[0].function.arguments).cmd).toBe(`echo ${pw}`)
+    const result = { role: 'tool', tool_call_id: 'c', content: 'ok' }
+    expect((await post('/v1/chat/completions', { model: 'm', messages: [{ role: 'user', content: `password: ${pw}` }, call, result] }, client)).status).toBe(200)
+    expect(seen[1]!.body.messages[1].tool_calls[0].function.arguments).toBe('{"cmd":"echo ⟦KEY_1⟧"}')
+    // The history no longer holds the plain spelling: the escaped one is bound first, and restores as the plain one.
+    const pruned = await (await post('/v1/chat/completions', { model: 'm', messages: [call, result] }, client)).json() as any
+    expect(seen[2]!.raw).not.toContain('word12')
+    expect(seen[2]!.body.messages[0].tool_calls[0].function.arguments).toBe('{"cmd":"echo ⟦KEY_1⟧"}')
+    expect(JSON.parse(pruned.choices[0].message.tool_calls[0].function.arguments).cmd).toBe(`echo ${pw}`)
+  })
 })
 
 describe('tool-call arguments', () => {

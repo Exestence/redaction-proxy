@@ -217,24 +217,59 @@ function foldAsciiCase(text: string): string {
  * Add the originals one client has bound before to a detector's propagation,
  * so each of their occurrences is masked as if this request had detected it.
  * A remembered credential is also found in any ASCII case: `TR0UB4DOR&3X`
- * repeats `Tr0ub4dor&3x`, and is masked under its own identity.
+ * repeats `Tr0ub4dor&3x`, and is masked under its own identity. Every value
+ * is also found JSON-escaped, as a resent tool call's `arguments` writes it
+ * (`p@ss\\word`), under the identity of its plain spelling.
  * @param detector - the request's detector.
  * @param known - the client's known originals, mapped to their categories.
+ * @param escaped - receives each JSON-escaped spelling searched for, mapped to its plain spelling.
  * @returns the detector to mask with.
  */
-function withKnownOriginals(detector: RedactionDetector, known: ReadonlyMap<string, string> | undefined): RedactionDetector {
-  if (known === undefined) return detector
-  const keys = new Map([...known].filter(([, category]) => category === 'KEY').map(([original]) => [foldAsciiCase(original), 'KEY']))
+function withKnownOriginals(detector: RedactionDetector, known: ReadonlyMap<string, string> | undefined, escaped: Map<string, string>): RedactionDetector {
+  const keys = new Map([...known ?? []].filter(([, category]) => category === 'KEY').map(([original]) => [foldAsciiCase(original), 'KEY']))
   return {
     policyDigest: detector.policyDigest,
     detectorVersion: detector.detectorVersion,
     categories: detector.categories,
     detect: text => detector.detect(text),
-    propagate: async (texts, values) => [
-      ...await detector.propagate?.(texts, new Map([...known, ...values])) ?? [],
-      ...keys.size === 0 ? [] : await detector.propagate?.(texts.map(foldAsciiCase), keys) ?? [],
-    ],
-    ...detector.identityKey === undefined ? {} : { identityKey: detector.identityKey.bind(detector) },
+    propagate: async (texts, values) => {
+      const all = new Map([...known ?? [], ...values])
+      const spellings = new Map<string, string>()
+      for (const [original, category] of all) {
+        const spelling = JSON.stringify(original).slice(1, -1)
+        if (spelling === original) continue
+        escaped.set(spelling, original)
+        spellings.set(spelling, category)
+      }
+      return [
+        ...await detector.propagate?.(texts, all) ?? [],
+        ...keys.size === 0 ? [] : await detector.propagate?.(texts.map(foldAsciiCase), keys) ?? [],
+        ...spellings.size === 0 ? [] : await detector.propagate?.(texts, spellings) ?? [],
+      ]
+    },
+    identityKey: (value, category) => {
+      const plain = escaped.get(value) ?? value
+      return detector.identityKey?.(plain, category) ?? plain
+    },
+  }
+}
+
+/**
+ * Restore each identity as its plain spelling when a JSON-escaped spelling was
+ * bound first, so restoring into `arguments` escapes it once, not twice.
+ * @param registry - bindings of a mask call.
+ * @param escaped - JSON-escaped spellings mapped to their plain spellings.
+ * @returns the registry to restore and remember from.
+ */
+function unescaping(registry: RedactionRegistry, escaped: ReadonlyMap<string, string>): RedactionRegistry {
+  return {
+    original: id => {
+      const original = registry.original(id)
+      return original === undefined ? undefined : escaped.get(original) ?? original
+    },
+    ids: () => registry.ids(),
+    originals: () => registry.originals(),
+    subset: ids => unescaping(registry.subset(ids), escaped),
   }
 }
 
@@ -899,9 +934,10 @@ export function createProxyServer(
     const all = [...priorTexts, ...texts]
     const userTexts = new Set([...prior?.userTexts ?? [], ...texts.filter((_, i) => isUserText(parsed, (slots[i] as Slot).path))])
     const known = knownTo(client)
+    const escaped = new Map<string, string>()
     let result
     try {
-      result = await mask(withKnownOriginals(detectorFor(userTexts, stats), known), all.map((text, seq) => ({ seq, path: '', text })), emptyRedactionIndex())
+      result = await mask(withKnownOriginals(detectorFor(userTexts, stats), known, escaped), all.map((text, seq) => ({ seq, path: '', text })), emptyRedactionIndex())
     } catch (error) {
       // Screening above leaves only a conflict a continuation's stored texts can raise.
       if (error instanceof RedactionError) throw new Refusal(422, `request text cannot be masked: ${error.code}`)
@@ -925,8 +961,9 @@ export function createProxyServer(
       if (span.seq >= priorTexts.length) stats.masked[category] = (stats.masked[category] ?? 0) + 1
     }
     refuseLeaks(parsed, bound, modelValues, known)
-    rememberOriginals(client, result.registry, userBound)
-    return { outgoing: JSON.stringify(parsed), registry: result.registry, texts: all, userTexts }
+    const registry = unescaping(result.registry, escaped)
+    rememberOriginals(client, registry, userBound)
+    return { outgoing: JSON.stringify(parsed), registry, texts: all, userTexts }
   }
 
   const forward = async (req: IncomingMessage, res: ServerResponse, path: string, api: Api | undefined, body: Buffer | undefined, cors: Record<string, string>): Promise<void> => {
