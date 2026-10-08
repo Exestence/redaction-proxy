@@ -604,6 +604,87 @@ describe('tool restore policy', () => {
     expect(streamed).toBe(JSON.parse(all.find(e => e.type === 'response.function_call_arguments.done').arguments).command)
     expect(streamed).toMatch(new RegExp(`^curl -d ⟦KEY_\\d+⟧ -F to=${EMAIL.replaceAll('.', '\\.')} -F f=@⟦PATH_\\d+⟧/notes\\.md$`))
   })
+
+  // What the default categories leave of `line`: the key and the email kept, the path restored.
+  const line = (entry: Seen): string => JSON.parse(command(entry)).command
+  const DEFAULT_KEPT = new RegExp(`^curl -d ⟦KEY_\\d+⟧ -F to=⟦EMAIL_\\d+⟧ -F f=@${HOME}/notes\\.md$`)
+
+  it('applies the policy to every Responses output item whose type ends in _call, named by its type when it has no name', async () => {
+    const items = (entry: Seen) => [
+      { type: 'local_shell_call', id: 'ls', call_id: 'c1', status: 'completed', action: { type: 'exec', command: ['bash', '-lc', line(entry)] } },
+      { type: 'shell_call', id: 'sh', call_id: 'c2', action: { commands: [line(entry)] } },
+      { type: 'computer_call', id: 'cc', call_id: 'c3', action: { type: 'type', text: line(entry) } },
+      { type: 'apply_patch_call', id: 'ap', call_id: 'c4', operation: { type: 'create_file', path: 'x.txt', diff: line(entry) } },
+      { type: 'custom_tool_call', id: 'ct', call_id: 'c5', name: 'bash', input: line(entry) },
+    ]
+    const payloads = (output: any[]): string[] => {
+      const [shell, shells, computer, patch, custom] = output
+      return [shell.action.command[2], shells.action.commands[0], computer.action.text, patch.operation.diff, custom.input]
+    }
+    reply = entry => ({ json: { id: 'r-calls', output: items(entry) } })
+    const body = await (await post('/v1/responses', { model: 'm', input: USER_TEXT })).json() as any
+    for (const payload of payloads(body.output)) expect(payload).toMatch(DEFAULT_KEPT)
+    expect(logs).toEqual(expect.arrayContaining([expect.stringMatching(/kept by the tool restore policy KEY_\d+ in local_shell_call at \/action\/command\/2$/)]))
+
+    reply = entry => ({
+      sse: sse([
+        ...items(entry).map((item, index): [string, unknown] => ['response.output_item.done', { type: 'response.output_item.done', output_index: index, item }]),
+        ['response.completed', { type: 'response.completed', response: { id: 'r-calls-stream', output: items(entry) } }],
+      ]),
+    })
+    const all = events(await (await post('/v1/responses', { model: 'm', stream: true, input: USER_TEXT })).text())
+    for (const payload of payloads(all.filter(e => e.type === 'response.output_item.done').map(e => e.item))) expect(payload).toMatch(DEFAULT_KEPT)
+    for (const payload of payloads(all.find(e => e.type === 'response.completed').response.output)) expect(payload).toMatch(DEFAULT_KEPT)
+  })
+
+  it('applies the policy to a Chat custom tool call, in a JSON reply and in a stream', async () => {
+    reply = entry => ({ json: { choices: [{ index: 0, message: { role: 'assistant', tool_calls: [{ id: 't', type: 'custom', custom: { name: 'bash', input: line(entry) } }] } }] } })
+    const body = await (await post('/v1/chat/completions', { model: 'm', messages: [userRequest] })).json() as any
+    expect(body.choices[0].message.tool_calls[0].custom.input).toMatch(DEFAULT_KEPT)
+
+    reply = entry => {
+      const env = { id: 'c', object: 'chat.completion.chunk', model: 'm' }
+      const call = (part: string, first: boolean) => ({ index: 0, ...first ? { id: 't', type: 'custom' } : {}, custom: { ...first ? { name: 'bash' } : {}, input: part } })
+      return {
+        sse: [
+          // Ends inside a held placeholder prefix, so the finishing chunk carries the tail.
+          ...sse(chunk(`${line(entry)} ${id(entry, 'KEY')}`.slice(0, -2), 3).map((part, i) => [undefined, { ...env, choices: [{ index: 0, delta: { tool_calls: [call(part, i === 0)] }, finish_reason: null }] }])),
+          ...sse([[undefined, { ...env, choices: [{ index: 0, delta: {}, finish_reason: 'tool_calls' }] }], [undefined, '[DONE]']]),
+        ],
+      }
+    }
+    const text = await (await post('/v1/chat/completions', { model: 'm', stream: true, messages: [userRequest] })).text()
+    const calls = events(text).flatMap(event => event.choices[0].delta.tool_calls ?? [])
+    expect(calls.every((call: any) => call.function === undefined)).toBe(true)
+    const input = calls.map((call: any) => call.custom.input).join('')
+    expect(input.slice(0, input.lastIndexOf(' '))).toMatch(DEFAULT_KEPT)
+    expect(input).toMatch(/ ⟦KEY_\d*$/)
+  })
+
+  it('looks up a per-tool override by trimmed, case-folded name', async () => {
+    reply = entry => ({ json: { choices: [{ index: 0, message: { role: 'assistant', tool_calls: ['Git_Commit', ' git_commit '].map((name, i) => ({ id: `t${i}`, type: 'function', function: { name, arguments: command(entry) } })) } }] } })
+    const body = await (await post('/v1/chat/completions', { model: 'm', messages: [userRequest] })).json() as any
+    for (const call of body.choices[0].message.tool_calls) {
+      expect(JSON.parse(call.function.arguments).command).toMatch(new RegExp(`^curl -d ⟦KEY_\\d+⟧ -F to=${EMAIL.replaceAll('.', '\\.')} -F f=@⟦PATH_\\d+⟧/notes\\.md$`))
+    }
+  })
+
+  it('applies the default policy to Anthropic input_json_delta events without a content_block_start', async () => {
+    reply = entry => ({
+      sse: sse([
+        ['message_start', { type: 'message_start', message: { id: 'm', role: 'assistant', content: [] } }],
+        // Ends inside a held placeholder prefix, so the stop event's tail must be tool input too.
+        ...chunk(`${command(entry)} ${id(entry, 'KEY')}`.slice(0, -2), 2).map((part): [string, unknown] => ['content_block_delta', { type: 'content_block_delta', index: 0, delta: { type: 'input_json_delta', partial_json: part } }]),
+        ['content_block_stop', { type: 'content_block_stop', index: 0 }],
+        ['message_stop', { type: 'message_stop' }],
+      ]),
+    })
+    const text = await (await post('/v1/messages', { model: 'c', max_tokens: 1, stream: true, messages: [userRequest] }, { 'x-api-key': 'k' })).text()
+    const deltas = events(text).filter(e => e.type === 'content_block_delta').map(e => e.delta)
+    expect(deltas.every(delta => delta.type === 'input_json_delta')).toBe(true)
+    const partial = deltas.map(delta => delta.partial_json).join('')
+    expect(JSON.parse(partial.slice(0, partial.lastIndexOf(' '))).command).toMatch(DEFAULT_KEPT)
+  })
 })
 
 describe('refusals and screening', () => {

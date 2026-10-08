@@ -93,6 +93,11 @@ describe('settings that fail loud', () => {
     expect(() => loadConfig(configFile({ toolRestore: { tools: { bash: 7 } } }), {})).toThrow('toolRestore.tools.bash must be an array of categories or "*"')
     expect(() => loadConfig(configFile({ toolRestore: { allow: ['EMAIL'] } }), {})).toThrow('toolRestore: unknown key "allow"')
   })
+
+  it('keys per-tool overrides by trimmed, lower-cased name and refuses two names for one tool', () => {
+    expect(loadConfig(configFile({ toolRestore: { tools: { ' Git_Commit ': ['EMAIL'] } } }), {}).toolRestore.tools).toEqual(new Map([['git_commit', ['EMAIL']]]))
+    expect(() => loadConfig(configFile({ toolRestore: { tools: { bash: [], Bash: '*' } } }), {})).toThrow('toolRestore.tools: "Bash" names a tool listed before')
+  })
 })
 
 describe('requests', () => {

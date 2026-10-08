@@ -24,7 +24,7 @@ import type { PlaceholderEvent, PlaceholderOutcome, RedactionDetector, Redaction
 import { NameModelDetector, NameModelError, containsStandingAlone, isSearchedValue } from '../core/model/detector.ts'
 import type { NameModel } from '../core/model/name-model.ts'
 import { NAME_MODEL_CATEGORIES } from '../core/model/config.ts'
-import { isLoopbackHost } from './config.ts'
+import { isLoopbackHost, toolKey } from './config.ts'
 import type { ProxyConfig, ToolRestorePolicy } from './config.ts'
 
 /** Which wire API a route speaks. */
@@ -409,7 +409,7 @@ interface Restoring {
  * @returns a test of one placeholder identity.
  */
 function restoresInto(policy: ToolRestorePolicy, tool: unknown): (id: RedactionId) => boolean {
-  const allowed = (typeof tool === 'string' ? policy.tools.get(tool) : undefined) ?? policy.categories
+  const allowed = (typeof tool === 'string' ? policy.tools.get(toolKey(tool)) : undefined) ?? policy.categories
   return id => allowed === '*' || allowed.includes(categoryOf(id))
 }
 
@@ -481,16 +481,28 @@ function restoreString(text: string, ctx: Restoring, options: StreamRestoreOptio
   return out
 }
 
+/** Keys holding a tool call's own input, whose JSON pointers are logged relative to it. */
+const TOOL_INPUT = new Set(['arguments', 'input'])
+
+/** Responses events about a tool call's input: `response.function_call_arguments.delta`, `response.custom_tool_call_input.done`, and the like. */
+const TOOL_CALL_EVENT = /^response\..*_call_/
+
 /**
- * Whether `record[key]` holds tool-call arguments: `arguments` (Chat, Responses,
- * and their events), or the `input` of an Anthropic `*tool_use` block or a
- * Responses custom tool call.
+ * The tool call a response object holds, with its tool's name: a Responses
+ * output item whose type ends in `_call` (function, custom, shell, computer,
+ * patch, MCP, and any later kind), named by its type when it has no name; a
+ * Responses event about one ({@link TOOL_CALL_EVENT}); an
+ * Anthropic `*tool_use` block; or a Chat custom call's `custom` object.
  * @param record - a response object.
- * @param key - one of its keys.
- * @returns whether the value is tool-call arguments.
+ * @param ctx - the request's restoring context, for tool names a stream announced.
+ * @returns the object every string of which is tool input, or `undefined`.
  */
-function holdsToolArguments(record: Json, key: string): boolean {
-  return key === 'arguments' || (key === 'input' && /tool_use$|custom_tool_call/.test(String(record.type ?? '')))
+function toolCallOf(record: Json, ctx: Restoring): { call: Json; tool: unknown } | undefined {
+  const type = String(record.type ?? '')
+  if (/_call$|tool_use$/.test(type)) return { call: record, tool: record.name ?? type }
+  if (TOOL_CALL_EVENT.test(type)) return { call: record, tool: ctx.toolNames.get(record.item_id) }
+  if (type === 'custom' && record.custom !== null && typeof record.custom === 'object') return { call: record.custom, tool: record.custom.name }
+  return undefined
 }
 
 /**
@@ -528,14 +540,32 @@ function restoreDeep(value: unknown, ctx: Restoring, key = ''): unknown {
   }
   if (value !== null && typeof value === 'object') {
     const record = value as Json
+    const found = toolCallOf(record, ctx)
+    if (found !== undefined) {
+      restoreToolCall(found.call, ctx, found.tool)
+      return value
+    }
     for (const [name, item] of Object.entries(record)) {
       if (SKIP_RESTORE.has(name)) continue
-      record[name] = holdsToolArguments(record, name)
-        ? restoreToolArguments(item, ctx, record.name ?? ctx.toolNames.get(record.item_id), JSON_TEXT.has(name))
+      // Chat `function` calls and the legacy `function_call` carry their arguments under this key.
+      record[name] = name === 'arguments'
+        ? restoreToolArguments(item, ctx, record.name ?? ctx.toolNames.get(record.item_id), true)
         : restoreDeep(item, ctx, name)
     }
   }
   return value
+}
+
+/**
+ * Restore every string of one tool call in place through the tool restore policy.
+ * @param call - the tool call, as {@link toolCallOf} finds it.
+ * @param ctx - the request's restoring context.
+ * @param tool - the tool's name, if known.
+ */
+function restoreToolCall(call: Json, ctx: Restoring, tool: unknown): void {
+  for (const [name, item] of Object.entries(call)) {
+    if (!SKIP_RESTORE.has(name)) call[name] = restoreToolArguments(item, ctx, tool, JSON_TEXT.has(name), TOOL_INPUT.has(name) ? [] : [name])
+  }
 }
 
 /** One parsed SSE event: its raw non-data lines and its data payload. */
@@ -622,6 +652,8 @@ type Json = Record<string, any>
 function sseTransformer(api: Api, ctx: Restoring, onResponseId: (id: string) => void) {
   const r = restorers(ctx)
   const toolBlocks = new Set<string>()
+  /** Chat restorer keys of custom tool calls, whose held tail belongs in `custom.input`. */
+  const customCalls = new Set<string>()
   return (lines: string[], event: Json): string => {
     let before = ''
     if (api === 'chat') {
@@ -632,8 +664,13 @@ function sseTransformer(api: Api, ctx: Restoring, onResponseId: (id: string) => 
         if (typeof delta.reasoning_content === 'string') delta.reasoning_content = r.push(`${at}reasoning`, delta.reasoning_content)
         for (const call of (delta.tool_calls ?? []) as Json[]) {
           const key = `${at}tool:${call.index}`
-          if (typeof call.function?.name === 'string') ctx.toolNames.set(key, call.function.name)
+          const name = call.function?.name ?? call.custom?.name
+          if (typeof name === 'string') ctx.toolNames.set(key, name)
           if (typeof call.function?.arguments === 'string') call.function.arguments = r.push(key, call.function.arguments, ctx.toolOptions(ctx.toolNames.get(key), true))
+          if (typeof call.custom?.input === 'string') {
+            customCalls.add(key)
+            call.custom.input = r.push(key, call.custom.input, ctx.toolOptions(ctx.toolNames.get(key), false))
+          }
         }
         if (choice.finish_reason == null) continue
         // The finishing chunk may carry text of its own, so a held tail is appended to it, not sent ahead.
@@ -642,10 +679,11 @@ function sseTransformer(api: Api, ctx: Restoring, onResponseId: (id: string) => 
           const field = key.slice(at.length)
           if (field.startsWith('tool:')) {
             const index = Number(field.slice(5))
+            const [kind, input] = customCalls.has(key) ? ['custom', 'input'] : ['function', 'arguments']
             const calls = (delta.tool_calls ??= []) as Json[]
             const call = calls.find(item => item.index === index)
-            if (call === undefined) calls.push({ index, function: { arguments: text } })
-            else call.function = { ...call.function, arguments: (call.function?.arguments ?? '') + text }
+            if (call === undefined) calls.push({ index, [kind]: { [input]: text } })
+            else call[kind] = { ...call[kind], [input]: (call[kind]?.[input] ?? '') + text }
           } else {
             const name = field === 'content' ? 'content' : 'reasoning_content'
             delta[name] = (delta[name] ?? '') + text
@@ -672,7 +710,8 @@ function sseTransformer(api: Api, ctx: Restoring, onResponseId: (id: string) => 
         return formatEvent(lines, event)
       }
       if (event.type === 'content_block_delta' && event.delta?.type === 'input_json_delta') {
-        event.delta.partial_json = r.push(at, event.delta.partial_json, { json: true })
+        toolBlocks.add(at)
+        event.delta.partial_json = r.push(at, event.delta.partial_json, ctx.toolOptions(undefined, true))
         return formatEvent(lines, event)
       }
       if (event.type === 'content_block_delta') return formatEvent(lines, event)
@@ -686,10 +725,10 @@ function sseTransformer(api: Api, ctx: Restoring, onResponseId: (id: string) => 
     }
     // Responses
     const type = String(event.type ?? '')
-    if (type === 'response.output_item.added' && typeof event.item?.id === 'string' && typeof event.item.name === 'string') ctx.toolNames.set(event.item.id, event.item.name)
+    if (type === 'response.output_item.added' && typeof event.item?.id === 'string') ctx.toolNames.set(event.item.id, event.item.name ?? event.item.type)
     const deltaKey = `${event.item_id}:${event.content_index ?? event.summary_index ?? ''}:${type.replace(/\.(delta|done)$/, '')}`
-    const json = type.startsWith('response.function_call_arguments.')
-    const tool = json || type.startsWith('response.custom_tool_call_input.')
+    const tool = TOOL_CALL_EVENT.test(type)
+    const json = tool && type.includes('_arguments.')
     if (type.endsWith('.delta') && typeof event.delta === 'string') {
       event.delta = r.push(deltaKey, event.delta, tool ? ctx.toolOptions(ctx.toolNames.get(event.item_id), json) : {})
       return formatEvent(lines, event)

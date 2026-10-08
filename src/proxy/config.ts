@@ -26,8 +26,17 @@ export type RestoredCategories = readonly string[] | '*'
 export interface ToolRestorePolicy {
   /** Categories restored for a tool `tools` does not name; {@link DEFAULT_TOOL_RESTORE_CATEGORIES} by default. */
   categories: RestoredCategories
-  /** Categories by exact tool name; each replaces `categories` for that tool. */
+  /** Categories by tool name as {@link toolKey} writes it; each replaces `categories` for that tool. */
   tools: ReadonlyMap<string, RestoredCategories>
+}
+
+/**
+ * The key a tool's name is looked up by in {@link ToolRestorePolicy.tools}, so `Bash` and `bash ` match `bash`.
+ * @param name - a tool name from the configuration or a model reply.
+ * @returns the name trimmed and lower-cased.
+ */
+export function toolKey(name: string): string {
+  return name.trim().toLowerCase()
 }
 
 /** Categories coding work needs back in tool calls: home paths and the literals the user listed, which name identifiers in code. */
@@ -172,9 +181,14 @@ function toolRestore(value: unknown, envCategories: string | undefined): ToolRes
   const [unknown] = Object.keys(rest)
   if (unknown !== undefined) throw new Error(`toolRestore: unknown key "${unknown}"`)
   if (tools === null || typeof tools !== 'object' || Array.isArray(tools)) throw new Error('toolRestore.tools must be an object of tool names')
+  const byTool = new Map<string, RestoredCategories>()
+  for (const [tool, list] of Object.entries(tools)) {
+    if (byTool.has(toolKey(tool))) throw new Error(`toolRestore.tools: ${JSON.stringify(tool)} names a tool listed before; names match trimmed and in any case`)
+    byTool.set(toolKey(tool), restoredCategories(list, `toolRestore.tools.${tool}`))
+  }
   return {
     categories: restoredCategories(envCategories ?? categories ?? DEFAULT_TOOL_RESTORE_CATEGORIES, 'toolRestore.categories'),
-    tools: new Map(Object.entries(tools).map(([tool, list]) => [tool, restoredCategories(list, `toolRestore.tools.${tool}`)])),
+    tools: byTool,
   }
 }
 
