@@ -1134,7 +1134,10 @@ export function createProxyServer(
     if (!anthropic && config.openaiApiKey !== undefined && headers.authorization === undefined) headers.authorization = `Bearer ${config.openaiApiKey}`
     const client = clientScope(headers)
 
-    const masked = api === undefined ? undefined : await maskBody(body, stats, client)
+    const masked = api === undefined ? undefined : await maskBody(body, stats, client).catch((error: unknown) => {
+      // The body's recursive walks overflow the call stack on nesting that deep.
+      throw error instanceof RangeError ? new Refusal(400, 'request body is nested too deeply to mask; it was not forwarded') : error
+    })
     const outgoing = masked?.outgoing
     if (outgoing !== undefined && config.debugMasked) log(`masked ${path}: ${outgoing}`)
 

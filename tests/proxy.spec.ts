@@ -1327,4 +1327,12 @@ describe('upstream failures', () => {
     reply = () => ({ status: 304 })
     expect((await fetch(`${base}/v1/models`, { headers: { authorization: 'Bearer k' } })).status).toBe(304)
   })
+
+  it('refuses a body nested too deeply to mask, without forwarding it', async () => {
+    const depth = 200_000
+    const res = await fetch(`${base}/v1/chat/completions`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: `{"model":"m","messages":${'['.repeat(depth)}${']'.repeat(depth)}}` })
+    expect(res.status).toBe(400)
+    expect(await res.text()).toContain('nested too deeply')
+    expect(seen).toHaveLength(0)
+  })
 })

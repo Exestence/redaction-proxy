@@ -212,6 +212,7 @@ flowchart TD
 | 狀態碼 | 何時 | 訊息內容 |
 | --- | --- | --- |
 | 400 | 遮罩路由的請求本文不是 JSON。 | `request body is not JSON` |
+| 400 | 遮罩路由的請求本文巢狀太深，遞迴走訪會耗盡呼叫堆疊（約數千層以上）。不轉送。 | 固定訊息 |
 | 403 | 帶有 `Origin`，但它既不是本機的 `http(s)` 來源，也不在 `allowedOrigins` 中（網頁發出的請求，含 `Origin: null`）；或未設 `authToken` 且 `Host` 不是本機名稱（`localhost`、`127.0.0.0/8`、`[::1]`；DNS rebinding）。在任何路由檢查之前。 | 固定訊息 |
 | 401 | 設了 `authToken`，但請求沒帶 `x-redaction-proxy-token`，或值不符。以 SHA-256 摘要做固定時間比較。帶正確權杖時不檢查 `Host`。 | 固定訊息 |
 | 204 | 允許的來源發出的 CORS 預檢（`OPTIONS` 帶 `Access-Control-Request-Method`）。不需權杖，不轉送。 | 無本文 |
