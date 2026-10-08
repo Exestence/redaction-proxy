@@ -634,6 +634,16 @@ describe('state kept per client credential', () => {
     }
   })
 
+  it('never refuses a remembered value whose occurrence another detection splits, nor the same value detected earlier in the request', async () => {
+    reply = () => ({ json: { choices: [] } })
+    const client = { authorization: 'Bearer client-split' }
+    const split = { role: 'user', content: 'call pw-0912345678 today; the pw-reset flow is broken' }
+    await post('/v1/chat/completions', { model: 'm', messages: [{ role: 'user', content: 'password: pw-0912345678' }] }, client)
+    expect((await post('/v1/chat/completions', { model: 'm', messages: [split] }, client)).status).toBe(200)
+    expect(seen[1]!.raw).not.toContain('0912345678')
+    expect((await post('/v1/chat/completions', { model: 'm', messages: [{ role: 'user', content: 'password: pw-0912345678' }, split] })).status).toBe(200)
+    expect(seen[2]!.raw).not.toContain('0912345678')
+  })
 
   it('keeps two credentials apart when one is the other\'s JSON-escaped spelling', async () => {
     const client = { authorization: 'Bearer client-backslash' }

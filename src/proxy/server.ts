@@ -1067,15 +1067,28 @@ export function createProxyServer(
       const plain = escaped.get(original) ?? original
       return !detected.has(plain) && (known?.has(plain) === true || rememberedKeys.has(foldAsciiCase(plain)))
     }
+    // A value repeated where another detection splits it binds each uncovered part on its own (`pw-` of `pw-0912345678`, a phone number inside); such a part is never refused.
+    const values = [...detected, ...known?.keys() ?? [], ...escaped.keys()]
+    const isPart = (text: string, start: number, end: number): boolean => {
+      const part = text.slice(start, end)
+      return !detected.has(part) && values.some(value => {
+        if (value.length <= part.length) return false
+        for (let at = value.indexOf(part); at >= 0 && at <= start; at = value.indexOf(part, at + 1)) {
+          if (text.startsWith(value, start - at)) return true
+        }
+        return false
+      })
+    }
     const modelValues = new Set<string>()
     const bound = new Map<string, string>()
     const clientBound = new Set<RedactionId>()
     for (const span of result.applied) {
       const category = categoryOf(span.id)
-      const original = (all[span.seq] as string).slice(span.start, span.end)
-      if (clientTexts.has(all[span.seq] as string)) clientBound.add(span.id)
+      const text = all[span.seq] as string
+      const original = text.slice(span.start, span.end)
+      if (clientTexts.has(text)) clientBound.add(span.id)
       if (span.seq >= priorTexts.length) stats.masked[category] = (stats.masked[category] ?? 0) + 1
-      if (onlyRemembered(original)) continue
+      if (onlyRemembered(original) || isPart(text, span.start, span.end)) continue
       bound.set(original, category)
       if (MODEL_CATEGORIES.has(category)) modelValues.add(original)
     }
