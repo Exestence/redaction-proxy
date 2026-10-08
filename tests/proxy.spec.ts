@@ -1131,10 +1131,24 @@ describe('refusals and screening', () => {
     expect(seen).toHaveLength(0)
   })
 
-  it('refuses a value that ends inside a longer overlapping value', async () => {
-    await start({ redaction: { terms: ['ab', 'xabc'] } })
+  it('counts a configured term as a leak only where it stands alone, in any ASCII case', async () => {
+    await start({ redaction: { terms: ['Hsin', 'Lin'] } })
     try {
-      const res = await post('/v1/chat/completions', { model: 'm', metadata: { tag: 'xab' }, messages: [{ role: 'user', content: 'ab and xabc' }] })
+      const send = (metadata: Record<string, string>) => post('/v1/chat/completions', { model: 'm', metadata, messages: [{ role: 'user', content: 'Hsin lives in Hsinchu, online' }] })
+      const res = await send({ note: 'Hsinchu, Linux' })
+      expect(res.status).toBe(200)
+      expect(seen[0]!.body.messages[0].content).toMatch(/^⟦TERM_\d+⟧ lives in /)
+      expect(seen[0]!.body.metadata.note).toBe('Hsinchu, Linux')
+      expect((await send({ note: 'met HSIN' })).status).toBe(422)
+    } finally {
+      await start()
+    }
+  })
+
+  it('refuses a value that ends inside a longer overlapping value', async () => {
+    await start({ redaction: { terms: ['ab', '-abc'] } })
+    try {
+      const res = await post('/v1/chat/completions', { model: 'm', metadata: { tag: '-ab' }, messages: [{ role: 'user', content: 'ab and -abc' }] })
       expect(res.status).toBe(422)
       expect(seen).toHaveLength(0)
     } finally {
