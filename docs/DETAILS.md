@@ -354,7 +354,7 @@ URL 內的佔位符不論類別一律保持原樣；回覆文字（含 reasoning
 POST /v1/chat/completions -> 200 masked 3 (EMAIL 1, TWID 1, PATH 1) restored 3 unknown 0 7ms
 ```
 
-工具呼叫參數中的每個已綁定佔位符另記一行：還原（`restored`）、因位於 URL 內而保留（`kept inside a URL`）或因類別不在[工具還原政策](#工具參數的還原政策)中而保留（`kept by the tool restore policy`），以及佔位符 id、工具名稱、參數的 JSON 路徑。同一行在同一個請求中只記一次（Responses 串流會把參數重送多次）。工具名稱與路徑中的鍵不合識別字格式時寫成 `<tool>`、`<key>`。有保留時（含回覆文字中 URL 內的佔位符），請求那一行多出 `kept N`。
+工具呼叫參數中的每個已綁定佔位符另記一行：還原（`restored`）、因位於 URL 內而保留（`kept inside a URL`）或因類別不在[工具還原政策](#工具參數的還原政策)中而保留（`kept by the tool restore policy`），以及佔位符 id、工具名稱（沒有名稱的 Responses `*_call` 項目寫它的 `type`）、參數的 JSON 路徑。同一行在同一個請求中只記一次（Responses 串流會把參數重送多次）。工具名稱與路徑中的鍵不合識別字格式時寫成 `<tool>`、`<key>`。有保留時（含回覆文字中 URL 內的佔位符），請求那一行多出 `kept N`。
 
 ```text
 POST /v1/messages tool arguments: kept inside a URL EMAIL_1 in web_fetch at /url
@@ -418,7 +418,7 @@ POST /v1/messages tool arguments: kept by the tool restore policy KEY_1 in bash 
 | `screen` | `REDACTION_PROXY_SCREEN` | `replace` | `replace` 或 `refuse`，見第 9 節。 |
 | `debugMasked` | `REDACTION_PROXY_DEBUG_MASKED=1` | `false` | 記錄遮罩後的請求本文。 |
 | `toolRestore.categories` | `REDACTION_PROXY_TOOL_RESTORE_CATEGORIES`（逗號分隔） | `PATH`、`TERM`、`PROJECT` | 還原進工具呼叫參數的類別，或 `"*"`（全部）；空字串代表都不還原。見[第 7 節](#工具參數的還原政策)。 |
-| `toolRestore.tools` | — | 無 | 依工具名稱完全比對的類別清單或 `"*"`，取代該工具的 `categories`。 |
+| `toolRestore.tools` | — | 無 | 依工具名稱（去掉前後空白、不分大小寫）比對的類別清單或 `"*"`，取代該工具的 `categories`。 |
 | `redaction.rules` | — | `card`、`entropy` 以外全部 | 啟用的內建規則；空陣列停用所有內建偵測。代理預設啟用 42 條：全部規則，但以 `card-strict`、`entropy-strict` 取代 `card`、`entropy`（上例即代理預設）。直接使用核心的宿主（`new RulesDetector()`）預設只有臺灣與通用的 10 條（`DEFAULT_RULE_NAMES`），見下方說明。 |
 | `redaction.terms` | — | 無 | 以 `TERM` 遮罩的字面值，例如人名。 |
 | `redaction.projectNames` | — | 無 | 以 `PROJECT` 遮罩的字面值，例如代號。 |

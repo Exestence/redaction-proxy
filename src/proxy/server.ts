@@ -380,16 +380,16 @@ function containsAnyOf(patterns: readonly string[]): (text: string) => boolean {
  * (`tel0912345678`) or upper-cased still fails closed. Keys are checked too;
  * {@link ENUM_FIELDS} are not.
  * @param body - the masked request body.
- * @param registry - bindings of the mask call.
+ * @param bound - every spelling the mask call bound, mapped to its category.
  * @param modelValues - the originals the name model bound.
  * @param known - the originals the client's earlier requests bound.
  * @throws {Refusal} 422 naming the JSON pointers with the category of what each holds, never the value.
  */
-function refuseLeaks(body: Json, registry: RedactionRegistry, modelValues: ReadonlySet<string>, known: ReadonlyMap<string, string> | undefined): void {
+function refuseLeaks(body: Json, bound: ReadonlyMap<string, string>, modelValues: ReadonlySet<string>, known: ReadonlyMap<string, string> | undefined): void {
   // A value inside a JSON-text string (`arguments`) is written JSON-escaped.
   const forms = (original: string): string[] => [original, JSON.stringify(original).slice(1, -1)]
   const words = [...modelValues].filter(isSearchedValue).flatMap(forms)
-  const holdsSubstring = containsAnyOf(registry.originals().filter(original => !modelValues.has(original)).flatMap(forms))
+  const holdsSubstring = containsAnyOf([...bound.keys()].filter(original => !modelValues.has(original)).flatMap(forms))
   const leaks = (text: string): boolean => holdsSubstring(text) || words.some(form => containsStandingAlone(text, form))
   const where: Array<[path: string, text: string]> = []
   const walk = (value: unknown, path: string, key: string): void => {
@@ -411,9 +411,8 @@ function refuseLeaks(body: Json, registry: RedactionRegistry, modelValues: Reado
     : forms(original).some(form => foldAsciiCase(text).includes(foldAsciiCase(form)))
   const describe = ([path, text]: [string, string]): string => {
     // oxlint-disable-next-line typescript/no-non-null-assertion -- `leaks` found some bound original in the text.
-    const id = registry.ids().find(candidate => holds(text, registry.original(candidate)!))!
-    // oxlint-disable-next-line typescript/no-non-null-assertion -- every listed identity is bound.
-    return `${path} (${categoryOf(id)}${known?.has(registry.original(id)!) === true ? ', remembered from an earlier request' : ''})`
+    const [original, category] = [...bound].find(([candidate]) => holds(text, candidate))!
+    return `${path} (${category}${known?.has(original) === true ? ', remembered from an earlier request' : ''})`
   }
   throw new Refusal(422, `a detected value is still unmasked at ${where.slice(0, 5).map(describe).join(', ')}; the request was not forwarded`)
 }
@@ -893,12 +892,15 @@ export function createProxyServer(
       ;(slot.parent as Record<string | number, string>)[slot.key] = masked
     })
     const modelValues = new Set<string>()
+    const bound = new Map<string, string>()
     for (const span of result.applied) {
       const category = categoryOf(span.id)
-      if (MODEL_CATEGORIES.has(category)) modelValues.add((all[span.seq] as string).slice(span.start, span.end))
+      const original = (all[span.seq] as string).slice(span.start, span.end)
+      bound.set(original, category)
+      if (MODEL_CATEGORIES.has(category)) modelValues.add(original)
       if (span.seq >= priorTexts.length) stats.masked[category] = (stats.masked[category] ?? 0) + 1
     }
-    refuseLeaks(parsed, result.registry, modelValues, known)
+    refuseLeaks(parsed, bound, modelValues, known)
     rememberOriginals(client, result.registry)
     return { outgoing: JSON.stringify(parsed), registry: result.registry, texts: all, userTexts }
   }
