@@ -218,7 +218,7 @@ flowchart TD
 | 413 | 請求本文超過 64 MiB。 | 上限 |
 | 404 | POST 到代理不遮罩的路由（例如 `/v1/embeddings`），或 GET、POST 以外的方法。 | 方法與路徑 |
 | 422 | `screen: "refuse"` 且某段文字含控制字元、U+FFFD、孤立 surrogate 或 `⟦`/`⟧`。 | JSON 路徑與字元類別 |
-| 422 | **送出前外洩檢查**：遮罩後請求的任一字串或鍵中，仍找得到某個偵測到的原始值（原樣或 JSON 跳脫形式）。規則值在任何位置、不分 ASCII 大小寫都算（`LIN@EXAMPLE.TEST` 算 `lin@example.test`）。先前請求記住的值（第 8 節）也檢查：憑證與至少 8 個字元的值同樣在任何位置都算，較短的只算完整單字。名稱模型的值：以空格分詞的文字只算完整單字（`Leeds` 裡的 `Lee` 不算），中日韓文字在任何位置都算；只有一個字的模型值不檢查。列舉欄位（`role`、`type` 等）的值像列舉值時不檢查，`metadata`、`stop` 底下與工具呼叫輸入中照常檢查，見第 8 節。 | 最多 5 個欄位路徑，各附所含值的類別，值由先前的請求記住時加註 `remembered from an earlier request` |
+| 422 | **送出前外洩檢查**：遮罩後請求的任一字串或鍵中，仍找得到這個請求偵測到的某個原始值（原樣或 JSON 跳脫形式）。規則值在任何位置、不分 ASCII 大小寫都算（`LIN@EXAMPLE.TEST` 算 `lin@example.test`）。只由先前請求記住的值（第 8 節）不檢查。名稱模型的值：以空格分詞的文字只算完整單字（`Leeds` 裡的 `Lee` 不算），中日韓文字在任何位置都算；只有一個字的模型值不檢查。列舉欄位（`role`、`type` 等）的值像列舉值時不檢查，`metadata`、`stop` 底下與工具呼叫輸入中照常檢查，見第 8 節。 | 最多 5 個欄位路徑，各附所含值的類別 |
 | 422 | 帶 `previous_response_id`，但代理沒有這個用戶端憑證的先前輸入（重啟、被擠出、從未經過代理，或屬於另一個用戶端）。 | 固定訊息 |
 | 422 | 與 `previous_response_id` 先前輸入合併後 `mask` 拋出 `RedactionError`。 | 錯誤代碼 |
 | 502 | 連不上上游。 | 網路錯誤代碼 |
@@ -328,14 +328,17 @@ URL 內的佔位符不論類別一律保持原樣；回覆文字（含 reasoning
 
 ### 已知原始值
 
-用戶端可能改寫歷史：壓縮成摘要，或丟掉較早的訊息。值若是靠上下文偵測到的（`password: Tr0ub4dor&3x` 的關鍵詞），先前回覆中還原出來的 `Tr0ub4dor&3x` 少了關鍵詞就不再被偵測，會原樣送上游。因此代理把每個請求綁定的原始值與類別，依同一個用戶端範圍存在記憶體中，之後同一範圍的請求把它們加進同值擴散，與這次偵測到的值一樣遮罩，並受外洩檢查保護。
+用戶端可能改寫歷史：壓縮成摘要，或丟掉較早的訊息。值若是靠上下文偵測到的（`password: Tr0ub4dor&3x` 的關鍵詞），先前回覆中還原出來的 `Tr0ub4dor&3x` 少了關鍵詞就不再被偵測，會原樣送上游。因此代理把每個請求偵測到的原始值與類別，依同一個用戶端範圍存在記憶體中，之後同一範圍的請求把它們加進同值擴散，在它們單獨出現的地方遮罩。保護分兩層：
 
-- **長度。** 同一個請求內，憑證（`KEY`）不論多短都擴散到它的每個出現處：`password: ab12x, again ab12x` 兩處都遮。帶到之後請求的，只有本身長度就夠擴散的值：至少 6 個可列印 ASCII 字元，或至少 2 個其他碼位。較短的值不記住，否則 `ab1` 會遮掉之後每個 `ab12` 裡的那段；所以之後的請求中，少了關鍵詞的 `ab12x` 照原樣送出。全由協定與佔位用字組成的 snake_case 值（`max_tokens`、`data_store`）也不記住，否則之後請求中同名的 JSON 鍵會被外洩檢查擋下（422）；它們只在綁定它們的請求中遮。
+- **同一個請求內。** 這次偵測到的值不論多短都擴散到它的每個出現處，並受外洩檢查保護：遮罩後仍在請求中的寫法（黏著其他字元、大寫、在不改寫的欄位中）讓請求以 422 拒絕（第 6 節）。
+- **跨請求。** 記住的值只是盡力而為的額外遮罩，從不拒絕請求。它們以同值擴散比對：作為完整單字出現時遮（憑證也找任何 ASCII 大小寫與 JSON 跳脫寫法），黏在其他文字中（`xTr0ub4dor&3xy`、`footballer` 裡記住的 `football`）、換了寫法（大寫又經 JSON 跳脫的 `P@SS\\WORD12`），或在不改寫的欄位（`metadata`）中時照原樣送出。這樣記住的 `football` 不會讓之後含 `footballer` 的請求被拒。
+- **長度。** 同一個請求內，憑證（`KEY`）不論多短都擴散到它的每個出現處：`password: ab12x, again ab12x` 兩處都遮。帶到之後請求的，只有本身長度就夠擴散的值：至少 6 個可列印 ASCII 字元，或至少 2 個其他碼位。較短的值不記住，否則 `ab1` 會遮掉之後每個 `ab12` 裡的那段；所以之後的請求中，少了關鍵詞的 `ab12x` 照原樣送出。全由協定與佔位用字組成的 snake_case 值（`max_tokens`、`data_store`）也不記住，否則之後請求中提到這個欄位名的文字都會被遮；它們只在綁定它們的請求中遮。
 - **大小寫。** 記住的憑證不分 ASCII 大小寫：之後出現的 `TR0UB4DOR&3X`、`tr0ub4dor&3x` 都遮，各有自己的佔位符。其他類別照原樣比對。
 - **容量。** 每個範圍每個類別最多 4,096 個值、最多 64 個範圍，都先進先出；請求再綁定的值移到最新端。類別各自計數，所以一次幾千個 email 的工具結果擠不掉記住的憑證。在用戶端自己寫的文字（user、system、developer 訊息的內容與文字部分，以及 Anthropic 的 `system` 與 Responses 的 `instructions`）中綁定的值另外放在每個類別各一個桶中，也是 4,096 個，所以一次幾千行 cookie 的工具結果也擠不掉使用者訊息或系統提示中的密碼；使用者自己貼上的大量同類別新值（例如 4,096 個新的 `password: …`）則會擠掉較舊的憑證，之後它的回聲照原樣送出。記憶依用戶端憑證分開且有上限，所以連得到代理的本機程式可以送大量請求（或用 64 個不同的憑證）把記住的值擠掉；這可以接受，因為代理預設只綁定本機位址，綁定其他位址時必須設 `authToken`（第 11 節）。
-- **外洩檢查。** 記住的值也受外洩檢查保護：擴散沒遮到的寫法（黏著其他字元的 `xTr0ub4dor&3xy`、`Tr0ub4dor&3x2`，或大寫又經 JSON 跳脫的 `P@SS\\WORD12`）若是憑證或至少 8 個字元長，請求以 422 拒絕。較短的其他值只在作為完整單字出現時才算，否則記住的 `Nimbus` 會讓之後每個含 `Nimbusx` 的請求被拒。憑證不論長短都這樣檢查，所以記住的 `ab1234` 出現在 `ab12345` 中時，請求會一直以 422 拒絕，直到用戶端從歷史中拿掉那段文字，或代理忘記這個值。列舉欄位（`type`、`role`、`object`、`status`、`finish_reason`、`stop_reason`、`service_tier`、`reasoning_effort`、`tool_choice`）的字串只能是 API 定義的固定值，不帶私人資料；值像列舉值（小寫英文字母開頭，只含小寫英數字與 `_`、`.`、`:`、`-`，最多 64 字元）時外洩檢查不看。否則一個被誤判並記住的 `assistant`，會讓之後每個帶 assistant 回合的請求被拒。`metadata`、`stop` 底下與工具呼叫輸入中的鍵由用戶端或工具定義，那裡同名的鍵照常檢查；工具呼叫輸入不論鍵名都遮（第 5 節），所以還原進名為 `type`、`status`、`name` 等工具參數的值，回送時會再被遮罩。物件鍵照常檢查：被誤判的 `messages`、`text` 會讓含這些鍵的請求以 422 拒絕。拒絕訊息寫出每個欄位所含值的類別，以及它是否由先前的請求記住，從不寫值本身。
+- **外洩檢查。** 列舉欄位（`type`、`role`、`object`、`status`、`finish_reason`、`stop_reason`、`service_tier`、`reasoning_effort`、`tool_choice`）的字串只能是 API 定義的固定值，不帶私人資料；值像列舉值（小寫英文字母開頭，只含小寫英數字與 `_`、`.`、`:`、`-`，最多 64 字元）時外洩檢查不看。否則一個被誤判的 `assistant`，會讓帶 assistant 回合的請求被拒。`metadata`、`stop` 底下與工具呼叫輸入中的鍵由用戶端或工具定義，那裡同名的鍵照常檢查；工具呼叫輸入不論鍵名都遮（第 5 節），所以還原進名為 `type`、`status`、`name` 等工具參數的值，回送時會再被遮罩。物件鍵照常檢查：被誤判的 `messages`、`text` 會讓含這些鍵的請求以 422 拒絕。拒絕訊息寫出每個欄位所含值的類別，從不寫值本身。
+- **存活時間。** 每個值從最後一次被偵測起保留 `knownOriginalsTtlSeconds` 秒（預設 86,400，即 24 小時；`0` 表示什麼都不記），過期的值在下次讀取該範圍的記憶時刪除。只靠記憶遮到的回聲不會延長存活時間。
 
-這些原始值留在記憶體中直到被擠出或代理重啟，不寫入磁碟。
+這些原始值留在記憶體中直到過期、被擠出或代理重啟，不寫入磁碟。
 
 ## 9. 控制字元篩檢
 
@@ -393,6 +396,7 @@ POST /v1/messages tool arguments: kept by the tool restore policy KEY_1 in bash 
   "anthropicUpstream": "https://api.anthropic.com",
   "screen": "replace",
   "debugMasked": false,
+  "knownOriginalsTtlSeconds": 86400,
   "toolRestore": {
     "categories": ["PATH", "TERM", "PROJECT"],
     "tools": { "git_commit": ["PATH", "TERM", "PROJECT", "EMAIL"] }
@@ -417,6 +421,7 @@ POST /v1/messages tool arguments: kept by the tool restore policy KEY_1 in bash 
 | `allowInsecureUpstream` | `REDACTION_PROXY_ALLOW_INSECURE_UPSTREAM=1` | `false` | 允許以明文 `http://` 連到非本機的上游。未設定時這種上游會讓啟動失敗，因為 API 金鑰會以明文傳送。 |
 | `screen` | `REDACTION_PROXY_SCREEN` | `replace` | `replace` 或 `refuse`，見第 9 節。 |
 | `debugMasked` | `REDACTION_PROXY_DEBUG_MASKED=1` | `false` | 記錄遮罩後的請求本文。 |
+| `knownOriginalsTtlSeconds` | `REDACTION_PROXY_KNOWN_ORIGINALS_TTL_SECONDS` | `86400` | 偵測到的值為之後的請求保留的秒數，從最後一次偵測起算；`0` 表示不記住。見[第 8 節](#已知原始值)。 |
 | `toolRestore.categories` | `REDACTION_PROXY_TOOL_RESTORE_CATEGORIES`（逗號分隔） | `PATH`、`TERM`、`PROJECT` | 還原進工具呼叫參數的類別，或 `"*"`（全部）；空字串代表都不還原。見[第 7 節](#工具參數的還原政策)。 |
 | `toolRestore.tools` | — | 無 | 依工具名稱（去掉前後空白、不分大小寫）比對的類別清單或 `"*"`，取代該工具的 `categories`。 |
 | `redaction.rules` | — | `card`、`entropy` 以外全部 | 啟用的內建規則；空陣列停用所有內建偵測。代理預設啟用 42 條：全部規則，但以 `card-strict`、`entropy-strict` 取代 `card`、`entropy`（上例即代理預設）。直接使用核心的宿主（`new RulesDetector()`）預設只有臺灣與通用的 10 條（`DEFAULT_RULE_NAMES`），見下方說明。 |
@@ -552,7 +557,7 @@ node scripts/fetch-name-model.mjs ~/models/nym       # 從 Hugging Face 下載�
 | 只認標準佔位符 | 模型若把 `⟦EMAIL_1⟧` 改寫成 `[EMAIL_1]`，你會原樣看到它。 |
 | 模型品質可能下降 | 需要直接操作被遮值的任務（例如把絕對路徑改成相對路徑）會變差。你會看到佔位符，不是靜默出錯。 |
 | 會改動一些字元 | 預設把控制字元換成可見字元（`␛`），把原文中的 `⟦` `⟧` 換成 `⟪` `⟫`。 |
-| 重啟會忘記接續對話與已知原始值 | Responses API 的 `previous_response_id` 依賴記憶體中最近 256 個回應；重啟或被擠出後，接續請求以 422 拒絕。已知原始值（第 8 節）重啟後也會忘記。 |
+| 重啟會忘記接續對話與已知原始值 | Responses API 的 `previous_response_id` 依賴記憶體中最近 256 個回應；重啟或被擠出後，接續請求以 422 拒絕。已知原始值（第 8 節）重啟後也會忘記，平時也在最後一次偵測 24 小時後忘記（`knownOriginalsTtlSeconds`）。 |
 | 本機預設沒有驗證 | 預設只綁定 `127.0.0.1`；沒設 `authToken` 時，你電腦上的任何程式都能使用它。網頁的請求（不允許的 `Origin`、DNS rebinding）以 403 拒絕。 |
 | 工具參數只還原允許的類別 | 回應中 URL 內的佔位符保持原樣（合法的 `https://host/⟦PATH_1⟧` 也一樣）。工具參數只還原 `toolRestore` 允許的類別（預設 `PATH`、`TERM`、`PROJECT`），需要其他值的工具拿到佔位符，可能失敗，直到使用者為它開放。允許的類別照常還原並記入日誌，所以 shell 指令等仍可能把它們送出。 |
 | 請求大小 | 本文超過 64 MiB 以 413 拒絕。 |
