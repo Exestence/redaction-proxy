@@ -966,6 +966,7 @@ export function createProxyServer(
    * Remember every {@link isRememberable} original a request detected, for the client's later requests.
    * A value only memory supplied keeps its time to live, which runs from its last detection; bound in
    * text the client wrote, it also moves into the client's bucket, so tool output cannot evict it.
+   * A credential written in another ASCII case keeps the remembered spelling's time to live.
    * @param client - the client scope.
    * @param registry - bindings of the request's mask call.
    * @param clientBound - the identities bound in text the client wrote ({@link isClientText}).
@@ -974,14 +975,25 @@ export function createProxyServer(
   const rememberOriginals = (client: string, registry: RedactionRegistry, clientBound: ReadonlySet<RedactionId>, detected: ReadonlySet<string>): void => {
     const known = knownOriginals.get(client) ?? new Map<string, Map<string, KnownOriginal>>()
     const expires = Date.now() + config.knownOriginalsTtlSeconds * 1000
+    let keys: Map<string, number> | undefined
+    const kept = (original: string, category: string): number => {
+      if (category !== 'KEY') return Math.max(0, ...[category, `client ${category}`].map(name => known.get(name)?.get(original)?.expires ?? 0))
+      if (keys === undefined) {
+        keys = new Map()
+        for (const [spelling, { expires: until }] of [...known.get('KEY') ?? [], ...known.get('client KEY') ?? []]) {
+          const folded = foldAsciiCase(spelling)
+          keys.set(folded, Math.max(keys.get(folded) ?? 0, until))
+        }
+      }
+      return keys.get(foldAsciiCase(original)) ?? 0
+    }
     for (const id of registry.ids()) {
       // oxlint-disable-next-line typescript/no-non-null-assertion -- every listed identity is bound.
       const original = registry.original(id)!
       if (!isRememberable(original)) continue
       const category = categoryOf(id)
       const fromClient = clientBound.has(id)
-      const kept = Math.max(0, ...[category, `client ${category}`].map(name => known.get(name)?.get(original)?.expires ?? 0))
-      const until = detected.has(original) ? expires : fromClient ? kept : 0
+      const until = detected.has(original) ? expires : fromClient ? kept(original, category) : 0
       if (until === 0) continue
       const name = fromClient ? `client ${category}` : category
       const bucket = known.get(name) ?? new Map<string, KnownOriginal>()
