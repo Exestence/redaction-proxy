@@ -125,10 +125,10 @@ Environment variables and every option: [technical details §12](docs/DETAILS.md
 | Email | `lin@example.test` | `⟦EMAIL_1⟧` |
 | API keys and credentials | `sk-…`, `ghp_…`, `AKIA…`, `glpat-…`, `sk_live_…`, JWT, `Bearer …`, `password=…`, `the token is …` | `⟦KEY_1⟧` |
 | Home-directory path (prefix only) | `/Users/lin/notes.md` | `⟦PATH_1⟧/notes.md` |
-| Private IP, internal host | `192.168.1.20`, `nas.local`, `git.corp` | `⟦IP_1⟧`, `⟦HOST_1⟧` |
+| Private IP, internal host | `192.168.1.20`, `100.64.1.2`, `fd12::1`, `nas.local`, `git.corp` | `⟦IP_1⟧`, `⟦HOST_1⟧` |
 | Phone numbers in national formats or after a phone word | `(415) 555-0132`, `020 7946 0958`, `Telefon: 030 12345678` | `⟦PHONE_1⟧` |
 | Card number (Luhn checked) | 13–19 digits | `⟦CARD_1⟧` |
-| Taiwan ID, mobile, business number | `A123456789`, `0912-345-678` | `⟦TWID_1⟧`, `⟦PHONE_1⟧` |
+| Taiwan ID, mobile, business number, passport and health-insurance card after their keyword | `A123456789`, `0912-345-678`, `0912.345.678`, `護照 312345678` | `⟦TWID_1⟧`, `⟦PHONE_1⟧` |
 | IDs from 10 more countries and regions, IBAN | US SSN, UK NINO, Chinese resident ID, My Number, … | `⟦NATID_1⟧`, `⟦IBAN_1⟧` |
 | Long random strings | hex or base64, 32+ characters | `⟦ENTROPY_1⟧` |
 | Words you list | `terms`, `projectNames` | `⟦TERM_1⟧`, `⟦PROJECT_1⟧` |
@@ -200,7 +200,7 @@ Where it is weak (English, proxy default):
 
 Restore, a self-check rather than a score: with rules only, restoring the masked text gave the original byte for byte in all 1,617 prompts; with the name model on, in 1,587 of 1,617 (30 were not exact).
 
-Two fixes came after this run and are not in these numbers: `card-strict` now reads regrouped, dotted, space-and-dash mixed, and line-wrapped card numbers (the proxy default masked 30.5% of English cards here against 44.1% for the core default), and the name model's restore errors are fixed: different spellings of one name (`Jordan`, `JORDAN`) now get separate placeholders, and a 2,908-prompt synthetic round-trip check went from 754 altered prompts to 0.
+Three changes came after this run and are not in these numbers: the proxy default now also masks lower-case and no-break-spaced Taiwan IDs, mobile numbers grouped by `.` or `/`, Taiwan passport and health-insurance card numbers after their keyword, email addresses with an HTML- or JSON-escaped `@`, quoted credential keys (`"密碼": "…"`, `"jwt": "…"`), and `100.64.0.0/10` and IPv6 unique local addresses; `card-strict` now reads regrouped, dotted, space-and-dash mixed, and line-wrapped card numbers (the proxy default masked 30.5% of English cards here against 44.1% for the core default), and the name model's restore errors are fixed: different spellings of one name (`Jordan`, `JORDAN`) now get separate placeholders, and a 2,908-prompt synthetic round-trip check went from 754 altered prompts to 0.
 
 Full tables: [held-out v2 results](bench/results/public-bench-held-out-v2.md). The earlier [held-out v1 run](bench/results/public-bench-held-out.md) (1,518 prompts, older rules `rules-6+intl-1`, standard spellings only) is kept for history. Method and other measurements: [technical details §18](docs/DETAILS.md#18-實測數字).
 <!-- RESULTS:END -->
@@ -208,7 +208,7 @@ Full tables: [held-out v2 results](bench/results/public-bench-held-out-v2.md). T
 ## What it does not protect
 
 - **Meaning.** The cloud still reads everything around the placeholders: `⟦PATH_1⟧/clients/acme-layoffs.md` still says a lot.
-- **Names, addresses, health details, salaries**, unless you list them in `terms` or the name model finds them.
+- **Names, addresses, health details, salaries**, unless you list them in `terms` or the name model finds them. Addresses are free text with no fixed format or keyword, so there is no address rule.
 - **Images, PDFs, audio, `url` fields, `metadata`, `stop` sequences, `name` fields (tool and participant names), signed thinking.** These are forwarded unchanged and never scanned, nor are JSON object keys: a value found in the masked text that also appears in one makes the proxy refuse the whole request with 422, but a value that appears only there is sent as is.
 - **Unusual spellings.** Some split or encoded forms slip through, such as `name @ domain` with spaces, `name at domain`, a lower-case IBAN, or a double percent-encoded value.
 - **Cursor**, or any tool that sends requests from its own servers.
