@@ -212,7 +212,7 @@ flowchart TD
 | 狀態碼 | 何時 | 訊息內容 |
 | --- | --- | --- |
 | 400 | 遮罩路由的請求本文不是 JSON。 | `request body is not JSON` |
-| 400 | 遮罩路由的請求本文巢狀太深，遞迴走訪會耗盡呼叫堆疊（約數千層以上）。不轉送。 | 固定訊息 |
+| 400 | 遮罩路由的請求本文巢狀太深，遞迴走訪會耗盡呼叫堆疊（實測陣列約 1,500 層、物件約 2,000 層以上，依 Node 版本與堆疊大小而定）。不轉送。 | 固定訊息 |
 | 403 | 帶有 `Origin`，但它既不是本機的 `http(s)` 來源，也不在 `allowedOrigins` 中（網頁發出的請求，含 `Origin: null`）；或未設 `authToken` 且 `Host` 不是本機名稱（`localhost`、`127.0.0.0/8`、`[::1]`；DNS rebinding）。在任何路由檢查之前。 | 固定訊息 |
 | 401 | 設了 `authToken`，但請求沒帶 `x-redaction-proxy-token`，或值不符。以 SHA-256 摘要做固定時間比較。帶正確權杖時不檢查 `Host`。 | 固定訊息 |
 | 204 | 允許的來源發出的 CORS 預檢（`OPTIONS` 帶 `Access-Control-Request-Method`）。不需權杖，不轉送。 | 無本文 |
@@ -277,7 +277,7 @@ sequenceDiagram
 
 上游串流在欄位結束前就停止（沒有 `finish_reason`、`content_block_stop` 或 `.done`）時，仍扣住的殘留以同樣的合成 delta 在 `[DONE]` 之前或串流最後送出。
 
-其他事件（以及非串流的 JSON 回應）以 `restoreDeep` 整份還原。上游送回非 JSON 本文（例如 HTML 錯誤頁）時原樣轉送。SSE 解析會把 `\r\n` 正規化為 `\n`，無法解析的事件原樣轉送；`choices`、`tool_calls` 不是陣列時，以及其中不是物件的項目，也原樣轉送。
+其他事件（以及非串流的 JSON 回應）以 `restoreDeep` 整份還原。上游送回非 JSON 本文（例如 HTML 錯誤頁）時原樣轉送。SSE 解析會把 `\r\n` 正規化為 `\n`，無法解析的事件原樣轉送；`choices`、`tool_calls` 不是陣列時，以及其中不是物件的項目，也原樣轉送；唯一例外是收尾事件的 `tool_calls` 不是陣列、而還有扣住的工具參數尾段時，該欄位換成只含那段尾段的陣列。
 
 還原只認標準的 `⟦CATEGORY_n⟧`。模型若改寫成 `EMAIL_1`、`[EMAIL_1]`、`〚EMAIL_1〛`，用戶端會原樣看到。還原只填佔位符，從不把原始值送往上游。
 

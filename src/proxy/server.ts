@@ -836,6 +836,15 @@ function records(value: unknown): Json[] {
 }
 
 /**
+ * An upstream value as an object to merge a flushed tail into.
+ * @param value - a parsed upstream value.
+ * @returns the value when it is a non-array object, else an empty object.
+ */
+function asRecord(value: unknown): Json {
+  return value !== null && typeof value === 'object' && !Array.isArray(value) ? value as Json : {}
+}
+
+/**
  * Build the SSE transformer for one API. It restores text deltas through
  * keyed stream restorers, writes any held tail as a synthetic delta just
  * before the event that closes its field, and restores every other event whole.
@@ -866,12 +875,13 @@ function sseTransformer(api: Api, ctx: Restoring, onResponseId: (id: string) => 
     if (field.startsWith('tool:')) {
       const index = Number(field.slice(5))
       const [kind, input] = customCalls.has(key) ? ['custom', 'input'] : ['function', 'arguments']
-      const calls = (delta.tool_calls ??= []) as Json[]
-      const call = calls.find(item => item.index === index)
-      if (call === undefined) calls.push({ index, [kind]: { [input]: text } })
-      else call[kind] = { ...call[kind], [input]: (call[kind]?.[input] ?? '') + text }
+      // A malformed `tool_calls` on the finishing chunk cannot carry the tail, so the tail replaces it.
+      if (!Array.isArray(delta.tool_calls)) delta.tool_calls = []
+      const call = records(delta.tool_calls).find(item => item.index === index)
+      if (call === undefined) delta.tool_calls.push({ index, [kind]: { [input]: text } })
+      else call[kind] = { ...asRecord(call[kind]), [input]: (asRecord(call[kind])[input] ?? '') + text }
     } else if (field === 'function_call') {
-      delta.function_call = { ...delta.function_call, arguments: (delta.function_call?.arguments ?? '') + text }
+      delta.function_call = { ...asRecord(delta.function_call), arguments: (asRecord(delta.function_call).arguments ?? '') + text }
     } else {
       delta[field] = (delta[field] ?? '') + text
     }
