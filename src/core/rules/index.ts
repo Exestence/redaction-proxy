@@ -86,7 +86,7 @@ export interface RulesRedactionConfig {
 }
 
 /** Detector version recorded with every scan; changes whenever a rule's matches change. */
-export const DETECTOR_VERSION = 'rules-6'
+export const DETECTOR_VERSION = 'rules-7'
 
 /** Shared addresses that are public by construction and carry no private value. */
 export const DEFAULT_ALLOWLIST: readonly string[] = ['git@github.com', 'noreply@github.com']
@@ -94,7 +94,7 @@ export const DEFAULT_ALLOWLIST: readonly string[] = ['git@github.com', 'noreply@
 /**
  * Rules enabled when the configuration names none. Enabling any other rule
  * changes the detector version and so the policy digest; this default keeps
- * both equal to those of detectors built before the international rules.
+ * both free of the international and extended rule versions.
  */
 export const DEFAULT_RULE_NAMES: readonly DefaultRuleName[] = [
   'email', 'user-path', 'api-key', 'tw-national-id', 'phone', 'tax-id', 'card', 'ip', 'host', 'entropy',

@@ -105,6 +105,13 @@ const mustMask = [
   '密碼：hunter2',
   'ssh://alice:s3cr3t@buildbox/repo',
   'hooks.slack.com/services/T0123456789/B0123456789/abcdefghij',
+  // Weak passwords are still passwords.
+  'password: admin',
+  'password: changeme',
+  'DB_PASSWORD=changeme',
+  'password: 123456',
+  'password: Tr0ub4dor&3',
+  '{"password":"xxx123"}',
 ]
 
 // Source and prose a credential rule must leave alone.
@@ -183,6 +190,14 @@ const mustKeep = [
   'password=a.b(x)[',
   'password=a.b(x)<',
   'password=a.b(x){',
+  // Schema words, protocol roles and content types, type names, and masked spellings.
+  ...[
+    'required', 'Optional', 'example', 'placeholder', 'none', 'None', 'text', 'index', 'system', 'user',
+    'assistant', 'tool', 'image', 'messages', 'content', 'str', 'int', 'float', '***', '********', 'xxx', 'XXXXXXXX', '<redacted>',
+    '[REDACTED]', 'your-password', 'your_password', '...',
+  ].flatMap(value => [
+    `password: ${value}`, `{"password":"${value}"}`, `PASSWORD=${value}`, `Authorization: ${value}`, `密碼：${value}`,
+  ]),
 ]
 
 describe('credential rule', () => {

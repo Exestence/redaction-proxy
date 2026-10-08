@@ -15,7 +15,7 @@ import {
 import type { RedactionRuleName } from '../src/core/index.ts'
 
 /** Policy digest of the default rules, which hosts persist with their span index. */
-const DEFAULT_DIGEST = 'sha256:49cba7ce69b8961ec8f8e056240beb401c8b8eba1d2f98a4a4e16460712239ff'
+const DEFAULT_DIGEST = 'sha256:52d3676648dbe5c2e97bd8d115f76122ca8f3395c57aa03008ef3118f9f37fe2'
 
 async function maskWith(rules: RedactionRuleName[], text: string): Promise<string> {
   const result = await mask(new RulesDetector({ rules }), [{ seq: 1, path: '', text }], emptyRedactionIndex())

@@ -33,7 +33,7 @@ const PREFIX_TOKENS_AFTER_ESCAPE = PREFIX_TOKENS.map(pattern => afterHighEscape(
 // A Slack incoming-webhook URL is itself the credential.
 const SLACK_WEBHOOK = /hooks\.slack\.com\/services\/[A-Za-z0-9][A-Za-z0-9/_-]{9,120}/g
 const BEARER = /(?<![a-z0-9])bearer[ \t]+([a-z0-9._~+/=-]{8,256})/gi
-const AUTHORIZATION = /(?<![a-z0-9])authorization[ \t]*[:=][ \t]*([^\r\n]{4,256})/gi
+const AUTHORIZATION = /(?<![a-z0-9])authorization[ \t]*[:=][ \t]*([^\s][^\r\n]{3,255})/gi
 const COOKIE = /^[ \t]*(?:set-)?cookie[ \t]*:[ \t]*([^\r\n]{1,256})/gim
 const COOKIE_PAIR = /^[^=\s;]+=[^;]+/
 /** Credential words that do not survive the Latin identifier scan, as pattern alternatives. */
@@ -96,7 +96,7 @@ const UPPER_NAME_WORDS = new Set(['key', 'token', 'secret'])
 const TYPE_WORDS = new Set([
   'string', 'number', 'boolean', 'any', 'unknown', 'never', 'void', 'null', 'undefined',
   'object', 'symbol', 'bigint', 'true', 'false', 'Buffer', 'Date', 'RegExp', 'Promise',
-  'Error', 'Array', 'Map', 'Set', 'WeakMap', 'WeakSet',
+  'Error', 'Array', 'Map', 'Set', 'WeakMap', 'WeakSet', 'str', 'int', 'float', 'bool', 'bytes',
 ])
 
 const CODE_ROOTS = new Set([
@@ -126,6 +126,22 @@ const RESERVED_VALUE_WORDS = new Set([
   'buffer', 'stream', 'handler', 'callback', 'next', 'done', 'name', 'url', 'path',
   'file', 'entry', 'entries', 'item', 'items', 'record', 'schema', 'state',
 ])
+
+/**
+ * Words a credential field holds in a schema, a form, or an example rather
+ * than a credential: schema words, chat-protocol field names, roles and
+ * content types, and masked spellings. A protocol word bound as a credential
+ * would also match the field names, `role`, and `type` of every later
+ * request. Weak real passwords such as `admin` and `changeme` are not here.
+ */
+const PLACEHOLDER_VALUE_WORDS = new Set([
+  'required', 'optional', 'example', 'placeholder', 'redacted', 'masked', 'hidden', 'none', 'nil',
+  'text', 'index', 'system', 'user', 'assistant', 'developer', 'tool', 'tools', 'image', 'messages',
+  'content', 'role', 'model',
+])
+
+/** A masked or placeholder spelling: `***`, `xxx`, `<redacted>`, `[hidden]`, `your-password`. */
+const MASKED_VALUE = /^(?:\*+|x+|<[A-Za-z _-]+>|\[[A-Za-z _-]+\]|your[-_][A-Za-z_-]+)$/i
 
 /**
  * Words that describe an attribute of a credential rather than the credential:
@@ -262,7 +278,8 @@ export function isCodeShape(raw: string, options: CodeShapeOptions = {}): boolea
   const value = raw.slice(0, trimValueEnd(raw))
   if (value.length === 0) return true
   if (TYPE_WORDS.has(value)) return true
-  if (RESERVED_VALUE_WORDS.has(value.toLowerCase()) && /^[A-Za-z]+$/.test(value)) return true
+  if (/^[A-Za-z]+$/.test(value) && (RESERVED_VALUE_WORDS.has(value.toLowerCase()) || PLACEHOLDER_VALUE_WORDS.has(value.toLowerCase()))) return true
+  if (MASKED_VALUE.test(value)) return true
   if (/^\$\{[^{}]*\}$/.test(value)) return true
   // A call with arguments can carry a literal secret, so only an empty argument list counts.
   if (/^[A-Za-z_$][\w$]*(?:\??\.[A-Za-z_$][\w$]*)*\(\s*\)$/.test(value)) return true
