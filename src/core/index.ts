@@ -24,11 +24,12 @@ export {
 } from './engine.ts'
 export type { RedactionErrorCode } from './engine.ts'
 export { createStreamRestorer, restoreLenient } from './restore.ts'
-export type { PlaceholderEvent, StreamRestoreOptions, StreamRestorer } from './restore.ts'
+export type { PlaceholderEvent, PlaceholderOutcome, StreamRestoreOptions, StreamRestorer } from './restore.ts'
 export {
   DEFAULT_ALLOWLIST,
   DEFAULT_RULE_NAMES,
   DETECTOR_VERSION,
+  RULE_CATEGORIES,
   RULE_NAMES,
   RulesDetector,
   isTaiwanBusinessNumber,

@@ -22,7 +22,7 @@ The prompt asks the model to echo one synthetic line (e-mail, Taiwan mobile numb
 
 1. the request body the service received contains none of the original values, verbatim or JSON-escaped;
 2. the prompt the service received is the client's prompt with each original replaced by a placeholder;
-3. the client's reply equals the service's reply with each of those placeholders replaced by the original it stood for. This holds whatever the model chose to say, streamed or not.
+3. the client's reply equals the service's reply with each of those placeholders replaced by the original it stood for. This holds whatever the model chose to say, streamed or not. The harness's proxy restores every category into tool calls (`REDACTION_PROXY_TOOL_RESTORE_CATEGORIES=*`), so the forced tool call checks the restore itself, not the default tool restore policy.
 
 A scenario is `inconclusive` when the model echoed no placeholder of the request, so restoration was not exercised. The run exits non-zero when a scenario fails or errors, or when services ran and no scenario passed; with no key set it exits 0. `pnpm test` runs the same harness against a fake upstream (`tests/real-e2e-harness.spec.ts`).
 

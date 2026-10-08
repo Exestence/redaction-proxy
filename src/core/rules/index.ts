@@ -134,6 +134,9 @@ function categoriesOf(rule: RedactionRuleName): readonly string[] {
   return isExtendedRule(rule) ? EXTENDED_RULE_CATEGORIES[rule] : DEFAULT_RULE_CATEGORIES[rule]
 }
 
+/** Every placeholder category the rules detector can report, configured literals included. */
+export const RULE_CATEGORIES: readonly string[] = [...new Set([...RULE_NAMES.flatMap(categoriesOf), 'PROJECT', 'TERM'])]
+
 /**
  * Validate one configured literal list.
  * @param values - the configured values, or `undefined` for the fallback.

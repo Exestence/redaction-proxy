@@ -50,10 +50,17 @@ describe('inside a URL', () => {
     const events: PlaceholderEvent[] = []
     restoreChunks([`{"a":[{"b":"${E}"},"https://x/${E}"],"c":{"${E}":1}}`], { json: true, keepInUrls: true, onPlaceholder: event => events.push(event) })
     expect(events).toEqual([
-      { id: 'EMAIL_1', restored: true, path: ['a', 0, 'b'] },
-      { id: 'EMAIL_1', restored: false, path: ['a', 1] },
-      { id: 'EMAIL_1', restored: true, path: ['c', undefined] },
+      { id: 'EMAIL_1', outcome: 'restored', path: ['a', 0, 'b'] },
+      { id: 'EMAIL_1', outcome: 'inUrl', path: ['a', 1] },
+      { id: 'EMAIL_1', outcome: 'restored', path: ['c', undefined] },
     ])
+  })
+
+  it('keeps a placeholder that restores refuses, wherever it sits', () => {
+    const events: PlaceholderEvent[] = []
+    const text = `to ${E}, see https://x/${E}`
+    expect(restoreChunks([...text], { keepInUrls: true, restores: () => false, onPlaceholder: event => events.push(event) })).toBe(text)
+    expect(events.map(event => event.outcome)).toEqual(['refused', 'refused'])
   })
 
   it('gives the same output for every split of a stream', () => {

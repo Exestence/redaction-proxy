@@ -32,15 +32,19 @@ export interface StreamRestoreOptions {
    * client fetches, renders, or follows would carry the original to its host.
    */
   keepInUrls?: boolean
+  /** Whether a bound placeholder may be restored; one it refuses is kept as written. Absent means every one may. */
+  restores?: (id: RedactionId) => boolean
   /** Receives each bound placeholder after it is restored or kept; never the original. */
   onPlaceholder?: (event: PlaceholderEvent) => void
 }
 
+/** What a restorer did with one bound placeholder: restored it, or kept it as written inside a URL or by `restores`. */
+export type PlaceholderOutcome = 'restored' | 'inUrl' | 'refused'
+
 /** One bound placeholder met by a restorer. */
 export interface PlaceholderEvent {
   id: RedactionId
-  /** `false` when it was kept as written because it sat inside a URL. */
-  restored: boolean
+  outcome: PlaceholderOutcome
   /** JSON pointer segments where it sat; `undefined` for a key; empty for plain text. */
   path: Array<string | number | undefined>
 }
@@ -62,7 +66,7 @@ export interface StreamRestorer {
   readonly restored: number
   /** Number of well-formed placeholders the registry does not bind. */
   readonly unknown: number
-  /** Number of bound placeholders kept as written by `keepInUrls`. */
+  /** Number of bound placeholders kept as written by `keepInUrls` or `restores`. */
   readonly kept: number
 }
 
@@ -126,13 +130,16 @@ export function createStreamRestorer(registry: RedactionRegistry, options: Strea
         }
         const id = body as RedactionId
         const original = registry.original(id)
-        const keep = original === undefined || (options.keepInUrls === true && cursor?.inUrl === true)
+        const outcome: PlaceholderOutcome = options.restores?.(id) === false ? 'refused'
+          : options.keepInUrls === true && cursor?.inUrl === true ? 'inUrl'
+          : 'restored'
+        const keep = original === undefined || outcome !== 'restored'
         if (original === undefined) unknown += 1
         else if (keep) kept += 1
         else restored += 1
         const path = cursor?.path() ?? []
         emit(keep ? held.slice(0, close + 1) : encode(original))
-        if (original !== undefined) options.onPlaceholder?.({ id, restored: !keep, path })
+        if (original !== undefined) options.onPlaceholder?.({ id, outcome, path })
         held = held.slice(close + 1)
       }
     },

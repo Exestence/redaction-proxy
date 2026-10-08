@@ -20,12 +20,12 @@ import { createHash, timingSafeEqual } from 'node:crypto'
 import { createServer } from 'node:http'
 import type { IncomingMessage, Server, ServerResponse } from 'node:http'
 import { RedactionError, RulesDetector, createStreamRestorer, emptyRedactionIndex, mask, screenText } from '../core/index.ts'
-import type { PlaceholderEvent, RedactionDetector, RedactionRegistry, StreamRestoreOptions, StreamRestorer } from '../core/index.ts'
+import type { PlaceholderEvent, PlaceholderOutcome, RedactionDetector, RedactionId, RedactionRegistry, StreamRestoreOptions, StreamRestorer } from '../core/index.ts'
 import { NameModelDetector, NameModelError, containsStandingAlone, isSearchedValue } from '../core/model/detector.ts'
 import type { NameModel } from '../core/model/name-model.ts'
 import { NAME_MODEL_CATEGORIES } from '../core/model/config.ts'
 import { isLoopbackHost } from './config.ts'
-import type { ProxyConfig } from './config.ts'
+import type { ProxyConfig, ToolRestorePolicy } from './config.ts'
 
 /** Which wire API a route speaks. */
 type Api = 'chat' | 'responses' | 'messages'
@@ -107,7 +107,7 @@ interface Stats {
   masked: Record<string, number>
   restored: number
   unknown: number
-  /** Placeholders left as written inside a URL. */
+  /** Placeholders left as written: inside a URL, or in tool arguments outside the tool restore policy. */
   kept: number
   nameModelFailed: boolean
 }
@@ -136,6 +136,13 @@ interface TrieNode {
   fail: TrieNode
   /** Whether this prefix ends with a whole pattern. */
   terminal: boolean
+}
+
+/** How a tool-argument log line describes each placeholder outcome. */
+const OUTCOME_LOG: Readonly<Record<PlaceholderOutcome, string>> = {
+  restored: 'restored',
+  inUrl: 'kept inside a URL',
+  refused: 'kept by the tool restore policy',
 }
 
 /** Original texts of one request, kept for a Responses continuation. */
@@ -385,7 +392,8 @@ interface Restoring {
   /** Tool names by Responses item id, or by Chat `choice:tool:index` key, as the stream announces them. */
   toolNames: Map<string, string>
   /**
-   * Restorer options for one tool call's arguments: every bound placeholder is logged.
+   * Restorer options for one tool call's arguments: only the tool's restored categories
+   * are restored, and every bound placeholder is logged.
    * @param tool - the tool's name, if known.
    * @param json - whether the arguments are JSON text.
    * @param base - JSON pointer segments of the string inside parsed arguments.
@@ -394,13 +402,26 @@ interface Restoring {
 }
 
 /**
+ * Which placeholders the policy restores into one tool's arguments. A tool
+ * whose name is unknown or not a string gets the default categories.
+ * @param policy - the tool restore policy.
+ * @param tool - the tool's name, if known.
+ * @returns a test of one placeholder identity.
+ */
+function restoresInto(policy: ToolRestorePolicy, tool: unknown): (id: RedactionId) => boolean {
+  const allowed = (typeof tool === 'string' ? policy.tools.get(tool) : undefined) ?? policy.categories
+  return id => allowed === '*' || allowed.includes(categoryOf(id))
+}
+
+/**
  * Build the restoring context of one request.
  * @param registry - bindings of the request's mask call.
  * @param stats - counters.
+ * @param policy - which categories are restored into tool arguments.
  * @param log - receives one line per placeholder met in tool arguments, written once per distinct line.
  * @returns the context.
  */
-function restoring(registry: RedactionRegistry, stats: Stats, log: (line: string) => void): Restoring {
+function restoring(registry: RedactionRegistry, stats: Stats, policy: ToolRestorePolicy, log: (line: string) => void): Restoring {
   const logged = new Set<string>()
   return {
     registry,
@@ -410,9 +431,10 @@ function restoring(registry: RedactionRegistry, stats: Stats, log: (line: string
       const name = typeof tool === 'string' && NAMEABLE_TOOL.test(tool) ? tool : '<tool>'
       return {
         json,
+        restores: restoresInto(policy, tool),
         onPlaceholder: (event: PlaceholderEvent) => {
           const pointer = [...base, ...event.path].map(segment => `/${pointerSegment(segment)}`).join('')
-          const line = `tool arguments: ${event.restored ? 'restored' : 'kept inside a URL'} ${event.id} in ${name}${pointer === '' ? '' : ` at ${pointer}`}`
+          const line = `tool arguments: ${OUTCOME_LOG[event.outcome]} ${event.id} in ${name}${pointer === '' ? '' : ` at ${pointer}`}`
           if (logged.has(line)) return
           logged.add(line)
           log(line)
@@ -821,7 +843,7 @@ export function createProxyServer(
       done()
       return
     }
-    const ctx = restoring(registry, stats, line => log(`${req.method} ${path} ${line}`))
+    const ctx = restoring(registry, stats, config.toolRestore, line => log(`${req.method} ${path} ${line}`))
     if (!(upstream.headers.get('content-type') ?? '').includes('text/event-stream')) {
       const text = await upstream.text()
       let payload = text
