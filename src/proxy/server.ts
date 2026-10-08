@@ -22,6 +22,7 @@ import type { IncomingMessage, Server, ServerResponse } from 'node:http'
 import { RedactionError, RulesDetector, createStreamRestorer, emptyRedactionIndex, mask, screenText } from '../core/index.ts'
 import type { PlaceholderEvent, PlaceholderOutcome, RedactionDetector, RedactionId, RedactionRegistry, StreamRestoreOptions, StreamRestorer } from '../core/index.ts'
 import { NameModelDetector, NameModelError, containsStandingAlone, isSearchedValue } from '../core/model/detector.ts'
+import { isProtocolFieldName } from '../core/rules/secret.ts'
 import type { NameModel } from '../core/model/name-model.ts'
 import { NAME_MODEL_CATEGORIES } from '../core/model/config.ts'
 import { isLoopbackHost, toolKey } from './config.ts'
@@ -195,11 +196,14 @@ function clientScope(headers: Readonly<Record<string, string>>): string {
  * Whether a later request may search for an original: as long as a value the
  * rules propagate by length alone, six printable ASCII characters or two other
  * code points. A shorter credential is masked throughout the request that
- * detected it; remembering it would mask `ab1` inside every later `ab12`.
+ * detected it; remembering it would mask `ab1` inside every later `ab12`. A
+ * protocol field name such as `data_store` is masked in its own request only:
+ * remembered, it would match a later request's JSON key and refuse it.
  * @param original - a bound original.
  * @returns whether it is remembered.
  */
 function isRememberable(original: string): boolean {
+  if (isProtocolFieldName(original)) return false
   // oxlint-disable-next-line typescript/no-misused-spread -- the floor counts code points, not graphemes.
   return /^[\x20-\x7e]*$/.test(original) ? original.length >= 6 : [...original].length >= 2
 }

@@ -20,7 +20,7 @@ import {
 import { loadConfig } from '../src/proxy/config.ts'
 
 /** Policy digest of the default rules, which the international rules leave alone. */
-const DEFAULT_DIGEST = 'sha256:fe993f02ae7edfba0fa724cd2a5f9613f090335953a7f69af937339e1816ef9c'
+const DEFAULT_DIGEST = 'sha256:f199375522abc1d37599668f247393aa6ce587d7aaddf37d7a9a43165e98809f'
 
 const everyRule = new RulesDetector({ rules: [...RULE_NAMES] })
 

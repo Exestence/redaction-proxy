@@ -401,6 +401,15 @@ describe('state kept per client credential', () => {
     expect(seen[1]!.body.messages[0].content).toBe('the label ab12x')
   })
 
+  it('masks a password spelled like a protocol field name in its own request, but does not search later requests for it', async () => {
+    const client = { authorization: 'Bearer client-protocol' }
+    await post('/v1/chat/completions', { model: 'm', messages: [{ role: 'user', content: 'password: "max_tokens" and DB_PASSWORD=data_store' }] }, client)
+    expect(seen[0]!.body.messages[0].content).toMatch(/^password: "⟦KEY_\d+⟧" and DB_PASSWORD=⟦KEY_\d+⟧$/)
+    const later = await post('/v1/chat/completions', { model: 'm', max_tokens: 5, data_store: 'x', messages: [{ role: 'user', content: 'please set max_tokens higher in data_store' }] }, client)
+    expect(later.status).toBe(200)
+    expect(seen[1]!.body.messages[0].content).toBe('please set max_tokens higher in data_store')
+  })
+
   it('names the category of a leaked value and whether an earlier request bound it, never the value', async () => {
     const client = { authorization: 'Bearer client-leak' }
     await post('/v1/chat/completions', { model: 'm', messages: [{ role: 'user', content: `password: ${PASS}` }] }, client)
