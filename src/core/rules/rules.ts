@@ -596,8 +596,10 @@ export function collectEntropyCandidates(text: string, push: PushCandidate, file
  * full-width or zero-width spelling still matches, and a non-ASCII term also
  * matches its `\uXXXX` escape spelling. A term edge that is an ASCII letter or
  * digit matches only where the projection's neighbouring character is not one
- * (see {@link hasFreeEdges}), so `Lin` skips `online` and `Linux`; a CJK edge
- * matches inside text. The escape spelling matches without this check.
+ * (see {@link hasFreeEdges}), or where the text itself shows a whole word (see
+ * {@link standsAlone}), so `Lin` skips `online` and `Linux` but matches in
+ * `Lin™` and `Lin\u200Bux`, whose projections read `lintm` and `linux`; a CJK
+ * edge matches inside text. The escape spelling matches without this check.
  * @param text - text to scan.
  * @param terms - configured terms with their categories.
  * @param push - candidate sink.
@@ -612,16 +614,19 @@ export function collectTermCandidates(text: string, terms: readonly ConfiguredTe
       // Configuration refuses a term that projects to nothing, so the needle is never empty.
       const needle = projectNfkc(term.value).lower
       for (let at = projection.lower.indexOf(needle); at >= 0; at = projection.lower.indexOf(needle, at + 1)) {
-        if (!hasFreeEdges(projection.lower, at, at + needle.length, needle)) continue
         // oxlint-disable-next-line typescript/no-non-null-assertion -- both offsets are inside the projection.
-        push(projection.startMap[at]!, projection.endMap[at + needle.length - 1]!, term.category, PRIORITY_TERM)
+        const rawStart = projection.startMap[at]!, rawEnd = projection.endMap[at + needle.length - 1]!
+        if (hasFreeEdges(projection.lower, at, at + needle.length, needle) || standsAlone(text, rawStart, rawEnd)) {
+          push(rawStart, rawEnd, term.category, PRIORITY_TERM)
+        }
       }
     } else {
       for (let match = pattern.exec(projection.lower); match !== null; match = pattern.exec(projection.lower)) {
         const end = match.index + match[0].length
-        if (hasFreeEdges(projection.lower, match.index, end, match[0])) {
-          // oxlint-disable-next-line typescript/no-non-null-assertion -- both offsets are inside the projection.
-          push(projection.startMap[match.index]!, projection.endMap[end - 1]!, term.category, PRIORITY_TERM)
+        // oxlint-disable-next-line typescript/no-non-null-assertion -- both offsets are inside the projection.
+        const rawStart = projection.startMap[match.index]!, rawEnd = projection.endMap[end - 1]!
+        if (hasFreeEdges(projection.lower, match.index, end, match[0]) || standsAlone(text, rawStart, rawEnd)) {
+          push(rawStart, rawEnd, term.category, PRIORITY_TERM)
         }
         // Overlapping occurrences are found too, as the single-part search finds
         // them. A `u` pattern backs a lastIndex inside a surrogate pair up to the
@@ -655,4 +660,22 @@ export function hasFreeEdges(text: string, start: number, end: number, value: st
   if (isAlnum(value.charAt(0)) && isAlnum(text.charAt(start - 1)) && !endsHighEscape(text, start)) return false
   if (isAlnum(value.charAt(value.length - 1)) && isAlnum(text.charAt(end))) return false
   return true
+}
+
+/** A letter or digit of a script that separates words with spaces. CJK scripts do not. */
+const SPACED_WORD_CHAR = /^(?![\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}\p{Script=Hangul}])[\p{L}\p{N}\p{M}]$/u
+
+/**
+ * Whether an occurrence is a whole word at both ends. An end is cut only when
+ * the occurrence's character there and its neighbour outside are both letters
+ * or digits of a spaced script, so `Lee` stands alone in `Lee's` but not in
+ * `Leeds`, and `鴻遠科技` stands alone anywhere.
+ * @param text - the text holding the occurrence.
+ * @param start - inclusive UTF-16 start.
+ * @param end - exclusive UTF-16 end.
+ * @returns whether neither end cuts a word.
+ */
+export function standsAlone(text: string, start: number, end: number): boolean {
+  const cuts = (inside: string, outside: string): boolean => SPACED_WORD_CHAR.test(inside) && SPACED_WORD_CHAR.test(outside)
+  return !cuts(text.charAt(start), text.charAt(start - 1)) && !cuts(text.charAt(end - 1), text.charAt(end))
 }
