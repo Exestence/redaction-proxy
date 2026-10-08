@@ -185,9 +185,10 @@ const TWID_LOOSE = new RegExp(`(?<![A-Za-z0-9])[A-Za-z](?:${NARROW_SPACE}?\\d){9
  * number (twelve digits, optionally grouped 4-4-4) right after its keyword.
  * Neither has a check digit, so neither is read without the keyword. The
  * English keyword may carry `number`, `no.`, or `#`, as `號碼` follows `護照`.
+ * A passport number may be grouped 3-3-3 by hyphens: `312-345-678`.
  */
 const TW_PASSPORT = new RegExp(
-  `(?:護照|护照|passport(?:[ _-]?(?:number|no\\.?|#))?)${KEYWORD_GAP}(?<![A-Za-z0-9])(?<value>\\d{9})(?![A-Za-z0-9])`,
+  `(?:護照|护照|passport(?:[ _-]?(?:number|no\\.?|#))?)${KEYWORD_GAP}(?<![A-Za-z0-9])(?<value>\\d{3}(-?)\\d{3}\\2\\d{3})(?![A-Za-z0-9]|-\\d)`,
   'gid',
 )
 const TW_NHI_CARD = new RegExp(
@@ -200,7 +201,7 @@ const TW_NHI_CARD = new RegExp(
  * `0912_345_678`, `(0912)345678`. Not a part of a longer dotted, slashed, or
  * underscored run such as a version, a date, or an identifier.
  */
-const TW_MOBILE_LOOSE = /(?<![A-Za-z0-9./_])(?:09\d{2}([./_])\d{3}\1\d{3}|\(09\d{2}\) ?\d{3}-?\d{3})(?![A-Za-z0-9_]|[./_]\d)/g
+const TW_MOBILE_LOOSE = /(?<![A-Za-z0-9./_])(?:09\d{2}([./_])\d{3}\1\d{3}|\(09\d{2}\)[ -]?\d{3}[ -]?\d{3})(?![A-Za-z0-9_]|[./_]\d)/g
 /** An `@` escaped as an HTML character reference or a JSON escape: `&#64;`, `&#x40;`, `&commat;`, `\u0040`. */
 const ESCAPED_AT = /&#0*64;|&#x0*40;|&commat;|\\u0040/gi
 /** An address in the shared address space 100.64.0.0/10 (RFC 6598), used by carrier-grade NAT and Tailscale. */

@@ -271,6 +271,7 @@ describe('tw-passport-nhi', () => {
     ['passport number is 312345678', 'passport number is ⟦TWID_1⟧'],
     ['passport #: 312345678', 'passport #: ⟦TWID_1⟧'],
     ['passport_number=312345678', 'passport_number=⟦TWID_1⟧'],
+    ['passport number 312-345-678', 'passport number ⟦TWID_1⟧'],
     ['健保卡號：0000 1234 5678', '健保卡號：⟦TWID_1⟧'],
     ['健保卡 000012345678', '健保卡 ⟦TWID_1⟧'],
   ])('masks %j', async (text, expected) => {
@@ -281,6 +282,7 @@ describe('tw-passport-nhi', () => {
     ['nine digits without a keyword', 'order 312345678'],
     ['twelve digits without a keyword', 'trace 0000 1234 5678'],
     ['a longer number after the keyword', '護照 3123456789'],
+    ['mixed or longer hyphen groups after the keyword', 'passport 312-345678 and passport 312-345-678-9'],
   ])('leaves %s alone', async (_name, text) => {
     expect(await maskWith(['tw-passport-nhi'], text)).toBe(text)
   })
@@ -295,6 +297,8 @@ describe('tw-mobile-loose', () => {
     ['打 0912_345_678', '打 ⟦PHONE_1⟧'],
     ['打 (0912)345678', '打 ⟦PHONE_1⟧'],
     ['打 (0912) 345-678', '打 ⟦PHONE_1⟧'],
+    ['打 (0912)-345-678', '打 ⟦PHONE_1⟧'],
+    ['打 (0912) 345 678', '打 ⟦PHONE_1⟧'],
   ])('masks %j', async (text, expected) => {
     expect(await maskWith(['tw-mobile-loose'], text)).toBe(expected)
   })
@@ -305,6 +309,7 @@ describe('tw-mobile-loose', () => {
     ['mixed separators', '0912.345/678'],
     ['snake-case identifiers and longer underscored runs', 'v1_2_3 x_0912_345_678 0912_345_678_9 0912_345_6789'],
     ['a longer bracketed run', '(0912)3456789'],
+    ['a bracketed run of other lengths', '(0912) 345 6789 (0912) 2026'],
   ])('leaves %s alone', async (_name, text) => {
     expect(await maskWith(['tw-mobile-loose'], text)).toBe(text)
   })
