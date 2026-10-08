@@ -161,7 +161,7 @@ What it reads, every number, and the options: [technical details §16](docs/DETA
 ## Results
 
 <!-- RESULTS:START -->
-**held-out set v2 (written blind, run once).** 1,617 synthetic prompts in 7 languages (English, Traditional and Simplified Chinese, Japanese, Korean, German, French) with 10,268 sensitive values and 2,997 hard negatives. The author never read the rules or the benchmark code; about 60% of the values use non-standard spellings (dotted cards, lower-case IBANs, `name at example dot com`, phone extensions). The set was frozen with a SHA-256 checksum and scored once, on commit `01489cd`.
+**held-out set v2 (written blind, run once).** 1,617 synthetic prompts in 7 languages (English, Traditional and Simplified Chinese, Japanese, Korean, German, French) with 10,268 sensitive values and 2,997 hard negatives. The author never read the rules or the benchmark code; about 60% of the values use non-standard spellings (dotted cards, lower-case IBANs, `name at example dot com`, phone extensions). The set was frozen with a SHA-256 checksum and scored once, on commit `01489cd`; both held-out sets and their checksums are in [bench/heldout/](bench/heldout/).
 
 ![Bar chart: share of sensitive values fully masked per category on the English held-out v2 prompts, proxy-default rules and rules plus name model against Presidio at cutoff 0.4.](docs/media/results.svg)
 
