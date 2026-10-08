@@ -155,7 +155,6 @@ export class NameModelDetector {
         return [...ruleDetections, ...dropOverlapping(await this.findOrFail(text, onFailure), ruleDetections)]
       },
       propagate: (texts, values) => this.propagate(texts, values),
-      identityKey: (value, category) => this.rules.identityKey(value, category),
     }
   }
 

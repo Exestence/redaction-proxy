@@ -36,8 +36,9 @@ const BEARER = /(?<![a-z0-9])bearer[ \t]+([a-z0-9._~+/=-]{8,256})/gi
 const AUTHORIZATION = /(?<![a-z0-9])authorization[ \t]*[:=][ \t]*([^\r\n]{4,256})/gi
 const COOKIE = /^[ \t]*(?:set-)?cookie[ \t]*:[ \t]*([^\r\n]{1,256})/gim
 const COOKIE_PAIR = /^[^=\s;]+=[^;]+/
-/** Credential words that do not survive the Latin identifier scan. */
-const CJK_SECRET = /(?:密碼|密码|口令|金鑰|金钥|密鑰|密钥|憑證|凭证|權杖|权杖|令牌)[ \t]*[:=][ \t]*/g
+/** Credential words that do not survive the Latin identifier scan, as pattern alternatives. */
+export const CJK_SECRET_WORDS = '密碼|密码|口令|金鑰|金钥|密鑰|密钥|憑證|凭证|權杖|权杖|令牌'
+const CJK_SECRET = new RegExp(`(?:${CJK_SECRET_WORDS})[ \\t]*[:=][ \\t]*`, 'g')
 // Anchored on `://`: a greedy scheme run followed by a required `:` rescans
 // every start position of a text that has no colon at all.
 const URL_AUTHORITY = /:\/\//g
@@ -449,6 +450,22 @@ export function isKeywordValue(value: string): boolean {
 }
 
 /**
+ * Collect the value a CJK credential word assigns, unless it is shorter than
+ * three characters or reads as code.
+ * @param text - text being scanned.
+ * @param from - offset just past the assignment operator.
+ * @param push - candidate sink.
+ */
+export function collectCjkSecretValue(text: string, from: number, push: PushCandidate): void {
+  const read = readAssignmentValue(text, from, false)
+  if (read === undefined) return
+  const end = read.start + trimValueEnd(text.slice(read.start, read.end))
+  if (end - read.start < 3) return
+  if (isCodeShape(text.slice(read.start, read.end))) return
+  push(read.start, end, 'KEY', PRIORITY_SECRET)
+}
+
+/**
  * Collect every credential candidate of one text.
  * @param text - text to scan.
  * @param push - sink for candidates.
@@ -520,12 +537,7 @@ export function collectSecretCandidates(text: string, push: PushCandidate, after
   })
 
   runAll(CJK_SECRET, (match) => {
-    const read = readAssignmentValue(text, match.index + match[0].length, false)
-    if (read === undefined) return
-    const end = read.start + trimValueEnd(text.slice(read.start, read.end))
-    if (end - read.start < 3) return
-    if (isCodeShape(text.slice(read.start, read.end))) return
-    secret(read.start, end)
+    collectCjkSecretValue(text, match.index + match[0].length, push)
   })
 
   runAll(SECRET_KEYWORD, (match) => {
@@ -588,11 +600,15 @@ export function collectSecretCandidates(text: string, push: PushCandidate, after
 /**
  * Whether a detected original is long and distinctive enough to propagate.
  * Without this guard `王` masks inside `國王` and `12345678` inside `123456789`.
+ * A credential propagates at any length: its restored echo in a later request
+ * must be masked again, or the proxy's leak scan refuses every later request.
  * @param value - a detected original.
+ * @param category - the category it is masked under.
  * @returns whether the value may be searched for elsewhere.
  */
-export function isPropagatableValue(value: string): boolean {
+export function isPropagatableValue(value: string, category: string): boolean {
   if (isKeywordValue(value)) return false
+  if (category === 'KEY') return true
   if (isAsciiPrintable(value)) return value.length >= 6
   // oxlint-disable-next-line typescript/no-misused-spread -- the guard counts code points, not graphemes.
   return [...value].length >= 2

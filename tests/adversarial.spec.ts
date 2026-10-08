@@ -48,12 +48,12 @@ describe('leaks', () => {
     expect(back.ok && back.text).toBe(text)
   })
 
-  it('masks every spelling of a configured term under one identity and restores the first spelling', async () => {
+  it('masks each spelling of a configured term under its own identity and restores every spelling exactly', async () => {
     const result = await maskAll(['Nimbus, nimbus and NIMBUS'])
-    expect(result.masked[0]).toBe('⟦PROJECT_1⟧, ⟦PROJECT_1⟧ and ⟦PROJECT_1⟧')
+    expect(result.masked[0]).toBe('⟦PROJECT_1⟧, ⟦PROJECT_2⟧ and ⟦PROJECT_3⟧')
     expect(result.registry.originals()).toEqual(['Nimbus', 'nimbus', 'NIMBUS'])
     const back = restore(result.masked[0] ?? '', result.registry)
-    expect(back.ok && back.text).toBe('Nimbus, Nimbus and Nimbus')
+    expect(back.ok && back.text).toBe('Nimbus, nimbus and NIMBUS')
   })
 })
 

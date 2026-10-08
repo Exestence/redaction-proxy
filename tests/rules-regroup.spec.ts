@@ -54,19 +54,19 @@ describe('configured terms split by a separator', () => {
   it('steps over an astral character between overlapping occurrences', async () => {
     const astral = new RulesRedactionService(new Context(), { terms: ['𠮷野家'] })
     const result = await astral.mask([{ seq: SessionSeq(1), path: '/a', text: '去𠮷 野家 𠮷野家𠮷野家' }], emptyRedactionIndex())
-    expect(result.masked[0]).toBe('去⟦TERM_1⟧ ⟦TERM_1⟧⟦TERM_1⟧')
+    expect(result.masked[0]).toBe('去⟦TERM_1⟧ ⟦TERM_2⟧⟦TERM_2⟧')
   })
 
-  it('binds every spelling to one identity and restores the first spelling', async () => {
+  it('binds each spelling to its own identity and restores every spelling exactly', async () => {
     const text = '星河計畫、星河 計畫、星河-計畫'
     const result = await service.mask([{ seq: SessionSeq(1), path: '/content/0/text', text }], emptyRedactionIndex())
-    expect(result.masked[0]).toBe('⟦TERM_1⟧、⟦TERM_1⟧、⟦TERM_1⟧')
+    expect(result.masked[0]).toBe('⟦TERM_1⟧、⟦TERM_2⟧、⟦TERM_3⟧')
     expect(result.registry.originals()).toEqual(['星河計畫', '星河 計畫', '星河-計畫'])
-    const back = service.restore('⟦TERM_1⟧ / ⟦TERM_1⟧', result.registry)
-    expect(back.ok && back.text).toBe('星河計畫 / 星河計畫')
+    const back = service.restore('⟦TERM_1⟧ / ⟦TERM_3⟧', result.registry)
+    expect(back.ok && back.text).toBe('星河計畫 / 星河-計畫')
   })
 
-  it('reuses the identity of a recorded spelling for a new spelling in a later call', async () => {
+  it('keeps a recorded spelling\'s identity and gives a new spelling in a later call its own', async () => {
     const first = await service.mask([{ seq: SessionSeq(1), path: '/a', text: '星河 計畫' }], emptyRedactionIndex())
     const index = {
       entries: [{ seq: SessionSeq(1), path: '/a', detectorVersion: service.detectorVersion, spans: first.spans.map(({ start, end, id }) => ({ start, end, id })) }],
@@ -78,7 +78,7 @@ describe('configured terms split by a separator', () => {
       { seq: SessionSeq(1), path: '/a', text: '星河 計畫' },
       { seq: SessionSeq(2), path: '/b', text: '星河-計畫' },
     ], index)
-    expect(second.masked).toEqual(['⟦TERM_1⟧', '⟦TERM_1⟧'])
+    expect(second.masked).toEqual(['⟦TERM_1⟧', '⟦TERM_2⟧'])
   })
 })
 

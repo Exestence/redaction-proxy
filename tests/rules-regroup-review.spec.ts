@@ -69,12 +69,12 @@ describe('WO-6 review D4: identity and restore across spellings', () => {
   it('sends no spelling and lists every spelling for the leak scan', async () => {
     const result = await service.mask([{ seq: SessionSeq(1), path: '/a', text }], emptyRedactionIndex())
     const masked = result.masked[0] ?? ''
-    expect(masked).toBe('⟦TERM_1⟧ / ⟦TERM_1⟧ / ⟦TERM_1⟧ / ⟦PROJECT_1⟧ / ⟦PROJECT_1⟧ / ⟦PROJECT_1⟧')
+    expect(masked).toBe('⟦TERM_1⟧ / ⟦TERM_2⟧ / ⟦TERM_3⟧ / ⟦PROJECT_1⟧ / ⟦PROJECT_2⟧ / ⟦PROJECT_3⟧')
     for (const fragment of ['星', '計', 'NIMBUS', 'nimbus', 'Nimbus', '7']) expect(masked).not.toContain(fragment)
     expect([...result.registry.originals()].sort()).toEqual([...spellings].sort())
   })
 
-  it('restores deterministically to the first spelling of the call', async () => {
+  it('restores each identity to its own spelling, deterministically', async () => {
     const restoreOnce = async (): Promise<string | false> => {
       const result = await service.mask([{ seq: SessionSeq(1), path: '/a', text }], emptyRedactionIndex())
       const back = service.restore('⟦TERM_1⟧ ⟦PROJECT_1⟧ ⟦TERM_1⟧', result.registry)
@@ -96,7 +96,7 @@ describe('WO-6 review D4: identity and restore across spellings', () => {
       { seq: SessionSeq(2), path: '/b', text: '星河計畫' },
       { seq: SessionSeq(1), path: '/a', text: '星河-計畫' },
     ], index)
-    expect(second.masked).toEqual(['⟦TERM_1⟧', '⟦TERM_1⟧'])
+    expect(second.masked).toEqual(['⟦TERM_2⟧', '⟦TERM_1⟧'])
     const back = service.restore('⟦TERM_1⟧', second.registry)
     expect(back.ok && back.text).toBe('星河-計畫')
   })

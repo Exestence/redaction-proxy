@@ -31,7 +31,7 @@ describe('extended rule configuration', () => {
     expect(withHost.detectorVersion).toBe(`${DETECTOR_VERSION}+ext-1`)
     expect(withHost.policyDigest).not.toBe(DEFAULT_DIGEST)
     expect(new RulesDetector({ rules: ['iban', 'token-format'] }).detectorVersion).toBe(`${DETECTOR_VERSION}+intl-2+ext-1`)
-    expect(new RulesDetector({ rules: [...EXTENDED_RULE_NAMES] }).categories).toEqual(['CARD', 'ENTROPY', 'KEY', 'HOST'])
+    expect(new RulesDetector({ rules: [...EXTENDED_RULE_NAMES] }).categories).toEqual(['CARD', 'ENTROPY', 'KEY', 'HOST', 'TWID', 'PHONE', 'EMAIL', 'IP'])
   })
 })
 
@@ -214,6 +214,10 @@ describe('credential-phrase', () => {
     ['Passwort: abc12345, Passwort ist abc12346', 'Passwort: ⟦KEY_1⟧, Passwort ist ⟦KEY_2⟧'],
     ['mot de passe : abc12345', 'mot de passe : ⟦KEY_1⟧'],
     ['contraseña: abc12345, senha é abc12346', 'contraseña: ⟦KEY_1⟧, senha é ⟦KEY_2⟧'],
+    ['{"密碼": "hunter0x"}', '{"密碼": "⟦KEY_1⟧"}'],
+    ['{"令牌": "abc123", \'金鑰\': \'xyz789\'}', '{"令牌": "⟦KEY_1⟧", \'金鑰\': \'⟦KEY_2⟧\'}'],
+    [`{"jwt": "${token}"}`, '{"jwt": "⟦KEY_1⟧"}'],
+    [`jwt: ${token}`, 'jwt: ⟦KEY_1⟧'],
   ])('masks %j', async (text, expected) => {
     expect(await maskWith(['credential-phrase'], text)).toBe(expected)
   })
@@ -230,6 +234,8 @@ describe('credential-phrase', () => {
     ['a shell variable', 'HOME=$PWD path=$bin:PATH'],
     ['a member or a flag', 'this.key Zq8xT2vK9mN4pL7wR3sYuB1 --password hunter2!x'],
     ['an assignment, which the api-key rule reads', 'token=Zq8xT2vK9mN4pL7wR3sYuB1'],
+    ['a quoted CJK key with a code value', '{"密碼": "config.password"}'],
+    ['a quoted key whose value is no credential', '{"jwt": "required", "token": "some-config-name"}'],
     ['a short value after a general word', 'token Ab3dEf9h'],
     ['a URL', 'key https://example.com/Zq8xT2vK9mN4pL7wR3sYuB1'],
     ['a date or a version after a password word', 'pw 2026-10-07 expires, passcode: 1.2.3.4, Passwort: 2026-10-07'],
@@ -240,12 +246,106 @@ describe('credential-phrase', () => {
   })
 })
 
+describe('tw-national-id-loose', () => {
+  it.each([
+    ['身分證 a123456789', '身分證 ⟦TWID_1⟧'],
+    ['ID A1234\u00a056789.', 'ID ⟦TWID_1⟧.'],
+    ['ID A\u202f123456789', 'ID ⟦TWID_1⟧'],
+  ])('masks %j', async (text, expected) => {
+    expect(await maskWith(['tw-national-id-loose'], text)).toBe(expected)
+  })
+
+  it.each([
+    ['a lower-case letter with a bad checksum', 'id a123456780'],
+    ['a plain space at a split the default rule does not read', 'id A1234 56789'],
+    ['a longer token', 'xa123456789 a1234567890'],
+  ])('leaves %s alone', async (_name, text) => {
+    expect(await maskWith(['tw-national-id-loose'], text)).toBe(text)
+  })
+})
+
+describe('tw-passport-nhi', () => {
+  it.each([
+    ['護照 312345678', '護照 ⟦TWID_1⟧'],
+    ['Passport No. 312345678', 'Passport No. ⟦TWID_1⟧'],
+    ['健保卡號：0000 1234 5678', '健保卡號：⟦TWID_1⟧'],
+    ['健保卡 000012345678', '健保卡 ⟦TWID_1⟧'],
+  ])('masks %j', async (text, expected) => {
+    expect(await maskWith(['tw-passport-nhi'], text)).toBe(expected)
+  })
+
+  it.each([
+    ['nine digits without a keyword', 'order 312345678'],
+    ['twelve digits without a keyword', 'trace 0000 1234 5678'],
+    ['a longer number after the keyword', '護照 3123456789'],
+  ])('leaves %s alone', async (_name, text) => {
+    expect(await maskWith(['tw-passport-nhi'], text)).toBe(text)
+  })
+})
+
+describe('tw-mobile-loose', () => {
+  it.each([
+    ['打 0912.345.678', '打 ⟦PHONE_1⟧'],
+    ['打 0912／345／678', '打 ⟦PHONE_1⟧'],
+    ['打 ０９１２．３４５．６７８', '打 ⟦PHONE_1⟧'],
+    ['call 0912/345/678.', 'call ⟦PHONE_1⟧.'],
+  ])('masks %j', async (text, expected) => {
+    expect(await maskWith(['tw-mobile-loose'], text)).toBe(expected)
+  })
+
+  it.each([
+    ['versions, dates, and addresses', 'v1.2.3 on 2026.10.08 at 10.0.0.1'],
+    ['a longer dotted run', '0912.345.678.9 and 10912.345.678'],
+    ['mixed separators', '0912.345/678'],
+  ])('leaves %s alone', async (_name, text) => {
+    expect(await maskWith(['tw-mobile-loose'], text)).toBe(text)
+  })
+})
+
+describe('email-escaped', () => {
+  it.each([
+    ['mail lin&#64;example.test', 'mail ⟦EMAIL_1⟧'],
+    ['mail lin&#x40;example.test', 'mail ⟦EMAIL_1⟧'],
+    ['{"to":"lin\\u0040example.test"}', '{"to":"⟦EMAIL_1⟧"}'],
+  ])('masks %j', async (text, expected) => {
+    expect(await maskWith(['email-escaped'], text)).toBe(expected)
+  })
+
+  it.each([
+    ['an escape without a local part', 'at &#64;example.test'],
+    ['an escape without a domain', 'lin&#64; and lin\\u0040x'],
+  ])('leaves %s alone', async (_name, text) => {
+    expect(await maskWith(['email-escaped'], text)).toBe(text)
+  })
+})
+
+describe('ip-cgnat-ula', () => {
+  it.each([
+    ['host 100.64.1.2', 'host ⟦IP_1⟧'],
+    ['host 100.127.255.254', 'host ⟦IP_1⟧'],
+    ['host fd12:3456:789a::1', 'host ⟦IP_1⟧'],
+    ['route fc00::1/7', 'route ⟦IP_1⟧/7'],
+  ])('masks %j', async (text, expected) => {
+    expect(await maskWith(['ip-cgnat-ula'], text)).toBe(expected)
+  })
+
+  it.each([
+    ['addresses outside 100.64.0.0/10', '100.63.1.2 100.128.1.2 100.64.1.256'],
+    ['a MAC address', 'mac fd:12:34:56:78:9a'],
+    ['a public IPv6 address', '2001:db8::1'],
+    ['a hash holding fd12', 'sha 0afd1234abcd'],
+  ])('leaves %s alone', async (_name, text) => {
+    expect(await maskWith(['ip-cgnat-ula'], text)).toBe(text)
+  })
+})
+
 describe('pathological inputs to the extended rules', () => {
   const SIZE = 200 * 1024
   it.each([
     '4111 ', '4111-', '4111 1111-', '..4111', 'a4111', 'README.md: ', `a.md: ${'0123456789abcdef'.repeat(2)}01234567 `,
     '.corp', 'a.corp.b', '.home.arpa.', 'com.a.corp.', 'glpat-', 'SG.aaaaaaaaaaaaaaaa.', 'eyJaaaaaaaaaa.aa.',
     'sig=', 'AccountKey=', '1234567890:AA', 'token ', 'key is ', 'password: ', 'pw ', 'token is is ', ' \t',
+    'a1234\u00a0', '護照 ', '健保卡 0000 ', '0912.345.', 'a&#64;', 'a\\u0040', '100.64.1.', 'fd12:', '"密碼": ',
   ])('masks 200KB of %j within 2s of CPU time', async unit => {
     const text = unit.repeat(Math.ceil(SIZE / unit.length)).slice(0, SIZE)
     const started = process.cpuUsage()

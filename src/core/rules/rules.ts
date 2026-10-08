@@ -207,18 +207,6 @@ function termPattern(value: string): RegExp | undefined {
 }
 
 /**
- * Identity key of a configured term's spelling: its projection, lower-cased,
- * with every separator removed, so `星河計畫`, `星河 計畫`, and `星河-計畫`
- * share one placeholder.
- * @param value - one spelling.
- * @param category - `TERM` or `PROJECT`.
- * @returns the key, prefixed so it never equals another category's raw value.
- */
-export function termIdentityKey(value: string, category: string): string {
-  return `\u0000${category}\u0000${projectNfkc(value).lower.replaceAll(TERM_SEPARATORS, '')}`
-}
-
-/**
  * Whether a digit run opens with an issuer prefix a payment card uses.
  * @param digits - decimal digits only.
  * @returns whether the run starts with 3 to 6, or with 2221 through 2720.
@@ -235,7 +223,7 @@ function validCardPrefix(digits: string): boolean {
  * @param text - text to scan.
  * @param handler - called once per match in source order.
  */
-function runAll(pattern: RegExp, text: string, handler: (match: RegExpExecArray) => void): void {
+export function runAll(pattern: RegExp, text: string, handler: (match: RegExpExecArray) => void): void {
   pattern.lastIndex = 0
   for (let match = pattern.exec(text); match !== null; match = pattern.exec(text)) handler(match)
 }

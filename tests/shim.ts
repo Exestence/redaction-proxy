@@ -72,10 +72,6 @@ export class RulesRedactionService extends RedactionService {
   protected override propagate(texts: readonly string[], values: ReadonlyMap<string, string>): readonly RedactionPropagation[] {
     return this.detector.propagate(texts, values)
   }
-
-  protected override identityKey(value: string, category: string): string {
-    return this.detector.identityKey(value, category)
-  }
 }
 
 export default RulesRedactionService
