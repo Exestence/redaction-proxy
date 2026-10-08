@@ -550,6 +550,7 @@ describe('refusals and screening', () => {
     expect(res.status).toBe(422)
     const body = await res.text()
     expect(body).toContain('/metadata/owner')
+    expect((await post('/v1/chat/completions', { model: 'm', stop: [EMAIL], messages: [{ role: 'user', content: `hi ${EMAIL}` }] })).status).toBe(422)
     expect(body).not.toContain(EMAIL)
     expect(seen).toHaveLength(0)
   })
@@ -562,9 +563,13 @@ describe('refusals and screening', () => {
     ]
     for (const body of glued) expect((await post('/v1/chat/completions', { model: 'm', ...body })).status).toBe(422)
     await start({ redaction: { terms: ['Q'] } })
-    const res = await post('/v1/chat/completions', { model: 'm', metadata: { tag: 'Q' }, messages: [{ role: 'user', content: 'project Q is late' }] })
-    expect(res.status).toBe(422)
-    expect(seen).toHaveLength(0)
+    try {
+      const res = await post('/v1/chat/completions', { model: 'm', metadata: { tag: 'Q' }, messages: [{ role: 'user', content: 'project Q is late' }] })
+      expect(res.status).toBe(422)
+      expect(seen).toHaveLength(0)
+    } finally {
+      await start()
+    }
   })
 
   it('refuses a request from a browser origin or for a rebound host name, without forwarding it', async () => {
@@ -623,7 +628,6 @@ describe('refusals and screening', () => {
   })
 
   it('refuses a detected value written JSON-escaped in a field it does not rewrite', async () => {
-    await start()
     const res = await post('/v1/chat/completions', { model: 'm', metadata: { args: JSON.stringify({ p: QUOTED }) }, messages: [{ role: 'user', content: USER_TEXT }] })
     expect(res.status).toBe(422)
     expect(seen).toHaveLength(0)
