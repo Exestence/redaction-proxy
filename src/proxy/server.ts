@@ -491,10 +491,15 @@ function refuseLeaks(body: Json, bound: ReadonlyMap<string, string>, modelValues
   const words = [...bound].filter(([original, category]) => isWord(original, category) && (!modelValues.has(original) || isSearchedValue(original)))
   const holdsWord = containsAnyOf(words.flatMap(([original]) => forms(original)))
   const holdsSubstring = containsAnyOf([...bound].filter(([original, category]) => !isWord(original, category)).flatMap(([original]) => forms(original)))
-  const standsIn = (text: string, original: string): boolean => modelValues.has(original)
+  const standsIn = (text: string, folded: string, original: string): boolean => modelValues.has(original)
     ? forms(original).some(form => containsStandingAlone(text, form))
-    : forms(original).some(form => containsStandingAlone(foldAsciiCase(text), foldAsciiCase(form)))
-  const leaks = (text: string): boolean => holdsSubstring(text) || (holdsWord(text) && words.some(([original]) => standsIn(text, original)))
+    : forms(original).some(form => containsStandingAlone(folded, foldAsciiCase(form)))
+  const leaks = (text: string): boolean => {
+    if (holdsSubstring(text)) return true
+    if (!holdsWord(text)) return false
+    const folded = foldAsciiCase(text)
+    return words.some(([original]) => standsIn(text, folded, original))
+  }
   const where: Array<[path: string, text: string]> = []
   const walk = (value: unknown, path: string, key: string, data: boolean): void => {
     if (typeof value === 'string') {
@@ -513,7 +518,7 @@ function refuseLeaks(body: Json, bound: ReadonlyMap<string, string>, modelValues
   if (where.length === 0) return
   // The refusal path alone looks up which value each text holds, the way `leaks` matches it.
   const holds = (text: string, original: string, category: string): boolean => isWord(original, category)
-    ? words.some(([word]) => word === original) && standsIn(text, original)
+    ? words.some(([word]) => word === original) && standsIn(text, foldAsciiCase(text), original)
     : forms(original).some(form => foldAsciiCase(text).includes(foldAsciiCase(form)))
   const describe = ([path, text]: [string, string]): string => {
     // oxlint-disable-next-line typescript/no-non-null-assertion -- `leaks` found some bound original in the text.
