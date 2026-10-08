@@ -569,6 +569,17 @@ describe('state kept per client credential', () => {
       await start()
     }
   })
+
+  it('keeps two credentials apart when one is the other\'s JSON-escaped spelling', async () => {
+    const client = { authorization: 'Bearer client-backslash' }
+    const one = 'ab\\cd12ef'
+    const two = 'ab\\\\cd12ef'
+    reply = entry => ({ json: { choices: [{ index: 0, message: { role: 'assistant', content: placeholders(entry.raw).join(' ') } }] } })
+    const ask = async (content: string) => (await (await post('/v1/chat/completions', { model: 'm', messages: [{ role: 'user', content }] }, client)).json() as any).choices[0].message.content
+    expect(await ask(`password: ${one}`)).toBe(one)
+    expect(await ask(`my new password: ${two}`)).toBe(two)
+    expect(await ask(`old password: ${one}\nnew password: ${two}`)).toBe(`${one} ${two}`)
+  })
 })
 
 describe('tool-call arguments', () => {

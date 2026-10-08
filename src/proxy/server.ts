@@ -219,10 +219,11 @@ function foldAsciiCase(text: string): string {
  * A remembered credential is also found in any ASCII case: `TR0UB4DOR&3X`
  * repeats `Tr0ub4dor&3x`, and is masked under its own identity. Every value
  * is also found JSON-escaped, as a resent tool call's `arguments` writes it
- * (`p@ss\\word`), under the identity of its plain spelling.
+ * (`p@ss\\word`), under the identity of its plain spelling, unless that
+ * spelling is itself a bound or remembered value.
  * @param detector - the request's detector.
  * @param known - the client's known originals, mapped to their categories.
- * @param escaped - receives each JSON-escaped spelling searched for, mapped to its plain spelling.
+ * @param escaped - receives each JSON-escaped spelling searched for, mapped to its plain spelling; no other value binds these.
  * @returns the detector to mask with.
  */
 function withKnownOriginals(detector: RedactionDetector, known: ReadonlyMap<string, string> | undefined, escaped: Map<string, string>): RedactionDetector {
@@ -237,7 +238,8 @@ function withKnownOriginals(detector: RedactionDetector, known: ReadonlyMap<stri
       const spellings = new Map<string, string>()
       for (const [original, category] of all) {
         const spelling = JSON.stringify(original).slice(1, -1)
-        if (spelling === original) continue
+        // A spelling that is itself bound or remembered is a value of its own: `ab\\cd` typed beside `ab\cd`.
+        if (spelling === original || all.has(spelling)) continue
         escaped.set(spelling, original)
         spellings.set(spelling, category)
       }
