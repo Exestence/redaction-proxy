@@ -86,6 +86,12 @@ export interface ProxyConfig {
   debugMasked: boolean
   /** Which placeholder categories are restored into tool-call arguments. */
   toolRestore: ToolRestorePolicy
+  /**
+   * Seconds a value a client's request detected stays remembered for its later
+   * requests, counted from the last request that detected it; 86400 (24 hours)
+   * by default, 0 remembers nothing.
+   */
+  knownOriginalsTtlSeconds: number
 }
 
 /**
@@ -101,7 +107,7 @@ export const PROXY_DEFAULT_RULES = RULE_NAMES.filter(rule => rule !== 'card' && 
 
 const FILE_KEYS = new Set([
   'port', 'host', 'authToken', 'allowedOrigins', 'openaiUpstream', 'anthropicUpstream', 'allowInsecureUpstream',
-  'redaction', 'nameModel', 'screen', 'debugMasked', 'toolRestore',
+  'redaction', 'nameModel', 'screen', 'debugMasked', 'toolRestore', 'knownOriginalsTtlSeconds',
 ])
 
 /** Shortest `authToken` accepted; `openssl rand -hex 32` gives 64 characters. */
@@ -235,6 +241,12 @@ export function loadConfig(path: string | undefined, env: NodeJS.ProcessEnv): Pr
   const allowInsecure = env.REDACTION_PROXY_ALLOW_INSECURE_UPSTREAM === '1' || file.allowInsecureUpstream === true
   const screen = env.REDACTION_PROXY_SCREEN ?? file.screen ?? 'replace'
   if (screen !== 'replace' && screen !== 'refuse') throw new Error('screen must be "replace" or "refuse"')
+  const envTtl = env.REDACTION_PROXY_KNOWN_ORIGINALS_TTL_SECONDS
+  if (envTtl !== undefined && !/^\d+$/.test(envTtl)) throw new Error('REDACTION_PROXY_KNOWN_ORIGINALS_TTL_SECONDS must be a whole number of seconds')
+  const knownOriginalsTtlSeconds = Number(envTtl ?? file.knownOriginalsTtlSeconds ?? 86400)
+  if ((file.knownOriginalsTtlSeconds !== undefined && typeof file.knownOriginalsTtlSeconds !== 'number') || !Number.isSafeInteger(knownOriginalsTtlSeconds) || knownOriginalsTtlSeconds < 0) {
+    throw new Error('knownOriginalsTtlSeconds must be a whole number of seconds, 0 or more')
+  }
   const redaction = { rules: [...PROXY_DEFAULT_RULES], ...(file.redaction ?? {}) } as RulesRedactionConfig
   resolveRulesConfig(redaction)
   const config: ProxyConfig = {
@@ -247,6 +259,7 @@ export function loadConfig(path: string | undefined, env: NodeJS.ProcessEnv): Pr
     screen,
     debugMasked: env.REDACTION_PROXY_DEBUG_MASKED === '1' || file.debugMasked === true,
     toolRestore: toolRestore(file.toolRestore, env.REDACTION_PROXY_TOOL_RESTORE_CATEGORIES),
+    knownOriginalsTtlSeconds,
   }
   const model = nameModel(file.nameModel, env.REDACTION_PROXY_NAME_MODEL_DIR)
   if (model !== undefined) config.nameModel = model

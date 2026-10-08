@@ -3,7 +3,7 @@
 // 3-character SSE chunks so every placeholder straddles chunk boundaries.
 import { createServer, request } from 'node:http'
 import type { IncomingHttpHeaders, Server } from 'node:http'
-import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest'
+import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 import { DEFAULT_TOOL_RESTORE_CATEGORIES, loadConfig } from '../src/proxy/config.ts'
 import type { ProxyConfig, RestoredCategories } from '../src/proxy/config.ts'
 import { createProxyServer, listen } from '../src/proxy/server.ts'
@@ -410,13 +410,13 @@ describe('state kept per client credential', () => {
     expect(seen[1]!.body.messages[0].content).toBe('please set max_tokens higher in data_store')
   })
 
-  it('names the category of a leaked value and whether an earlier request bound it, never the value', async () => {
+  it('names the category of a value this request detected that is still unmasked, never the value, and does not count a remembered one', async () => {
     const client = { authorization: 'Bearer client-leak' }
     await post('/v1/chat/completions', { model: 'm', messages: [{ role: 'user', content: `password: ${PASS}` }] }, client)
     const res = await post('/v1/chat/completions', { model: 'm', metadata: { note: PASS, owner: EMAIL }, messages: [{ role: 'user', content: `echo ${PASS} to ${EMAIL}` }] }, client)
     expect(res.status).toBe(422)
     const { message } = (await res.json() as any).error
-    expect(message).toBe('a detected value is still unmasked at /metadata/note (KEY, remembered from an earlier request), /metadata/owner (EMAIL); the request was not forwarded')
+    expect(message).toBe('a detected value is still unmasked at /metadata/owner (EMAIL); the request was not forwarded')
     expect(seen).toHaveLength(1)
   })
 
@@ -552,29 +552,45 @@ describe('state kept per client credential', () => {
     expect((await res.json() as any).error.message).toContain('/messages/1/content/0/input/type (KEY)')
   })
 
-  it('refuses a remembered credential that propagation misses: glued, suffixed, or upper-cased and JSON-escaped', async () => {
+  it('masks a remembered value only where it stands alone, and forwards it glued, suffixed, upper-cased and JSON-escaped, or in metadata', async () => {
     const client = { authorization: 'Bearer client-glued' }
     const pw = 'p@ss\\word12'
-    await post('/v1/chat/completions', { model: 'm', messages: [{ role: 'user', content: `password: ${PASS} and password: ${pw}` }] }, client)
+    await post('/v1/chat/completions', { model: 'm', messages: [{ role: 'user', content: `password: football and password: ${PASS} and password: ${pw}` }] }, client)
     const call = (args: string) => [{ role: 'user', content: 'go' }, { role: 'assistant', tool_calls: [{ id: 'c', type: 'function', function: { name: 'bash', arguments: args } }] }, { role: 'tool', tool_call_id: 'c', content: 'ok' }]
-    for (const messages of [[{ role: 'user', content: `is it x${PASS}y?` }], [{ role: 'user', content: `maybe ${PASS}2` }], call('{"cmd":"echo P@SS\\\\WORD12"}')]) {
-      const res = await post('/v1/chat/completions', { model: 'm', messages }, client)
-      expect(res.status).toBe(422)
-      expect((await res.json() as any).error.message).toContain('(KEY, remembered from an earlier request)')
+    const send = async (messages: unknown[], extra: Record<string, unknown> = {}): Promise<string> => {
+      seen = []
+      expect((await post('/v1/chat/completions', { model: 'm', messages, ...extra }, client)).status).toBe(200)
+      return seen[0]!.raw
     }
-    expect(seen).toHaveLength(1)
+    expect(await send([{ role: 'user', content: 'football scores; the footballer scored' }])).toMatch(/"⟦KEY_\d+⟧ scores; the footballer scored"/)
+    expect(await send([{ role: 'user', content: `is it x${PASS}y or ${PASS}2?` }])).toContain(`is it x${PASS}y or ${PASS}2?`)
+    expect(await send([{ role: 'user', content: `${PASS.toUpperCase()} or x${PASS.toUpperCase()}y` }])).toMatch(new RegExp(`"⟦KEY_\\d+⟧ or x${PASS.toUpperCase()}y"`))
+    expect(await send(call('{"cmd":"echo P@SS\\\\WORD12"}'))).toContain('P@SS')
+    expect(await send([{ role: 'user', content: `use ${PASS}` }], { metadata: { note: PASS } })).toMatch(/"use ⟦KEY_\d+⟧"/)
+    expect(seen[0]!.body.metadata.note).toBe(PASS)
   })
 
-  it('refuses a remembered value shorter than 8 characters glued to a word only when it is a credential', async () => {
-    await start({ redaction: { terms: ['Nimbus'] } })
+  it('forgets a remembered value once its time to live has passed since a request last detected it', async () => {
+    vi.useFakeTimers({ toFake: ['Date'] })
     try {
-      const client = { authorization: 'Bearer client-short-glued' }
-      await post('/v1/chat/completions', { model: 'm', messages: [{ role: 'user', content: 'project Nimbus, password: ab1234' }] }, client)
-      const send = async (metadata: Record<string, string>) => (await post('/v1/chat/completions', { model: 'm', metadata, messages: [{ role: 'user', content: 'hi' }] }, client)).status
-      expect(await send({ note: 'Nimbusx' })).toBe(200)
-      expect(await send({ note: 'the Nimbus plan' })).toBe(422)
-      expect(await send({ note: 'id ab12345' })).toBe(422)
+      await start({ knownOriginalsTtlSeconds: 60 })
+      const client = { authorization: 'Bearer client-ttl' }
+      const echo = async (): Promise<string> => {
+        seen = []
+        await post('/v1/chat/completions', { model: 'm', messages: [{ role: 'user', content: `Noted ${PASS}.` }] }, client)
+        return seen[0]!.body.messages[0].content
+      }
+      const detect = () => post('/v1/chat/completions', { model: 'm', messages: [{ role: 'user', content: `password: ${PASS}` }] }, client)
+      await detect()
+      vi.advanceTimersByTime(30_000)
+      await detect()
+      vi.advanceTimersByTime(59_000)
+      // An echo masked from memory alone does not extend the time to live.
+      expect(await echo()).toMatch(/^Noted ⟦KEY_\d+⟧\.$/)
+      vi.advanceTimersByTime(1_000)
+      expect(await echo()).toBe(`Noted ${PASS}.`)
     } finally {
+      vi.useRealTimers()
       await start()
     }
   })
@@ -600,8 +616,32 @@ describe('state kept per client credential', () => {
     }
     expect(await resend('{"cmd":"echo Tr0ub4dor\\u00263x"}')).toBe('{"cmd":"echo ⟦KEY_1⟧"}')
     expect(await resend('{"path":"\\/Users\\/fictional-user\\/notes.md"}')).toBe('{"path":"⟦PATH_1⟧/notes.md"}')
-    expect(await resend('{"path":"\\u002fUsers\\u002Ffictional-user","q":"\\"\\u0022\\u0001\\ud83d\\ude00"}')).toBe('{"path":"⟦PATH_1⟧","q":"\\"\\u0022\\u0001\\ud83d\\ude00"}')
-    expect(await resend('{"cmd":"a\\\\u0026b \\\\/"}')).toBe('{"cmd":"a\\\\u0026b \\\\/"}')
+    expect(await resend('{"path":"\\u002fUsers\\u002Ffictional-user","q":"\\"\\u0022\\u005c\\u000a\\u0001\\ud83d\\ude00\\ud83d\\u0041\\udc00"}')).toBe('{"path":"⟦PATH_1⟧","q":"\\"\\"\\\\\\n\\u0001😀\\ud83dA\\udc00"}')
+    expect(await resend('{"cmd":"a\\\\u0026b \\\\/ \\u005cu0026"}')).toBe('{"cmd":"a\\\\u0026b \\\\/ \\\\u0026"}')
+  })
+
+  it('masks a value resent in tool arguments as a surrogate pair, or with a quote or backslash written \\uXXXX, and restores it as written', async () => {
+    await start({ redaction: { terms: ['𠀋氏'] } })
+    try {
+      reply = entry => ({ json: { choices: [{ index: 0, message: { role: 'assistant', tool_calls: [{ id: 'd', type: 'function', function: { name: 'bash', arguments: JSON.stringify({ v: placeholders(entry.raw)[0] }) } }] } }] } })
+      const cases: Array<[user: string, args: string, value: string]> = [
+        ['password: p@ss🔑word12', '{"cmd":"echo p@ss\\ud83d\\udd11word12"}', 'p@ss🔑word12'],
+        ['contact 𠀋氏 today', '{"name":"\\ud840\\udc0b\\u6c0f"}', '𠀋氏'],
+        ['password: ab"cd12ef', '{"cmd":"echo ab\\u0022cd12ef"}', 'ab"cd12ef'],
+        ['password: ab\\cd12ef', '{"cmd":"echo ab\\u005ccd12ef"}', 'ab\\cd12ef'],
+      ]
+      for (const [user, args, value] of cases) {
+        seen = []
+        const messages = [{ role: 'user', content: user }, { role: 'assistant', tool_calls: [{ id: 'c', type: 'function', function: { name: 'bash', arguments: args } }] }, { role: 'tool', tool_call_id: 'c', content: 'ok' }]
+        const res = await post('/v1/chat/completions', { model: 'm', messages })
+        expect(res.status).toBe(200)
+        const sent = seen[0]!.body.messages[1].tool_calls[0].function.arguments
+        expect(sent).toMatch(/^\{"(cmd|name)":"(echo )?⟦(KEY|TERM)_1⟧"\}$/)
+        expect(JSON.parse((await res.json() as any).choices[0].message.tool_calls[0].function.arguments).v).toBe(value)
+      }
+    } finally {
+      await start()
+    }
   })
 
   it('keeps a credential from the system prompt through a flood of tool output', async () => {
@@ -612,6 +652,29 @@ describe('state kept per client credential', () => {
     await post('/v1/chat/completions', { model: 'm', messages: [{ role: 'user', content: 'dump' }, { role: 'tool', tool_call_id: 't', content: cookies }] }, client)
     await post('/v1/chat/completions', { model: 'm', messages: [{ role: 'user', content: `Noted ${PASS}.` }] }, client)
     expect(seen[2]!.body.messages[0].content).toMatch(/^Noted ⟦KEY_\d+⟧\.$/)
+  })
+
+  it('keeps a credential from an Anthropic system string or block, or Responses instructions, through a flood of tool output', async () => {
+    reply = () => ({ json: {} })
+    const cookies = Array.from({ length: 4200 }, (_, i) => `Cookie: sessionid=s${String(i).padStart(5, '0')}f8a9c2d1e4b7a6c3`).join('\n')
+    const system = `Use password: ${PASS} for the db`
+    const messages = async (key: string, prompt: unknown): Promise<string> => {
+      seen = []
+      const client = { 'x-api-key': key }
+      await post('/v1/messages', { model: 'c', max_tokens: 1, system: prompt, messages: [{ role: 'user', content: 'hi' }] }, client)
+      const flood = [{ role: 'user', content: 'dump' }, { role: 'assistant', content: [{ type: 'tool_use', id: 't', name: 'dump', input: {} }] }, { role: 'user', content: [{ type: 'tool_result', tool_use_id: 't', content: cookies }] }]
+      await post('/v1/messages', { model: 'c', max_tokens: 1, messages: flood }, client)
+      await post('/v1/messages', { model: 'c', max_tokens: 1, messages: [{ role: 'user', content: `Noted ${PASS}.` }] }, client)
+      return seen[2]!.body.messages[0].content
+    }
+    expect(await messages('flood-system-string', system)).toMatch(/^Noted ⟦KEY_\d+⟧\.$/)
+    expect(await messages('flood-system-block', [{ type: 'text', text: system }])).toMatch(/^Noted ⟦KEY_\d+⟧\.$/)
+    seen = []
+    const client = { authorization: 'Bearer flood-instructions' }
+    await post('/v1/responses', { model: 'm', instructions: system, input: 'hi' }, client)
+    await post('/v1/responses', { model: 'm', input: [{ role: 'user', content: 'dump' }, { type: 'function_call', id: 'f', call_id: 'c', name: 'dump', arguments: '{}' }, { type: 'function_call_output', call_id: 'c', output: cookies }] }, client)
+    await post('/v1/responses', { model: 'm', input: `Noted ${PASS}.` }, client)
+    expect(seen[2]!.body.input).toMatch(/^Noted ⟦KEY_\d+⟧\.$/)
   })
 })
 
@@ -1068,10 +1131,24 @@ describe('refusals and screening', () => {
     expect(seen).toHaveLength(0)
   })
 
-  it('refuses a value that ends inside a longer overlapping value', async () => {
-    await start({ redaction: { terms: ['ab', 'xabc'] } })
+  it('counts a configured term as a leak only where it stands alone, in any ASCII case', async () => {
+    await start({ redaction: { terms: ['Hsin', 'Lin'] } })
     try {
-      const res = await post('/v1/chat/completions', { model: 'm', metadata: { tag: 'xab' }, messages: [{ role: 'user', content: 'ab and xabc' }] })
+      const send = (metadata: Record<string, string>) => post('/v1/chat/completions', { model: 'm', metadata, messages: [{ role: 'user', content: 'Hsin lives in Hsinchu, online' }] })
+      const res = await send({ note: 'Hsinchu, Linux' })
+      expect(res.status).toBe(200)
+      expect(seen[0]!.body.messages[0].content).toMatch(/^⟦TERM_\d+⟧ lives in /)
+      expect(seen[0]!.body.metadata.note).toBe('Hsinchu, Linux')
+      expect((await send({ note: 'met HSIN' })).status).toBe(422)
+    } finally {
+      await start()
+    }
+  })
+
+  it('refuses a value that ends inside a longer overlapping value', async () => {
+    await start({ redaction: { terms: ['ab', '-abc'] } })
+    try {
+      const res = await post('/v1/chat/completions', { model: 'm', metadata: { tag: '-ab' }, messages: [{ role: 'user', content: 'ab and -abc' }] })
       expect(res.status).toBe(422)
       expect(seen).toHaveLength(0)
     } finally {
