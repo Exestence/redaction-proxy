@@ -1365,6 +1365,24 @@ describe('upstream failures', () => {
     expect(logs.some(line => line.startsWith('POST /v1/chat/completions -> 200 masked 1'))).toBe(true)
   })
 
+  it('flushes a held tool-call tail into a finishing chunk whose tool_calls is malformed', async () => {
+    for (const malformed of [[null], {}, 'x']) {
+      reply = entry => {
+        const held = placeholders(entry.raw)[0]!.slice(0, -2)
+        return { sse: sse([
+          [undefined, { choices: [{ index: 0, delta: { tool_calls: [{ index: 0, id: 'c1', type: 'function', function: { name: 'bash', arguments: `{"cmd":"echo ${held}` } }] } }] }],
+          [undefined, { choices: [{ index: 0, delta: { tool_calls: malformed }, finish_reason: 'tool_calls' }] }],
+          [undefined, '[DONE]'],
+        ]) }
+      }
+      const res = await post('/v1/chat/completions', { model: 'm', stream: true, messages: [{ role: 'user', content: `mail ${EMAIL}` }] })
+      const text = await res.text()
+      expect(text).toContain('⟦EMAIL_')
+      expect(text).toContain('data: [DONE]')
+      expect(logs.at(-1)).toMatch(/^POST \/v1\/chat\/completions -> 200 /)
+    }
+  })
+
   it('logs a stream the client abandons', async () => {
     const hung = createServer((req, res) => {
       req.resume()
