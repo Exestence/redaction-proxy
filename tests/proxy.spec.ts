@@ -3,7 +3,7 @@
 // 3-character SSE chunks so every placeholder straddles chunk boundaries.
 import { createServer, request } from 'node:http'
 import type { IncomingHttpHeaders, Server } from 'node:http'
-import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest'
+import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 import { DEFAULT_TOOL_RESTORE_CATEGORIES, loadConfig } from '../src/proxy/config.ts'
 import type { ProxyConfig, RestoredCategories } from '../src/proxy/config.ts'
 import { createProxyServer, listen } from '../src/proxy/server.ts'
@@ -568,6 +568,31 @@ describe('state kept per client credential', () => {
     expect(await send(call('{"cmd":"echo P@SS\\\\WORD12"}'))).toContain('P@SS')
     expect(await send([{ role: 'user', content: `use ${PASS}` }], { metadata: { note: PASS } })).toMatch(/"use ⟦KEY_\d+⟧"/)
     expect(seen[0]!.body.metadata.note).toBe(PASS)
+  })
+
+  it('forgets a remembered value once its time to live has passed since a request last detected it', async () => {
+    vi.useFakeTimers({ toFake: ['Date'] })
+    try {
+      await start({ knownOriginalsTtlSeconds: 60 })
+      const client = { authorization: 'Bearer client-ttl' }
+      const echo = async (): Promise<string> => {
+        seen = []
+        await post('/v1/chat/completions', { model: 'm', messages: [{ role: 'user', content: `Noted ${PASS}.` }] }, client)
+        return seen[0]!.body.messages[0].content
+      }
+      const detect = () => post('/v1/chat/completions', { model: 'm', messages: [{ role: 'user', content: `password: ${PASS}` }] }, client)
+      await detect()
+      vi.advanceTimersByTime(30_000)
+      await detect()
+      vi.advanceTimersByTime(59_000)
+      // An echo masked from memory alone does not extend the time to live.
+      expect(await echo()).toMatch(/^Noted ⟦KEY_\d+⟧\.$/)
+      vi.advanceTimersByTime(1_000)
+      expect(await echo()).toBe(`Noted ${PASS}.`)
+    } finally {
+      vi.useRealTimers()
+      await start()
+    }
   })
 
   it('keeps two credentials apart when one is the other\'s JSON-escaped spelling', async () => {

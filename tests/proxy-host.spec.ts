@@ -60,6 +60,16 @@ describe('settings that fail loud', () => {
     expect(loadConfig(configFile({ port: 9001 }), {}).port).toBe(9001)
   })
 
+  it('reads knownOriginalsTtlSeconds as whole seconds, 24 hours by default, overridden by the environment', () => {
+    expect(loadConfig(undefined, {}).knownOriginalsTtlSeconds).toBe(86400)
+    expect(loadConfig(configFile({ knownOriginalsTtlSeconds: 0 }), {}).knownOriginalsTtlSeconds).toBe(0)
+    expect(loadConfig(configFile({ knownOriginalsTtlSeconds: 60 }), { REDACTION_PROXY_KNOWN_ORIGINALS_TTL_SECONDS: '3600' }).knownOriginalsTtlSeconds).toBe(3600)
+    for (const knownOriginalsTtlSeconds of ['60', -1, 1.5, null]) {
+      expect(() => loadConfig(configFile({ knownOriginalsTtlSeconds }), {})).toThrow('knownOriginalsTtlSeconds must be a whole number')
+    }
+    expect(() => loadConfig(undefined, { REDACTION_PROXY_KNOWN_ORIGINALS_TTL_SECONDS: '1h' })).toThrow('must be a whole number of seconds')
+  })
+
   it('refuses plain http:// to an upstream that is not loopback unless allowed', () => {
     expect(() => loadConfig(undefined, { REDACTION_PROXY_OPENAI_UPSTREAM: 'http://api.example.test' })).toThrow('cleartext')
     expect(() => loadConfig(configFile({ anthropicUpstream: 'http://192.0.2.1:8080' }), {})).toThrow('cleartext')

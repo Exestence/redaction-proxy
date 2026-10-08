@@ -94,7 +94,7 @@ const HOP = new Set([
 // ponytail: fixed-size FIFO of continuation texts; a restart forgets them (documented).
 const CONTINUATIONS_MAX = 256
 
-// ponytail: fixed-size FIFOs of known originals per bucket, by size only; add a time limit if a long-lived proxy must forget sooner.
+// ponytail: fixed-size FIFOs of known originals per bucket, besides the configured time to live.
 const KNOWN_ORIGINALS_MAX = 4096
 const KNOWN_CLIENTS_MAX = 64
 
@@ -155,6 +155,12 @@ const OUTCOME_LOG: Readonly<Record<PlaceholderOutcome, string>> = {
   restored: 'restored',
   inUrl: 'kept inside a URL',
   refused: 'kept by the tool restore policy',
+}
+
+/** A remembered original: its category, and when it is forgotten (epoch milliseconds). */
+interface KnownOriginal {
+  category: string
+  expires: number
 }
 
 /** Original texts of one request, kept for a Responses continuation. */
@@ -926,44 +932,56 @@ export function createProxyServer(
   /** Continuation texts by client scope and response id. */
   const continuations = new Map<string, RequestTexts>()
   /**
-   * Originals each client scope bound, by bucket, each mapped to its category, oldest first.
+   * Originals each client scope bound, by bucket, each mapped to its category and expiry time, oldest first.
    * One bucket per category, so a bulk tool result of emails cannot evict a remembered credential,
    * and per category one more for values bound in text the client wrote (its user messages and
    * system prompt), so a tool result full of cookies cannot evict the password the user typed.
    */
-  const knownOriginals = new Map<string, Map<string, Map<string, string>>>()
+  const knownOriginals = new Map<string, Map<string, Map<string, KnownOriginal>>>()
   const tokenDigest = config.authToken === undefined ? undefined : createHash('sha256').update(config.authToken).digest()
   const originAllowed = (origin: string): boolean => config.allowedOrigins.includes(origin.toLowerCase()) || isLoopbackOrigin(origin)
 
   /**
-   * Remember every {@link isRememberable} original a request bound, for the client's later requests.
+   * Remember every {@link isRememberable} original a request detected, for the client's later requests.
+   * A value only memory supplied is not remembered again, so its time to live runs from its last detection.
    * @param client - the client scope.
    * @param registry - bindings of the request's mask call.
    * @param clientBound - the identities bound in text the client wrote ({@link isClientText}).
+   * @param detected - the originals the request's detector found.
    */
-  const rememberOriginals = (client: string, registry: RedactionRegistry, clientBound: ReadonlySet<RedactionId>): void => {
-    const known = knownOriginals.get(client) ?? new Map<string, Map<string, string>>()
+  const rememberOriginals = (client: string, registry: RedactionRegistry, clientBound: ReadonlySet<RedactionId>, detected: ReadonlySet<string>): void => {
+    const known = knownOriginals.get(client) ?? new Map<string, Map<string, KnownOriginal>>()
+    const expires = Date.now() + config.knownOriginalsTtlSeconds * 1000
     for (const id of registry.ids()) {
       // oxlint-disable-next-line typescript/no-non-null-assertion -- every listed identity is bound.
       const original = registry.original(id)!
-      if (!isRememberable(original)) continue
+      if (!detected.has(original) || !isRememberable(original)) continue
       const category = categoryOf(id)
       const name = clientBound.has(id) ? `client ${category}` : category
-      const bucket = known.get(name) ?? new Map<string, string>()
+      const bucket = known.get(name) ?? new Map<string, KnownOriginal>()
       known.set(name, bucket)
-      setNewest(bucket, original, category, KNOWN_ORIGINALS_MAX)
+      setNewest(bucket, original, { category, expires }, KNOWN_ORIGINALS_MAX)
     }
     setNewest(knownOriginals, client, known, KNOWN_CLIENTS_MAX)
   }
 
   /**
-   * The originals one client's earlier requests bound.
+   * The originals one client's earlier requests bound, forgetting those past their time to live.
    * @param client - the client scope.
    * @returns each original mapped to its category, or `undefined` for a client not seen.
    */
   const knownTo = (client: string): Map<string, string> | undefined => {
     const known = knownOriginals.get(client)
-    return known === undefined ? undefined : new Map([...known.values()].flatMap(bucket => [...bucket]))
+    if (known === undefined) return undefined
+    const now = Date.now()
+    const originals = new Map<string, string>()
+    for (const bucket of known.values()) {
+      for (const [original, { category, expires }] of bucket) {
+        if (expires <= now) bucket.delete(original)
+        else originals.set(original, category)
+      }
+    }
+    return originals
   }
 
   /**
@@ -1037,7 +1055,7 @@ export function createProxyServer(
     }
     refuseLeaks(parsed, bound, modelValues)
     const registry = unescaping(result.registry, escaped)
-    rememberOriginals(client, registry, clientBound)
+    rememberOriginals(client, registry, clientBound, detected)
     return { outgoing: JSON.stringify(parsed), registry, texts: all, userTexts }
   }
 
