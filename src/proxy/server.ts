@@ -529,21 +529,28 @@ function replaceUnscreenable(text: string): string {
     .replaceAll('⟧', '⟫')
 }
 
+/** Characters JSON writes with a short escape (`\"`, `\\`, `\n`, …). */
+const SHORT_ESCAPED = /^["\\\b\f\n\r\t]$/
+
 /**
- * Write the `\uXXXX` and `\/` escapes of a JSON text as the characters they
- * stand for, as `JSON.stringify` writes them, so masking finds a value whose
- * characters a client's encoder escaped (Go writes `&` as `\u0026`, PHP `/` as
- * `\/`). A quote, backslash, control character, U+FFFD, or surrogate stays
- * escaped. The text need not parse.
+ * Write the `\uXXXX` and `\/` escapes of a JSON text as `JSON.stringify`
+ * writes them, so masking finds a value whose characters a client's encoder
+ * escaped (Go writes `&` as `\u0026`, PHP `/` as `\/`, Python `🔑` as
+ * `\ud83d\udd11`): a surrogate pair or other character as itself, and a quote,
+ * backslash, or control character with a short escape as that escape
+ * (`\u0022` as `\"`), which the JSON-escaped spelling of a value matches. Any
+ * other control character, U+FFFD, a lone surrogate, and an invalid escape
+ * stay as written. The text need not parse.
  * @param text - JSON text, such as a resent tool call's `arguments`.
- * @returns the text with those escapes decoded.
+ * @returns the text with those escapes rewritten.
  */
 function decodeJsonEscapes(text: string): string {
-  return text.replace(/\\(u[0-9a-fA-F]{4}|.)/gs, (escape, code: string) => {
+  return text.replace(/\\(u[dD][89abAB][0-9a-fA-F]{2}\\u[dD][c-fC-F][0-9a-fA-F]{2}|u[0-9a-fA-F]{4}|.)/gs, (escape, code: string) => {
     if (code === '/') return '/'
     if (code.length === 1) return escape
-    const char = String.fromCharCode(Number.parseInt(code.slice(1), 16))
-    return /[\u0000-\u001f"\\\u007f-\u009f\ud800-\udfff\ufffd]/.test(char) ? escape : char
+    const char = String.fromCharCode(...code.slice(1).split('\\u').map(unit => Number.parseInt(unit, 16)))
+    if (SHORT_ESCAPED.test(char)) return JSON.stringify(char).slice(1, -1)
+    return /^[\u0000-\u001f\u007f-\u009f\ud800-\udfff\ufffd]$/.test(char) ? escape : char
   })
 }
 

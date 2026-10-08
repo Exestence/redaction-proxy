@@ -205,7 +205,7 @@ flowchart TD
 
 回應中 `signature`、`thinking`、`data`、`encrypted_content` 的字串照模型送出的原樣保留（`SKIP_RESTORE`），因為用戶端之後要逐位元組回送；工具呼叫輸入中同名鍵的字串照常還原。因此 Anthropic 的 thinking 內容會帶著佔位符顯示。
 
-`arguments` 與 `partial_json` 是 JSON 文字，還原時原始值會以 JSON 跳脫寫入（`JSON_TEXT`）。所以遮罩時每個綁定或記住的值也以 JSON 跳脫寫法比對（`p@ss\word12` 也找 `p@ss\\word12`），用它原樣寫法的佔位符；這種寫法先綁定時，還原仍寫回原樣寫法，寫進 `arguments` 只跳脫一次。跳脫寫法本身若也是這次綁定或先前記住的值，就是另一個值，有自己的佔位符並原樣還原：先後輸入的密碼 `ab\cd12ef` 與 `ab\\cd12ef` 各自還原。請求中的 `arguments` 在遮罩前先把 `\uXXXX` 與 `\/` 跳脫寫成它們代表的字元（Go 把 `&` 寫成 `\u0026`，PHP 把 `/` 寫成 `\/`），送往上游的是解開後的文字；引號、反斜線、控制字元、U+FFFD 與 surrogate 維持跳脫。
+`arguments` 與 `partial_json` 是 JSON 文字，還原時原始值會以 JSON 跳脫寫入（`JSON_TEXT`）。所以遮罩時每個綁定或記住的值也以 JSON 跳脫寫法比對（`p@ss\word12` 也找 `p@ss\\word12`），用它原樣寫法的佔位符；這種寫法先綁定時，還原仍寫回原樣寫法，寫進 `arguments` 只跳脫一次。跳脫寫法本身若也是這次綁定或先前記住的值，就是另一個值，有自己的佔位符並原樣還原：先後輸入的密碼 `ab\cd12ef` 與 `ab\\cd12ef` 各自還原。請求中的 `arguments` 在遮罩前先把 `\uXXXX` 與 `\/` 跳脫改寫成 `JSON.stringify` 的寫法（Go 把 `&` 寫成 `\u0026`，PHP 把 `/` 寫成 `\/`，Python 與 .NET 把 `🔑` 寫成 `\ud83d\udd11`）：成對的 surrogate 與其他字元寫成字元本身，引號、反斜線與有短跳脫的控制字元寫成短跳脫（`\u0022` 寫成 `\"`、`\u000a` 寫成 `\n`），讓值的 JSON 跳脫寫法比對得到；送往上游的是改寫後的文字。其他控制字元、U+FFFD、孤立 surrogate 與無效的跳脫維持原樣。
 
 ## 6. 拒絕與錯誤狀態碼
 

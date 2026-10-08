@@ -616,8 +616,32 @@ describe('state kept per client credential', () => {
     }
     expect(await resend('{"cmd":"echo Tr0ub4dor\\u00263x"}')).toBe('{"cmd":"echo ⟦KEY_1⟧"}')
     expect(await resend('{"path":"\\/Users\\/fictional-user\\/notes.md"}')).toBe('{"path":"⟦PATH_1⟧/notes.md"}')
-    expect(await resend('{"path":"\\u002fUsers\\u002Ffictional-user","q":"\\"\\u0022\\u0001\\ud83d\\ude00"}')).toBe('{"path":"⟦PATH_1⟧","q":"\\"\\u0022\\u0001\\ud83d\\ude00"}')
-    expect(await resend('{"cmd":"a\\\\u0026b \\\\/"}')).toBe('{"cmd":"a\\\\u0026b \\\\/"}')
+    expect(await resend('{"path":"\\u002fUsers\\u002Ffictional-user","q":"\\"\\u0022\\u005c\\u000a\\u0001\\ud83d\\ude00\\ud83d\\u0041\\udc00"}')).toBe('{"path":"⟦PATH_1⟧","q":"\\"\\"\\\\\\n\\u0001😀\\ud83dA\\udc00"}')
+    expect(await resend('{"cmd":"a\\\\u0026b \\\\/ \\u005cu0026"}')).toBe('{"cmd":"a\\\\u0026b \\\\/ \\\\u0026"}')
+  })
+
+  it('masks a value resent in tool arguments as a surrogate pair, or with a quote or backslash written \\uXXXX, and restores it as written', async () => {
+    await start({ redaction: { terms: ['𠀋氏'] } })
+    try {
+      reply = entry => ({ json: { choices: [{ index: 0, message: { role: 'assistant', tool_calls: [{ id: 'd', type: 'function', function: { name: 'bash', arguments: JSON.stringify({ v: placeholders(entry.raw)[0] }) } }] } }] } })
+      const cases: Array<[user: string, args: string, value: string]> = [
+        ['password: p@ss🔑word12', '{"cmd":"echo p@ss\\ud83d\\udd11word12"}', 'p@ss🔑word12'],
+        ['contact 𠀋氏 today', '{"name":"\\ud840\\udc0b\\u6c0f"}', '𠀋氏'],
+        ['password: ab"cd12ef', '{"cmd":"echo ab\\u0022cd12ef"}', 'ab"cd12ef'],
+        ['password: ab\\cd12ef', '{"cmd":"echo ab\\u005ccd12ef"}', 'ab\\cd12ef'],
+      ]
+      for (const [user, args, value] of cases) {
+        seen = []
+        const messages = [{ role: 'user', content: user }, { role: 'assistant', tool_calls: [{ id: 'c', type: 'function', function: { name: 'bash', arguments: args } }] }, { role: 'tool', tool_call_id: 'c', content: 'ok' }]
+        const res = await post('/v1/chat/completions', { model: 'm', messages })
+        expect(res.status).toBe(200)
+        const sent = seen[0]!.body.messages[1].tool_calls[0].function.arguments
+        expect(sent).toMatch(/^\{"(cmd|name)":"(echo )?⟦(KEY|TERM)_1⟧"\}$/)
+        expect(JSON.parse((await res.json() as any).choices[0].message.tool_calls[0].function.arguments).v).toBe(value)
+      }
+    } finally {
+      await start()
+    }
   })
 
   it('keeps a credential from the system prompt through a flood of tool output', async () => {
