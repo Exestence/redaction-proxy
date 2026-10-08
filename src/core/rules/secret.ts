@@ -183,8 +183,12 @@ export function isProtocolFieldName(value: string): boolean {
 /** A masked or placeholder spelling: `***`, `xxx`, `<redacted>`, `[hidden]`, `your-password`. */
 const MASKED_VALUE = /^(?:\*+|x+|<[A-Za-z _-]+>|\[[A-Za-z _-]+\]|your[-_][A-Za-z_-]+)$/i
 
-/** A template placeholder, which may hold spaces: `<your secret>`, `{password}`, `${{ secrets.DB_PW }}`. */
-const TEMPLATE = '(?:<[A-Za-z][A-Za-z_ .-]*>|\\$?\\{\\{?[ \\t]*[A-Za-z][A-Za-z_ .-]*\\}\\}?)'
+/**
+ * A template placeholder, which may hold spaces: `<your secret>`, `{password}`,
+ * `${{ secrets.DB_PW }}`. A double-braced expression may hold digits
+ * (`${{ secrets.PW2 }}`); a digit in single braces makes a literal (`{hunter2}`).
+ */
+const TEMPLATE = '(?:<[A-Za-z][A-Za-z_ .-]*>|\\$?\\{[ \\t]*[A-Za-z][A-Za-z_ .-]*\\}|\\$?\\{\\{[ \\t]*[A-Za-z][\\w .-]*\\}\\})'
 const TEMPLATE_VALUE = new RegExp(`^${TEMPLATE}$`)
 const TEMPLATE_PREFIX = new RegExp(`^${TEMPLATE}(?![^\\s,.;:)\\]}&"'\`])`)
 

@@ -215,7 +215,7 @@ const mustKeep = [
     'assistant', 'tool', 'image', 'messages', 'content', 'str', 'int', 'float', '***', '********', 'xxx', 'XXXXXXXX', '<redacted>',
     '[REDACTED]', 'your-password', 'your_password', '...',
     // Template placeholders.
-    '<your secret>', '{password}', '{{ secrets.DB_PW }}',
+    '<your secret>', '{password}', '{{ secrets.DB_PW }}', '${{ secrets.PW2 }}', '{{ var1 }}',
   ].flatMap(value => [
     `password: ${value}`, `{"password":"${value}"}`, `PASSWORD=${value}`, `Authorization: ${value}`, `密碼：${value}`,
   ]),
@@ -224,6 +224,7 @@ const mustKeep = [
     'max_tokens', 'tool_calls', 'stop_sequences', 'content_block', 'input_text', 'tool_choice',
     'response_format', 'finish_reason', 'cache_control',
   ].flatMap(value => [`password: ${value}`, `Authorization: ${value}`, `密碼：${value}`]),
+  'password: ${{ secrets.PW2 }}\njobs:\n  build:\n    env:\n      TOKEN: ${{ secrets.T }}\n      A: ${{ matrix.a }}',
 ]
 
 describe('credential rule', () => {
