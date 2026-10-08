@@ -653,6 +653,29 @@ describe('state kept per client credential', () => {
     await post('/v1/chat/completions', { model: 'm', messages: [{ role: 'user', content: `Noted ${PASS}.` }] }, client)
     expect(seen[2]!.body.messages[0].content).toMatch(/^Noted ⟦KEY_\d+⟧\.$/)
   })
+
+  it('keeps a credential from an Anthropic system string or block, or Responses instructions, through a flood of tool output', async () => {
+    reply = () => ({ json: {} })
+    const cookies = Array.from({ length: 4200 }, (_, i) => `Cookie: sessionid=s${String(i).padStart(5, '0')}f8a9c2d1e4b7a6c3`).join('\n')
+    const system = `Use password: ${PASS} for the db`
+    const messages = async (key: string, prompt: unknown): Promise<string> => {
+      seen = []
+      const client = { 'x-api-key': key }
+      await post('/v1/messages', { model: 'c', max_tokens: 1, system: prompt, messages: [{ role: 'user', content: 'hi' }] }, client)
+      const flood = [{ role: 'user', content: 'dump' }, { role: 'assistant', content: [{ type: 'tool_use', id: 't', name: 'dump', input: {} }] }, { role: 'user', content: [{ type: 'tool_result', tool_use_id: 't', content: cookies }] }]
+      await post('/v1/messages', { model: 'c', max_tokens: 1, messages: flood }, client)
+      await post('/v1/messages', { model: 'c', max_tokens: 1, messages: [{ role: 'user', content: `Noted ${PASS}.` }] }, client)
+      return seen[2]!.body.messages[0].content
+    }
+    expect(await messages('flood-system-string', system)).toMatch(/^Noted ⟦KEY_\d+⟧\.$/)
+    expect(await messages('flood-system-block', [{ type: 'text', text: system }])).toMatch(/^Noted ⟦KEY_\d+⟧\.$/)
+    seen = []
+    const client = { authorization: 'Bearer flood-instructions' }
+    await post('/v1/responses', { model: 'm', instructions: system, input: 'hi' }, client)
+    await post('/v1/responses', { model: 'm', input: [{ role: 'user', content: 'dump' }, { type: 'function_call', id: 'f', call_id: 'c', name: 'dump', arguments: '{}' }, { type: 'function_call_output', call_id: 'c', output: cookies }] }, client)
+    await post('/v1/responses', { model: 'm', input: `Noted ${PASS}.` }, client)
+    expect(seen[2]!.body.input).toMatch(/^Noted ⟦KEY_\d+⟧\.$/)
+  })
 })
 
 describe('tool-call arguments', () => {
