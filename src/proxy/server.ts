@@ -297,16 +297,20 @@ class Refusal extends Error {
 }
 
 /**
- * Collect every maskable string of a request body in a stable order.
+ * Collect every maskable string of a request body in a stable order. Inside
+ * tool input ({@link isToolInput}) every string is masked whatever its key,
+ * except the keys a reply's tool call keeps as sent ({@link SKIP_RESTORE}),
+ * since restore may have written an original under any other key.
  * @param value - parsed JSON value.
  * @param path - JSON pointer of `value`.
  * @param out - slot sink.
+ * @param tool - whether `value` is tool input or inside it.
  */
-function collectSlots(value: unknown, path: string, out: Slot[]): void {
+function collectSlots(value: unknown, path: string, out: Slot[], tool = false): void {
   if (Array.isArray(value)) {
     value.forEach((item, index) => {
       if (typeof item === 'string') out.push({ parent: value, key: index, path: `${path}/${index}` })
-      else collectSlots(item, `${path}/${index}`, out)
+      else collectSlots(item, `${path}/${index}`, out, tool)
     })
     return
   }
@@ -315,11 +319,11 @@ function collectSlots(value: unknown, path: string, out: Slot[]): void {
   const keys = Object.keys(record)
   const ordered = path === '' ? [...HEAD_FIRST.filter(key => key in record), ...keys.filter(key => !HEAD_FIRST.includes(key))] : keys
   for (const key of ordered) {
-    if (SKIP_SUBTREE.has(key)) continue
+    if (!tool && SKIP_SUBTREE.has(key)) continue
     const item = record[key]
     const at = `${path}/${pointerSegment(key)}`
-    if (typeof item !== 'string') collectSlots(item, at, out)
-    else if (!SKIP_MASK.has(key) || isTextSource(record, key)) out.push({ parent: record, key, path: at })
+    if (typeof item !== 'string') collectSlots(item, at, out, tool || isToolInput(record, key))
+    else if (tool ? !SKIP_RESTORE.has(key) : !SKIP_MASK.has(key) || isTextSource(record, key)) out.push({ parent: record, key, path: at })
   }
 }
 
@@ -336,14 +340,17 @@ function isTextSource(record: Record<string, unknown>, key: string): boolean {
 }
 
 /**
- * Whether `record[key]` is an Anthropic tool call's input, such as a resent
- * `tool_use` block's `input`, whose keys and values the tool defines.
+ * Whether `record[key]` is a resent tool call's input, whose keys and values
+ * the tool defines: an Anthropic `*tool_use` block's `input`, or an object
+ * under a Responses `*_call` item's own fields, such as `local_shell_call`'s
+ * `action`. The item's identifiers, name, type, and status are not.
  * @param record - a request object.
  * @param key - one of its keys.
  * @returns whether the value is tool input.
  */
 function isToolInput(record: Record<string, unknown>, key: string): boolean {
-  return key === 'input' && /tool_use$/.test(String(record.type))
+  const type = String(record.type)
+  return /tool_use$/.test(type) ? key === 'input' : /_call$/.test(type) && !SKIP_MASK.has(key)
 }
 
 /**

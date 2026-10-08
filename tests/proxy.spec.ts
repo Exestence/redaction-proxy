@@ -428,23 +428,43 @@ describe('state kept per client credential', () => {
     }
   })
 
-  it('refuses a detected value in an enum-named field when it is no enum value, or sits in metadata or tool input', async () => {
+  it('refuses a detected value in an enum-named field when it is no enum value, or sits in metadata', async () => {
     const user = { role: 'user', content: `password: ${PASS} mail ${EMAIL} file ${HOME}/notes.md` }
     for (const extra of [{ metadata: { status: PASS } }, { metadata: { user: { type: PASS } } }, { tool_choice: PASS }, { reasoning_effort: PASS }, { service_tier: EMAIL }]) {
       expect((await post('/v1/chat/completions', { model: 'm', messages: [user], ...extra })).status).toBe(422)
     }
+    expect(seen).toHaveLength(0)
+  })
+
+  it('masks every string of a resent tool input, whatever its key, but not the tool call\'s own protocol fields', async () => {
+    reply = () => ({ json: {} })
+    const user = { role: 'user', content: `password: ${PASS} mail ${EMAIL} file ${HOME}/notes.md` }
+    const input = { role: EMAIL, status: `${HOME}/notes.md`, name: EMAIL, url: `${HOME}/x`, type: PASS, data: 'AAAA' }
     const resent = await post('/v1/messages', {
       model: 'c',
       max_tokens: 1,
       messages: [
         user,
-        { role: 'assistant', content: [{ type: 'tool_use', id: 't1', name: 'assign', input: { role: EMAIL, status: `${HOME}/notes.md` } }] },
+        { role: 'assistant', content: [{ type: 'tool_use', id: 't1', name: 'assign', input }] },
         { role: 'user', content: [{ type: 'tool_result', tool_use_id: 't1', content: 'ok' }] },
       ],
     }, { 'x-api-key': 'k' })
-    expect(resent.status).toBe(422)
-    expect((await resent.json() as any).error.message).toContain('/messages/1/content/0/input/role (EMAIL), /messages/1/content/0/input/status (PATH)')
-    expect(seen).toHaveLength(0)
+    expect(resent.status).toBe(200)
+    const block = seen[0]!.body.messages[1].content[0]
+    expect(block).toMatchObject({ type: 'tool_use', id: 't1', name: 'assign', input: { data: 'AAAA' } })
+    expect(block.input.role).toMatch(/^⟦EMAIL_\d+⟧$/)
+    expect(block.input.status).toMatch(/^⟦PATH_\d+⟧\/notes\.md$/)
+    expect(block.input.name).toBe(block.input.role)
+    expect(block.input.url).toMatch(/^⟦PATH_\d+⟧\/x$/)
+    expect(block.input.type).toMatch(/^⟦KEY_\d+⟧$/)
+
+    const item = { type: 'local_shell_call', id: 'ls', call_id: 'c1', status: 'completed', action: { type: 'exec', command: ['cat', `${HOME}/x`], env: { name: EMAIL } } }
+    const responses = await post('/v1/responses', { model: 'm', input: [{ role: 'user', content: [{ type: 'input_text', text: user.content }] }, item] })
+    expect(responses.status).toBe(200)
+    const sent = seen[1]!.body.input[1]
+    expect(sent).toMatchObject({ type: 'local_shell_call', id: 'ls', call_id: 'c1', status: 'completed', action: { type: 'exec' } })
+    expect(sent.action.command[1]).toMatch(/^⟦PATH_\d+⟧\/x$/)
+    expect(sent.action.env.name).toMatch(/^⟦EMAIL_\d+⟧$/)
   })
 
   it('keeps remembered credentials through a flood of another category or from a tool result, and forgets the oldest beyond 4096 the user wrote', async () => {

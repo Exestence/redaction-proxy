@@ -219,7 +219,7 @@ REDACTION_PROXY_NAME_MODEL_DIR=$HOME/models/nym node lib/cli.js
 
 - **语义。** 云端仍能读到占位符周围的全部内容：`⟦PATH_1⟧/clients/acme-layoffs.md` 照样透露很多。
 - **人名、地址、病情、薪资**，除非你写进 `terms` 或人名模型识别出来。地址是自由文本，没有固定格式或关键词，所以没有地址规则。
-- **图片、PDF 等 base64 文件（纯文本文档的内容照常遮罩）、音频、`url` 字段、`metadata`、`stop` 序列、`name` 字段（工具名与参与者名）、带签名的 thinking。** 这些原样转发且不扫描，JSON 对象的键也一样：在被遮的文本中检测到的值如果也出现在其中，整个请求以 422 拒绝；只出现在这些地方的值则原样发出。只接受 API 枚举值的字段（`role`、`type`、`status`、`tool_choice` 等）在值像枚举值（例如 `assistant`）时不检查，但 `metadata` 下与回传的 `tool_use` 输入中照常检查：还原进名为 `type`、`status`、`name` 的工具参数的值，会让这段对话之后的每个请求都以 422 拒绝。
+- **图片、PDF 等 base64 文件（纯文本文档的内容照常遮罩）、音频、`url` 字段、`metadata`、`stop` 序列、`name` 字段（工具名与参与者名）、带签名的 thinking。** 这些原样转发且不扫描，JSON 对象的键也一样：在被遮的文本中检测到的值如果也出现在其中，整个请求以 422 拒绝；只出现在这些地方的值则原样发出。只接受 API 枚举值的字段（`role`、`type`、`status`、`tool_choice` 等）在值像枚举值（例如 `assistant`）时不检查，但 `metadata` 下照常检查。回传的工具调用输入不论键名都照常遮罩，所以还原进名为 `type`、`name` 的工具参数的值会再被遮罩，不会被拒绝。
 - **少见的写法。** 有些拆开或编码过的写法识别不了，比如带空格的 `name @ domain`、`name at domain`、小写的 IBAN、两次百分号编码的值。
 - **Cursor**，以及任何从自家服务器发请求的工具。
 - **本机上的其他程序。** 代理默认只监听 `127.0.0.1`；没设 `authToken` 时，本机上的任何程序都能使用它。网页的请求以 403 拒绝，除非来源（Origin）是本机 `http(s)` 网页或列在 `allowedOrigins` 中；指定其他主机名的请求（DNS rebinding）也以 403 拒绝。
