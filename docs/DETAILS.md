@@ -205,7 +205,7 @@ flowchart TD
 
 回應中 `signature`、`thinking`、`data`、`encrypted_content` 的字串照模型送出的原樣保留（`SKIP_RESTORE`），因為用戶端之後要逐位元組回送。因此 Anthropic 的 thinking 內容會帶著佔位符顯示。
 
-`arguments` 與 `partial_json` 是 JSON 文字，還原時原始值會以 JSON 跳脫寫入（`JSON_TEXT`）。
+`arguments` 與 `partial_json` 是 JSON 文字，還原時原始值會以 JSON 跳脫寫入（`JSON_TEXT`）。所以遮罩時每個綁定或記住的值也以 JSON 跳脫寫法比對（`p@ss\word12` 也找 `p@ss\\word12`），用它原樣寫法的佔位符；這種寫法先綁定時，還原仍寫回原樣寫法，寫進 `arguments` 只跳脫一次。
 
 ## 6. 拒絕與錯誤狀態碼
 
@@ -218,7 +218,7 @@ flowchart TD
 | 413 | 請求本文超過 64 MiB。 | 上限 |
 | 404 | POST 到代理不遮罩的路由（例如 `/v1/embeddings`），或 GET、POST 以外的方法。 | 方法與路徑 |
 | 422 | `screen: "refuse"` 且某段文字含控制字元、U+FFFD、孤立 surrogate 或 `⟦`/`⟧`。 | JSON 路徑與字元類別 |
-| 422 | **送出前外洩檢查**：遮罩後請求的任一字串或鍵中，仍找得到某個偵測到的原始值（原樣或 JSON 跳脫形式）。規則值在任何位置、不分 ASCII 大小寫都算（`LIN@EXAMPLE.TEST` 算 `lin@example.test`）。名稱模型的值：以空格分詞的文字只算完整單字（`Leeds` 裡的 `Lee` 不算），中日韓文字在任何位置都算；只有一個字的模型值不檢查。列舉欄位（`role`、`type` 等，見第 8 節）不檢查。 | 最多 5 個欄位路徑，各附所含值的類別，值由先前的請求記住時加註 `remembered from an earlier request` |
+| 422 | **送出前外洩檢查**：遮罩後請求的任一字串或鍵中，仍找得到某個偵測到的原始值（原樣或 JSON 跳脫形式）。規則值在任何位置、不分 ASCII 大小寫都算（`LIN@EXAMPLE.TEST` 算 `lin@example.test`）。名稱模型的值：以空格分詞的文字只算完整單字（`Leeds` 裡的 `Lee` 不算），中日韓文字在任何位置都算；只有一個字的模型值不檢查。列舉欄位（`role`、`type` 等）的值像列舉值時不檢查，`metadata`、`stop` 底下與 Anthropic `tool_use` 的 `input` 中照常檢查，見第 8 節。 | 最多 5 個欄位路徑，各附所含值的類別，值由先前的請求記住時加註 `remembered from an earlier request` |
 | 422 | 帶 `previous_response_id`，但代理沒有這個用戶端憑證的先前輸入（重啟、被擠出、從未經過代理，或屬於另一個用戶端）。 | 固定訊息 |
 | 422 | 與 `previous_response_id` 先前輸入合併後 `mask` 拋出 `RedactionError`。 | 錯誤代碼 |
 | 502 | 連不上上游。 | 網路錯誤代碼 |
@@ -269,7 +269,7 @@ sequenceDiagram
 
 | API | 各自還原的欄位 | 欄位結束時的殘留 |
 | --- | --- | --- |
-| Chat Completions | 每個 choice 的 `content`、`reasoning_content`、每個工具呼叫的 `arguments` 或自訂工具的 `custom.input` | 附加到帶 `finish_reason` 的那個 chunk 上（它本身可能也帶文字） |
+| Chat Completions | 每個 choice 的 `content`、`reasoning_content`、`refusal`、每個工具呼叫的 `arguments` 或自訂工具的 `custom.input`、舊的 `function_call.arguments` | 附加到帶 `finish_reason` 的那個 chunk 上（它本身可能也帶文字） |
 | Anthropic Messages | 每個 content block 的 `text_delta` 與 `input_json_delta`（沒有 `content_block_start` 的 `input_json_delta` 也當工具參數，套用預設類別） | 在 `content_block_stop` 之前插入一個合成的 `content_block_delta` |
 | Responses | 依 `item_id`、`content_index` 或 `summary_index` 與事件類型區分的每個 `.delta` | 在對應的 `.done` 之前插入一個合成的 `.delta` |
 
@@ -332,8 +332,8 @@ URL 內的佔位符不論類別一律保持原樣；回覆文字（含 reasoning
 
 - **長度。** 同一個請求內，憑證（`KEY`）不論多短都擴散到它的每個出現處：`password: ab12x, again ab12x` 兩處都遮。帶到之後請求的，只有本身長度就夠擴散的值：至少 6 個可列印 ASCII 字元，或至少 2 個其他碼位。較短的值不記住，否則 `ab1` 會遮掉之後每個 `ab12` 裡的那段；所以之後的請求中，少了關鍵詞的 `ab12x` 照原樣送出。
 - **大小寫。** 記住的憑證不分 ASCII 大小寫：之後出現的 `TR0UB4DOR&3X`、`tr0ub4dor&3x` 都遮，各有自己的佔位符。其他類別照原樣比對。
-- **容量。** 每個範圍每個類別最多 4,096 個值、最多 64 個範圍，都先進先出；請求再綁定的值移到最新端。類別各自計數，所以一次幾千個 email 的工具結果擠不掉記住的憑證；同一類別的大量新值（例如 4,096 個新的 `password: …`）則會擠掉較舊的憑證，之後它的回聲照原樣送出。
-- **外洩檢查。** 列舉欄位（`type`、`role`、`object`、`status`、`finish_reason`、`stop_reason`、`service_tier`、`reasoning_effort`、`tool_choice`）的字串只能是 API 定義的固定值，不帶私人資料，外洩檢查不看。否則一個被誤判並記住的 `assistant`，會讓之後每個帶 assistant 回合的請求被拒。物件鍵照常檢查：被誤判的 `messages`、`text` 會讓含這些鍵的請求以 422 拒絕。拒絕訊息寫出每個欄位所含值的類別，以及它是否由先前的請求記住，從不寫值本身。
+- **容量。** 每個範圍每個類別最多 4,096 個值、最多 64 個範圍，都先進先出；請求再綁定的值移到最新端。類別各自計數，所以一次幾千個 email 的工具結果擠不掉記住的憑證。在使用者自己寫的文字（user 訊息的內容與文字部分）中綁定的值另外放在每個類別各一個桶中，也是 4,096 個，所以一次幾千行 cookie 的工具結果也擠不掉使用者打過的密碼；使用者自己貼上的大量同類別新值（例如 4,096 個新的 `password: …`）則會擠掉較舊的憑證，之後它的回聲照原樣送出。
+- **外洩檢查。** 列舉欄位（`type`、`role`、`object`、`status`、`finish_reason`、`stop_reason`、`service_tier`、`reasoning_effort`、`tool_choice`）的字串只能是 API 定義的固定值，不帶私人資料；值像列舉值（小寫英文字母開頭，只含小寫英數字與 `_`、`.`、`:`、`-`，最多 64 字元）時外洩檢查不看。否則一個被誤判並記住的 `assistant`，會讓之後每個帶 assistant 回合的請求被拒。`metadata`、`stop` 底下與 Anthropic `tool_use` 的 `input` 中的鍵由用戶端或工具定義，那裡同名的鍵照常檢查。這些欄位不遮（第 5 節），所以還原進名為 `type`、`status`、`role`、`name` 等工具參數的值，在用戶端回送那個 `tool_use` 時會讓請求以 422 拒絕。物件鍵照常檢查：被誤判的 `messages`、`text` 會讓含這些鍵的請求以 422 拒絕。拒絕訊息寫出每個欄位所含值的類別，以及它是否由先前的請求記住，從不寫值本身。
 
 這些原始值留在記憶體中直到被擠出或代理重啟，不寫入磁碟。
 
@@ -543,7 +543,7 @@ node scripts/fetch-name-model.mjs ~/models/nym       # 從 Hugging Face 下載�
 | --- | --- |
 | 藏實體，不藏語意 | 上游仍讀得到佔位符周圍的一切。`⟦PATH_1⟧/clients/acme-layoffs.md` 依然透露很多。 |
 | 人名、地址只有列出才遮 | 預設沒有自由文字的人名偵測，也沒有地址規則：地址是自由文字，沒有固定格式、檢查碼或關鍵詞，規則無法和一般句子區分。人名、公司名、代號要列進 `terms` 或 `projectNames`，或開啟[實驗性的人名模型](#16-人名模型實驗性)，但它會漏掉一些人名。病況、薪資照原樣送出。 |
-| 有些欄位不遮 | 圖片、PDF 等 base64 檔案（純文字文件的內容照常遮罩）、音訊、`metadata`、工具名稱、帶簽章的 thinking 原樣轉送且不掃描，JSON 物件的鍵也是。在被遮文字中偵測到的值若也出現在這些欄位，整個請求以 422 拒絕；只出現在這些欄位的值照原樣送出。 |
+| 有些欄位不遮 | 圖片、PDF 等 base64 檔案（純文字文件的內容照常遮罩）、音訊、`metadata`、工具名稱、帶簽章的 thinking 原樣轉送且不掃描，JSON 物件的鍵也是。在被遮文字中偵測到的值若也出現在這些欄位，整個請求以 422 拒絕；只出現在這些欄位的值照原樣送出。還原進 Anthropic `tool_use` 中名為 `type`、`status`、`role`、`name` 等參數的值，回送時同樣以 422 拒絕（第 8 節）。 |
 | Cursor 不能用 | Cursor 的自訂 base URL 請求是從 Cursor 自己的伺服器發出，連不到你的 `127.0.0.1`；而且 Cursor 後端在任何代理之前就看到未遮罩的提示。 |
 | 有些拆開的寫法抓不到 | 偵測不到：點後加空格的私有 IP（`192. 168. 1. 2`）；被空格或換行拆開的 API 金鑰（高熵規則只抓得到部分片段）；寫成 `name @ domain`（`@` 兩側有空白，`wang.yichun @ example.tw`）或單獨用 ` at `（`wang.yichun at example.tw`）的 email 不遮，因為 shell 提示字元（`root @ web01.example.com`）、帳號標記（`cc @ alice.me`）、英文散文（`socket.io at github.com`）與矩陣程式碼（`a.b @ c.de`）長得一樣；這類 email 只有隱私分類器把關。抓得到：加了空格或連字號的 terms、`＠`、`(at)`、`[at]`、`[dot]`，以及中間有一個分隔符的身分證字號、統編、手機號碼；啟用延伸規則時（代理預設）也抓得到小寫字母開頭或夾不換行空白的身分證字號，以及以 `.`、`/`、`_` 分組或前 4 碼加括號的手機號碼。仍偵測不到：一般空白或連字號在其他位置的身分證字號（`A12345-6789`），以及小寫字母開頭又有一般空白或連字號的寫法（`a 123456789`）；沒有關鍵詞的護照與健保卡號（沒有檢查碼）；`jwt=X` 中不是 JWT 形狀的值（`key = X` 指派由 `api-key` 讀，`jwt` 不在它的關鍵詞中；JWT 形狀的值本來就由 `api-key`、`token-format` 遮）。 |
 | 有些編碼寫法抓不到 | 百分比編碼（percent-encoding）的值（`lin.yating%40example.com`、查詢字串裡的 `%E6%98%9F…`、`%2FUsers%2F…`）會解碼一層後偵測，遮罩範圍是編碼原文，回覆還原時寫回編碼原文。夾雜無效或截斷的位元組（`%FF`、在 `%E6` 處被截斷的 URL）不會讓其餘部分不解碼，解碼後的全形字元與零寬字元也和一般文字一樣折疊，緊接在無效位元組後面的號碼或金鑰（`%E6%2B886…`、`%E609-1234-5678`、`%FFsk-…`）也抓得到。啟用 `email-escaped` 時（代理預設），`@` 寫成 `&#64;`、`&#x40;`、`&commat;`、`\u0040` 的 email 也抓得到。偵測不到：編碼兩次的值（`%2540`）；表單編碼查詢中代表空格的 `+`（`星河+計畫`）；URL 裡經 base64 編碼的值（隱私路由只在工具輸出中解碼 base64）；緊接在無效位元組後面的身分證字號（`%E6A123456789`），因為 Big5 與 Shift-JIS 中緊接在前導位元組後面的字母是該字的一部分（`%A4A` 是「乙」）。同理，尾位元組為 `A` 的 Shift-JIS 字元可能讓 `%83AKIA…` 被遮成形似金鑰的範圍。 |
