@@ -194,7 +194,7 @@ flowchart TD
 
 ## 5. 不遮就轉送的欄位
 
-請求中以下鍵的字串值不會被遮（`SKIP_MASK`）。值是物件或陣列時照常往下找，所以工具 schema 中名為 `name`、`data`、`url` 的屬性說明照常遮罩。例外：`data` 所在物件的 `type` 是 `text`（Anthropic 純文字文件的 `source`）時照常遮罩；回送的工具呼叫輸入（Anthropic `*tool_use` 的 `input`，以及 Responses `*_call` 項目自身欄位底下的物件，例如 `local_shell_call` 的 `action`）中的字串不論鍵名都遮，只有回應中工具呼叫原樣保留的 `signature`、`thinking`、`data`、`encrypted_content` 不遮，因為還原可能把原始值寫到其他任何鍵下；項目本身的 `type`、`id`、`call_id`、`name`、`status` 照常不遮；`metadata` 與 `stop` 整個值都不遮（`SKIP_SUBTREE`）。OpenAI 的檔案部分（`file_data`）是 base64 data URL，不解碼也不遮。
+請求中以下鍵的字串值不會被遮（`SKIP_MASK`）。值是物件或陣列時照常往下找，所以工具 schema 中名為 `name`、`data`、`url` 的屬性說明照常遮罩。例外：`data` 所在物件的 `type` 是 `text`（Anthropic 純文字文件的 `source`）時照常遮罩；回送的工具呼叫輸入（Anthropic `*tool_use` 的 `input`，以及 Responses `*_call` 項目自身欄位底下的物件，例如 `local_shell_call` 的 `action`）中的字串不論鍵名都遮，連 `data`、`thinking`、`signature`、`encrypted_content` 也遮，因為還原會把原始值寫進工具輸入中任何鍵下的字串，那裡也沒有簽章或加密狀態；項目本身的 `type`、`id`、`call_id`、`name`、`status` 照常不遮；`metadata` 與 `stop` 整個值都不遮（`SKIP_SUBTREE`）。OpenAI 的檔案部分（`file_data`）是 base64 data URL，不解碼也不遮。
 
 | 類型 | 鍵 |
 | --- | --- |
@@ -203,7 +203,7 @@ flowchart TD
 | 二進位與檔案 | `data`、`media_type`、`url`、`image_url`、`file_id`、`file_data` |
 | 簽章或加密的模型狀態 | `signature`、`thinking`、`encrypted_content` |
 
-回應中 `signature`、`thinking`、`data`、`encrypted_content` 的字串照模型送出的原樣保留（`SKIP_RESTORE`），因為用戶端之後要逐位元組回送。因此 Anthropic 的 thinking 內容會帶著佔位符顯示。
+回應中 `signature`、`thinking`、`data`、`encrypted_content` 的字串照模型送出的原樣保留（`SKIP_RESTORE`），因為用戶端之後要逐位元組回送；工具呼叫輸入中同名鍵的字串照常還原。因此 Anthropic 的 thinking 內容會帶著佔位符顯示。
 
 `arguments` 與 `partial_json` 是 JSON 文字，還原時原始值會以 JSON 跳脫寫入（`JSON_TEXT`）。所以遮罩時每個綁定或記住的值也以 JSON 跳脫寫法比對（`p@ss\word12` 也找 `p@ss\\word12`），用它原樣寫法的佔位符；這種寫法先綁定時，還原仍寫回原樣寫法，寫進 `arguments` 只跳脫一次。
 

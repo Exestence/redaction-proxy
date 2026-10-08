@@ -299,8 +299,8 @@ class Refusal extends Error {
 /**
  * Collect every maskable string of a request body in a stable order. Inside
  * tool input ({@link isToolInput}) every string is masked whatever its key,
- * except the keys a reply's tool call keeps as sent ({@link SKIP_RESTORE}),
- * since restore may have written an original under any other key.
+ * since restore writes originals into every string of a reply's tool input
+ * and no signed state lives there.
  * @param value - parsed JSON value.
  * @param path - JSON pointer of `value`.
  * @param out - slot sink.
@@ -323,7 +323,7 @@ function collectSlots(value: unknown, path: string, out: Slot[], tool = false): 
     const item = record[key]
     const at = `${path}/${pointerSegment(key)}`
     if (typeof item !== 'string') collectSlots(item, at, out, tool || isToolInput(record, key))
-    else if (tool ? !SKIP_RESTORE.has(key) : !SKIP_MASK.has(key) || isTextSource(record, key)) out.push({ parent: record, key, path: at })
+    else if (tool || !SKIP_MASK.has(key) || isTextSource(record, key)) out.push({ parent: record, key, path: at })
   }
 }
 

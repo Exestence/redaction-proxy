@@ -501,6 +501,47 @@ describe('state kept per client credential', () => {
     expect(seen[2]!.body.messages[0].tool_calls[0].function.arguments).toBe('{"cmd":"echo ⟦KEY_1⟧"}')
     expect(JSON.parse(pruned.choices[0].message.tool_calls[0].function.arguments).cmd).toBe(`echo ${pw}`)
   })
+
+  it('masks a resent tool input under keys named data, thinking, signature, or encrypted_content, at any depth', async () => {
+    reply = () => ({ json: {} })
+    const user = { role: 'user', content: `password: ${PASS} mail ${EMAIL} file ${HOME}/notes.md` }
+    const input = { data: `home is ${HOME}`, thinking: EMAIL, signature: PASS, encrypted_content: EMAIL, payload: { data: `${HOME}/x` }, files: [{ data: `${HOME}/a` }] }
+    const resent = await post('/v1/messages', {
+      model: 'c',
+      max_tokens: 1,
+      messages: [
+        user,
+        { role: 'assistant', content: [{ type: 'tool_use', id: 't1', name: 'write_file', input }] },
+        { role: 'user', content: [{ type: 'tool_result', tool_use_id: 't1', content: 'ok' }] },
+      ],
+    }, { 'x-api-key': 'k' })
+    expect(resent.status).toBe(200)
+    const sent = seen[0]!.body.messages[1].content[0].input
+    expect(sent.data).toMatch(/^home is ⟦PATH_\d+⟧$/)
+    expect(sent.thinking).toMatch(/^⟦EMAIL_\d+⟧$/)
+    expect(sent.signature).toMatch(/^⟦KEY_\d+⟧$/)
+    expect(sent.encrypted_content).toBe(sent.thinking)
+    expect(sent.payload.data).toMatch(/^⟦PATH_\d+⟧\/x$/)
+    expect(sent.files[0].data).toMatch(/^⟦PATH_\d+⟧\/a$/)
+
+    const item = { type: 'local_shell_call', id: 'ls', call_id: 'c1', status: 'completed', action: { type: 'exec', command: ['ls'], env: { data: `${HOME}/y` } } }
+    expect((await post('/v1/responses', { model: 'm', input: [user, item] })).status).toBe(200)
+    expect(seen[1]!.body.input[1].action.env.data).toMatch(/^⟦PATH_\d+⟧\/y$/)
+  })
+
+  it('refuses a bound value glued into an enum-like string under tool input', async () => {
+    const res = await post('/v1/messages', {
+      model: 'c',
+      max_tokens: 1,
+      messages: [
+        { role: 'user', content: 'password: secret_token1' },
+        { role: 'assistant', content: [{ type: 'tool_use', id: 't1', name: 'set', input: { type: 'xsecret_token1' } }] },
+        { role: 'user', content: [{ type: 'tool_result', tool_use_id: 't1', content: 'ok' }] },
+      ],
+    }, { 'x-api-key': 'k' })
+    expect(res.status).toBe(422)
+    expect((await res.json() as any).error.message).toContain('/messages/1/content/0/input/type (KEY)')
+  })
 })
 
 describe('tool-call arguments', () => {
