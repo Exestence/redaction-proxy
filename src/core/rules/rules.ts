@@ -594,7 +594,10 @@ export function collectEntropyCandidates(text: string, push: PushCandidate, file
 /**
  * Collect configured literal terms. Terms match on the NFKC projection so a
  * full-width or zero-width spelling still matches, and a non-ASCII term also
- * matches its `\uXXXX` escape spelling.
+ * matches its `\uXXXX` escape spelling. A term edge that is an ASCII letter or
+ * digit matches only where the projection's neighbouring character is not one
+ * (see {@link hasFreeEdges}), so `Lin` skips `online` and `Linux`; a CJK edge
+ * matches inside text. The escape spelling matches without this check.
  * @param text - text to scan.
  * @param terms - configured terms with their categories.
  * @param push - candidate sink.
@@ -609,13 +612,17 @@ export function collectTermCandidates(text: string, terms: readonly ConfiguredTe
       // Configuration refuses a term that projects to nothing, so the needle is never empty.
       const needle = projectNfkc(term.value).lower
       for (let at = projection.lower.indexOf(needle); at >= 0; at = projection.lower.indexOf(needle, at + 1)) {
+        if (!hasFreeEdges(projection.lower, at, at + needle.length, needle)) continue
         // oxlint-disable-next-line typescript/no-non-null-assertion -- both offsets are inside the projection.
         push(projection.startMap[at]!, projection.endMap[at + needle.length - 1]!, term.category, PRIORITY_TERM)
       }
     } else {
       for (let match = pattern.exec(projection.lower); match !== null; match = pattern.exec(projection.lower)) {
-        // oxlint-disable-next-line typescript/no-non-null-assertion -- both offsets are inside the projection.
-        push(projection.startMap[match.index]!, projection.endMap[match.index + match[0].length - 1]!, term.category, PRIORITY_TERM)
+        const end = match.index + match[0].length
+        if (hasFreeEdges(projection.lower, match.index, end, match[0])) {
+          // oxlint-disable-next-line typescript/no-non-null-assertion -- both offsets are inside the projection.
+          push(projection.startMap[match.index]!, projection.endMap[end - 1]!, term.category, PRIORITY_TERM)
+        }
         // Overlapping occurrences are found too, as the single-part search finds
         // them. A `u` pattern backs a lastIndex inside a surrogate pair up to the
         // pair's start, so the step is one whole code point.

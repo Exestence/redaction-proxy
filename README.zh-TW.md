@@ -95,7 +95,7 @@ curl http://127.0.0.1:8787/v1/chat/completions \
 | `openaiUpstream` | `https://api.openai.com` | Chat Completions 與 Responses 的上游。 |
 | `anthropicUpstream` | `https://api.anthropic.com` | Anthropic Messages 的上游。 |
 | `allowInsecureUpstream` | `false` | 允許以明文 `http://` 連到非本機的上游；API 金鑰會以明文傳送。 |
-| `redaction.terms` | 無 | 要遮的人名等字詞，不分大小寫。 |
+| `redaction.terms` | 無 | 要遮的人名等字詞，不分大小寫；首尾是英文字母或數字的字詞只比對完整的詞（`Lin` 不遮 `Linux`），中日韓字詞在文字中照常比對。 |
 | `redaction.projectNames` | 無 | 要遮的專案代號。 |
 | `redaction.allowlist` | `git@github.com`、`noreply@github.com` | 永遠不遮的值。 |
 | `redaction.rules` | `card`、`entropy` 以外全部 | 要啟用的內建規則。以 `card-strict`、`entropy-strict` 取代 `card`、`entropy`：不會把一串數字切成兩半，也放過以檔名為鍵的雜湊。 |
@@ -136,7 +136,7 @@ curl http://127.0.0.1:8787/v1/chat/completions \
 | 長亂數字串 | 32 字元以上的 hex 或 base64 | `⟦ENTROPY_1⟧` |
 | 你列出的字詞 | `terms`、`projectNames` | `⟦TERM_1⟧`、`⟦PROJECT_1⟧` |
 
-同一個值在整個請求中用同一個佔位符。請求中偵測到的值遮罩後若仍在請求中，代理會拒絕送出（422），不冒險外洩。用戶端請求中偵測到、至少 6 個 ASCII 字元或 2 個其他字元長的值，代理也依用戶端憑證記在記憶體中，從最後一次偵測起保留 24 小時（`knownOriginalsTtlSeconds`），之後的請求即使歷史中已沒有偵測它的上下文（`password: …`），它單獨出現的地方也照樣遮罩（憑證不分 ASCII 大小寫）。這份記憶只是盡力而為的額外遮罩，從不拒絕請求：記住的值黏著其他字元出現（`xTr0ub4dor&3xy`）、換了寫法，或在代理不改寫的欄位中時，照原樣送出。在你自己的訊息或系統提示中找到的值與在工具輸出中找到的值分開存放，所以大量的工具結果擠不掉寫在那裡的密碼。這份記憶有上限，所以連得到代理的本機程式可以送大量請求把值擠掉；代理預設只聽本機位址，其他位址必須設權杖。全由 API 欄位用字組成的 snake_case 值（`max_tokens`、`data_store`）只在綁定它的請求中遮，所以之後的請求仍能寫出這個欄位名。全形數字、`＠`、零寬字元會先折疊再比對。完整規則見[技術細節第 3 節](docs/DETAILS.md#3-偵測規則)。
+同一個值在整個請求中用同一個佔位符。請求中偵測到的值遮罩後若仍在請求中，代理會拒絕送出（422），不冒險外洩。用戶端請求中偵測到、至少 6 個 ASCII 字元或 2 個其他字元長的值，代理也依用戶端憑證記在記憶體中，從最後一次偵測起保留 24 小時（`knownOriginalsTtlSeconds`），之後的請求即使歷史中已沒有偵測它的上下文（`password: …`），它單獨出現的地方也照樣遮罩（憑證不分 ASCII 大小寫）。這份記憶只是盡力而為的額外遮罩，從不拒絕請求：記住的值黏著其他字元出現（`xTr0ub4dor&3xy`）、換了寫法，或在代理不改寫的欄位中時，照原樣送出。在你自己的訊息或系統提示中找到的值與在工具輸出中找到的值分開存放，所以大量的工具結果擠不掉寫在那裡的密碼。這份記憶有上限，所以連得到代理的本機程式可以送大量請求把值擠掉；代理預設只聽本機位址，其他位址必須設權杖。全由 API 欄位用字組成的 snake_case 值（`web_server`、`data_store`）只在綁定它的請求中遮，所以之後的請求仍能寫出這個欄位名。全形數字、`＠`、零寬字元會先折疊再比對。完整規則見[技術細節第 3 節](docs/DETAILS.md#3-偵測規則)。
 
 ## 選用的人名模型（實驗性）
 

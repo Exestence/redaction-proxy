@@ -77,7 +77,8 @@ describe('Unicode normalization', () => {
   it('matches a decorated term in two thousand seeded rounds', async () => {
     const random = rng(20260916)
     const zeroWidth = ['\u200b', '\u200c', '\u200d', '\u2060', '\ufeff']
-    const filler = ['x', ' ', '。', '-', '9', 'Ａ']
+    // No ASCII letter, digit, or full-width Latin letter: beside a Latin term edge those cut a longer word.
+    const filler = ['中', ' ', '。', '-', '，', '　']
     const pick = <T>(list: readonly T[]): T => list[Math.floor(random() * list.length)] as T
     let matched = 0
     let restoredAll = 0

@@ -95,7 +95,7 @@ curl http://127.0.0.1:8787/v1/chat/completions \
 | `openaiUpstream` | `https://api.openai.com` | Chat Completions 和 Responses 的上游。 |
 | `anthropicUpstream` | `https://api.anthropic.com` | Anthropic Messages 的上游。 |
 | `allowInsecureUpstream` | `false` | 允许以明文 `http://` 连接非本机的上游；API 密钥会以明文传输。 |
-| `redaction.terms` | 无 | 需要脱敏的人名等词语，不区分大小写。 |
+| `redaction.terms` | 无 | 需要脱敏的人名等词语，不区分大小写；首尾是英文字母或数字的词语只匹配完整的词（`Lin` 不遮 `Linux`），中日韩词语在文本中照常匹配。 |
 | `redaction.projectNames` | 无 | 需要脱敏的项目代号。 |
 | `redaction.allowlist` | `git@github.com`、`noreply@github.com` | 永不脱敏的值。 |
 | `redaction.rules` | 除 `card`、`entropy` 外全部 | 启用的内置规则。以 `card-strict`、`entropy-strict` 取代 `card`、`entropy`：不会把一串数字切成两半，也放过以文件名为键的哈希。 |
@@ -136,7 +136,7 @@ curl http://127.0.0.1:8787/v1/chat/completions \
 | 长随机串 | 32 位以上的 hex 或 base64 | `⟦ENTROPY_1⟧` |
 | 你列出的词语 | `terms`、`projectNames` | `⟦TERM_1⟧`、`⟦PROJECT_1⟧` |
 
-同一个值在整个请求里用同一个占位符。请求中检测到的值脱敏后若仍在请求里，代理会拒绝发送（422），不冒泄露的风险。客户端请求中检测到、至少 6 个 ASCII 字符或 2 个其他字符长的值，代理还会按客户端凭证记在内存中，从最后一次检测起保留 24 小时（`knownOriginalsTtlSeconds`），之后的请求即使历史中已没有检测它的上下文（`password: …`），它单独出现的地方也照样遮罩（凭证不区分 ASCII 大小写）。这份记忆只是尽力而为的额外遮罩，从不拒绝请求：记住的值粘着其他字符出现（`xTr0ub4dor&3xy`）、换了写法，或在代理不改写的字段中时，原样发出。在你自己的消息或系统提示词中找到的值与在工具输出中找到的值分开存放，所以大量的工具结果挤不掉写在那里的密码。这份记忆有上限，所以能连到代理的本机程序可以发大量请求把值挤掉；代理默认只监听本机地址，其他地址必须设令牌。全由 API 字段用词组成的 snake_case 值（`max_tokens`、`data_store`）只在绑定它的请求中遮罩，所以之后的请求仍能写出这个字段名。全角数字、`＠` 和零宽字符会先归一化再匹配。完整规则见[技术细节第 3 节](docs/DETAILS.md#3-偵測規則)。
+同一个值在整个请求里用同一个占位符。请求中检测到的值脱敏后若仍在请求里，代理会拒绝发送（422），不冒泄露的风险。客户端请求中检测到、至少 6 个 ASCII 字符或 2 个其他字符长的值，代理还会按客户端凭证记在内存中，从最后一次检测起保留 24 小时（`knownOriginalsTtlSeconds`），之后的请求即使历史中已没有检测它的上下文（`password: …`），它单独出现的地方也照样遮罩（凭证不区分 ASCII 大小写）。这份记忆只是尽力而为的额外遮罩，从不拒绝请求：记住的值粘着其他字符出现（`xTr0ub4dor&3xy`）、换了写法，或在代理不改写的字段中时，原样发出。在你自己的消息或系统提示词中找到的值与在工具输出中找到的值分开存放，所以大量的工具结果挤不掉写在那里的密码。这份记忆有上限，所以能连到代理的本机程序可以发大量请求把值挤掉；代理默认只监听本机地址，其他地址必须设令牌。全由 API 字段用词组成的 snake_case 值（`web_server`、`data_store`）只在绑定它的请求中遮罩，所以之后的请求仍能写出这个字段名。全角数字、`＠` 和零宽字符会先归一化再匹配。完整规则见[技术细节第 3 节](docs/DETAILS.md#3-偵測規則)。
 
 ## 可选的人名模型（实验性）
 

@@ -158,14 +158,27 @@ const PROTOCOL_FIELD_WORDS = new Set([
 ])
 
 /**
- * Chat-API field names written as a bare value, as in `password: max_tokens`.
- * Masking one would also flag the request's own JSON key of that name and
- * refuse the request. A quoted or `.env` value of the same spelling is masked.
+ * Request and response field names of the OpenAI Chat Completions and
+ * Responses APIs and the Anthropic Messages API, such as `password: top_p`.
+ * Bound as a credential, one would also flag the request's own JSON key of that
+ * name and refuse the request, so such a value is never masked, quoted, on a
+ * `.env` line, or bare, in any letter case.
  */
 const PROTOCOL_FIELD_NAMES = new Set([
-  'max_tokens', 'max_completion_tokens', 'max_output_tokens', 'tool_calls', 'tool_choice', 'tool_call_id',
-  'tool_use_id', 'stop_sequences', 'stop_reason', 'finish_reason', 'response_format', 'content_block',
-  'input_text', 'output_text', 'cache_control', 'previous_response_id', 'parallel_tool_calls',
+  // Request fields.
+  'audio', 'background', 'container', 'context_management', 'conversation', 'frequency_penalty',
+  'function_call', 'functions', 'include', 'input', 'instructions', 'logit_bias', 'logprobs',
+  'max_completion_tokens', 'max_output_tokens', 'max_tokens', 'max_tool_calls', 'mcp_servers', 'messages',
+  'metadata', 'modalities', 'model', 'n', 'parallel_tool_calls', 'prediction', 'presence_penalty',
+  'previous_response_id', 'prompt', 'prompt_cache_key', 'prompt_cache_retention', 'reasoning',
+  'reasoning_effort', 'response_format', 'safety_identifier', 'seed', 'service_tier', 'stop',
+  'stop_sequences', 'store', 'stream', 'stream_options', 'system', 'temperature', 'text', 'thinking',
+  'tool_choice', 'tools', 'top_k', 'top_logprobs', 'top_p', 'truncation', 'user', 'verbosity',
+  'web_search_options',
+  // Fields nested in requests and responses.
+  'budget_tokens', 'cache_control', 'content_block', 'disable_parallel_tool_use', 'finish_reason',
+  'include_usage', 'input_schema', 'input_text', 'is_error', 'json_schema', 'output_text', 'stop_reason',
+  'stop_sequence', 'tool_call_id', 'tool_calls', 'tool_use_id', 'user_id',
 ])
 
 /**
@@ -330,7 +343,7 @@ export function isCodeShape(raw: string, options: CodeShapeOptions = {}): boolea
   if (/^[A-Za-z]+$/.test(value) && (RESERVED_VALUE_WORDS.has(value.toLowerCase()) || PLACEHOLDER_VALUE_WORDS.has(value.toLowerCase()))) return true
   if (MASKED_VALUE.test(value)) return true
   if (TEMPLATE_VALUE.test(value)) return true
-  if (options.quoted !== true && options.envLine !== true && PROTOCOL_FIELD_NAMES.has(value)) return true
+  if (PROTOCOL_FIELD_NAMES.has(value.toLowerCase())) return true
   if (/^\$\{[^{}]*\}$/.test(value)) return true
   // A call with arguments can carry a literal secret, so only an empty argument list counts.
   if (/^[A-Za-z_$][\w$]*(?:\??\.[A-Za-z_$][\w$]*)*\(\s*\)$/.test(value)) return true

@@ -403,11 +403,24 @@ describe('state kept per client credential', () => {
 
   it('masks a password spelled like a protocol field name in its own request, but does not search later requests for it', async () => {
     const client = { authorization: 'Bearer client-protocol' }
-    await post('/v1/chat/completions', { model: 'm', messages: [{ role: 'user', content: 'password: "max_tokens" and DB_PASSWORD=data_store' }] }, client)
+    await post('/v1/chat/completions', { model: 'm', messages: [{ role: 'user', content: 'password: "web_server" and DB_PASSWORD=data_store' }] }, client)
     expect(seen[0]!.body.messages[0].content).toMatch(/^password: "⟦KEY_\d+⟧" and DB_PASSWORD=⟦KEY_\d+⟧$/)
-    const later = await post('/v1/chat/completions', { model: 'm', max_tokens: 5, data_store: 'x', messages: [{ role: 'user', content: 'please set max_tokens higher in data_store' }] }, client)
+    const later = await post('/v1/chat/completions', { model: 'm', web_server: 'x', data_store: 'x', messages: [{ role: 'user', content: 'please move web_server to data_store' }] }, client)
     expect(later.status).toBe(200)
-    expect(seen[1]!.body.messages[0].content).toBe('please set max_tokens higher in data_store')
+    expect(seen[1]!.body.messages[0].content).toBe('please move web_server to data_store')
+  })
+
+  it('forwards a password spelled like an API field name next to that field, in any form', async () => {
+    const chat = { model: 'm', top_p: 1, temperature: 0, messages: [{ role: 'user', content: 'password: top_p, {"password":"temperature"}' }] }
+    expect((await post('/v1/chat/completions', chat, { authorization: 'Bearer client-field' })).status).toBe(200)
+    expect(seen[0]!.body.messages[0].content).toBe(chat.messages[0]!.content)
+    const result = '{"password":"max_tokens"}\nDB_PASSWORD=cache_control'
+    const messages = [
+      { role: 'assistant', content: [{ type: 'tool_use', id: 'toolu_1', name: 'read', input: {} }] },
+      { role: 'user', content: [{ type: 'tool_result', tool_use_id: 'toolu_1', content: result, cache_control: { type: 'ephemeral' } }] },
+    ]
+    expect((await post('/v1/messages', { model: 'c', max_tokens: 1, messages }, { 'x-api-key': 'k' })).status).toBe(200)
+    expect(seen[1]!.body.messages[1].content[0].content).toBe(result)
   })
 
   it('names the category of a value this request detected that is still unmasked, never the value, and does not count a remembered one', async () => {
