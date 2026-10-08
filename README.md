@@ -133,7 +133,7 @@ Environment variables and every option: [technical details §12](docs/DETAILS.md
 | Long random strings | hex or base64, 32+ characters | `⟦ENTROPY_1⟧` |
 | Words you list | `terms`, `projectNames` | `⟦TERM_1⟧`, `⟦PROJECT_1⟧` |
 
-The same value gets the same placeholder throughout a request. If a detected value is still in the request after masking, the proxy refuses to send it (422) rather than leak it. Full-width digits, `＠`, and zero-width characters are folded first. Every rule: [technical details §3](docs/DETAILS.md#3-偵測規則).
+The same value gets the same placeholder throughout a request. If a detected value is still in the request after masking, the proxy refuses to send it (422) rather than leak it. Values a client's requests have bound are remembered in memory per client credential and masked in its later requests too, even once the context that detected them (`password: …`) is gone from the history. Full-width digits, `＠`, and zero-width characters are folded first. Every rule: [technical details §3](docs/DETAILS.md#3-偵測規則).
 
 ## Optional name model (experimental)
 

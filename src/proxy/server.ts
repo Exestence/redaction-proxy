@@ -7,9 +7,11 @@
  * Placeholder numbering is re-derived from the whole request on every call.
  * Clients resend the full history, and allocation follows text order, so an
  * append-only conversation keeps its identities across turns without any
- * server-side state. Responses requests that continue with
- * `previous_response_id` do not resend history; for them the original input
- * texts of each response are kept in memory, keyed by response id.
+ * server-side state. Two things are kept in memory per client credential:
+ * the original input texts of each Responses response, for requests that
+ * continue with `previous_response_id` and do not resend history, and every
+ * original the client's requests bound, so a later request whose history no
+ * longer holds the context that detected a value (`password: …`) still masks it.
  *
  * @module redaction-proxy/proxy/server
  */
@@ -80,6 +82,10 @@ const HOP = new Set([
 // ponytail: fixed-size FIFO of continuation texts; a restart forgets them (documented).
 const CONTINUATIONS_MAX = 256
 
+// ponytail: fixed-size FIFOs of known originals, by size only; add a time limit if a long-lived proxy must forget sooner.
+const KNOWN_ORIGINALS_MAX = 4096
+const KNOWN_CLIENTS_MAX = 64
+
 // ponytail: fixed cap above Anthropic's 32 MB request limit; make it a setting if a provider accepts more.
 const BODY_MAX_BYTES = 64 * 1024 * 1024
 
@@ -145,6 +151,61 @@ interface MaskedRequest extends RequestTexts {
   outgoing: string
   /** Bindings of the mask call. */
   registry: RedactionRegistry
+}
+
+/**
+ * Category of a placeholder identity: `EMAIL` of `EMAIL_3`.
+ * @param id - a placeholder identity.
+ * @returns its category.
+ */
+function categoryOf(id: string): string {
+  return id.slice(0, id.lastIndexOf('_'))
+}
+
+/**
+ * Scope of one client's in-memory state: a digest of the credential the
+ * request is forwarded with. Clients without one of their own share the
+ * configured key's scope.
+ * @param headers - the headers sent upstream.
+ * @returns the hex digest; the credential itself is never kept.
+ */
+function clientScope(headers: Readonly<Record<string, string>>): string {
+  return createHash('sha256').update(headers.authorization ?? headers['x-api-key'] ?? '').digest('hex')
+}
+
+/**
+ * Add the originals one client has bound before to a detector's propagation,
+ * so each of their occurrences is masked as if this request had detected it.
+ * @param detector - the request's detector.
+ * @param known - the client's known originals, mapped to their categories.
+ * @returns the detector to mask with.
+ */
+function withKnownOriginals(detector: RedactionDetector, known: ReadonlyMap<string, string> | undefined): RedactionDetector {
+  if (known === undefined) return detector
+  return {
+    policyDigest: detector.policyDigest,
+    detectorVersion: detector.detectorVersion,
+    categories: detector.categories,
+    detect: text => detector.detect(text),
+    propagate: async (texts, values) => await detector.propagate?.(texts, new Map([...known, ...values])) ?? [],
+    ...detector.identityKey === undefined ? {} : { identityKey: detector.identityKey.bind(detector) },
+  }
+}
+
+/**
+ * Move a key to the newest end of a FIFO map and drop the oldest entries beyond a cap.
+ * @param map - the map, oldest entry first.
+ * @param key - the key to add or refresh.
+ * @param value - its value.
+ * @param max - most entries kept.
+ */
+function setNewest<K, V>(map: Map<K, V>, key: K, value: V, max: number): void {
+  map.delete(key)
+  map.set(key, value)
+  for (const oldest of map.keys()) {
+    if (map.size <= max) return
+    map.delete(oldest)
+  }
 }
 
 /** A request the proxy refuses before anything is forwarded. */
@@ -636,18 +697,34 @@ export function createProxyServer(
   const withModel = nameModel === undefined ? undefined : new NameModelDetector(rules, nameModel)
   const detectorFor = (userTexts: ReadonlySet<string>, stats: Stats): RedactionDetector =>
     withModel?.forRequest(userTexts, () => { stats.nameModelFailed = true }) ?? rules
+  /** Continuation texts by client scope and response id. */
   const continuations = new Map<string, RequestTexts>()
+  /** Originals each client scope bound, mapped to their categories, oldest first. */
+  const knownOriginals = new Map<string, Map<string, string>>()
   const tokenDigest = config.authToken === undefined ? undefined : createHash('sha256').update(config.authToken).digest()
   const originAllowed = (origin: string): boolean => config.allowedOrigins.includes(origin.toLowerCase()) || isLoopbackOrigin(origin)
+
+  /**
+   * Remember every original a request bound, for the client's later requests.
+   * @param client - the client scope.
+   * @param registry - bindings of the request's mask call.
+   */
+  const rememberOriginals = (client: string, registry: RedactionRegistry): void => {
+    const known = knownOriginals.get(client) ?? new Map<string, string>()
+    // oxlint-disable-next-line typescript/no-non-null-assertion -- every listed identity is bound.
+    for (const id of registry.ids()) setNewest(known, registry.original(id)!, categoryOf(id), KNOWN_ORIGINALS_MAX)
+    setNewest(knownOriginals, client, known, KNOWN_CLIENTS_MAX)
+  }
 
   /**
    * Mask every text of one request body, a continuation's stored texts first.
    * @param body - the raw request body.
    * @param stats - counters; receives masked counts and a tolerated model failure.
+   * @param client - the client scope, for continuations and known originals.
    * @returns the masked body and what its response needs.
    * @throws {Refusal} on a body that is not JSON, an unscreenable text, a mask conflict, a required model's failure, or a leak.
    */
-  const maskBody = async (body: Buffer | undefined, stats: Stats): Promise<MaskedRequest> => {
+  const maskBody = async (body: Buffer | undefined, stats: Stats, client: string): Promise<MaskedRequest> => {
     let parsed: Json
     try {
       parsed = JSON.parse(body?.toString('utf8') ?? '') as Json
@@ -663,17 +740,17 @@ export function createProxyServer(
       if (refusal !== undefined) throw new Refusal(422, `request text at ${slot.path} holds a ${refusal.reason} and cannot be masked (screen: "refuse")`)
       return text
     })
-    const prior = typeof parsed.previous_response_id === 'string' ? continuations.get(parsed.previous_response_id) : undefined
+    const prior = typeof parsed.previous_response_id === 'string' ? continuations.get(`${client}:${parsed.previous_response_id}`) : undefined
     // Without the earlier texts, this request's numbering would bind the upstream's old placeholders to other values.
     if (typeof parsed.previous_response_id === 'string' && prior === undefined) {
-      throw new Refusal(422, 'previous_response_id is unknown to this proxy (restarted, evicted, or never seen); start a new conversation or resend the full history')
+      throw new Refusal(422, 'previous_response_id is unknown to this proxy for this credential (restarted, evicted, never seen, or another client\'s); start a new conversation or resend the full history')
     }
     const priorTexts = prior?.texts ?? []
     const all = [...priorTexts, ...texts]
     const userTexts = new Set([...prior?.userTexts ?? [], ...texts.filter((_, i) => isUserText(parsed, (slots[i] as Slot).path))])
     let result
     try {
-      result = await mask(detectorFor(userTexts, stats), all.map((text, seq) => ({ seq, path: '', text })), emptyRedactionIndex())
+      result = await mask(withKnownOriginals(detectorFor(userTexts, stats), knownOriginals.get(client)), all.map((text, seq) => ({ seq, path: '', text })), emptyRedactionIndex())
     } catch (error) {
       // Screening above leaves only a conflict a continuation's stored texts can raise.
       if (error instanceof RedactionError) throw new Refusal(422, `request text cannot be masked: ${error.code}`)
@@ -687,11 +764,12 @@ export function createProxyServer(
     })
     const modelValues = new Set<string>()
     for (const span of result.applied) {
-      const category = span.id.slice(0, span.id.lastIndexOf('_'))
+      const category = categoryOf(span.id)
       if (MODEL_CATEGORIES.has(category)) modelValues.add((all[span.seq] as string).slice(span.start, span.end))
       if (span.seq >= priorTexts.length) stats.masked[category] = (stats.masked[category] ?? 0) + 1
     }
     refuseLeaks(parsed, result.registry, modelValues)
+    rememberOriginals(client, result.registry)
     return { outgoing: JSON.stringify(parsed), registry: result.registry, texts: all, userTexts }
   }
 
@@ -701,16 +779,17 @@ export function createProxyServer(
     const anthropic = api === 'messages' || (api === undefined && (req.headers['x-api-key'] !== undefined || req.headers['anthropic-version'] !== undefined))
     const target = (anthropic ? config.anthropicUpstream : config.openaiUpstream) + (req.url ?? '/')
 
-    const masked = api === undefined ? undefined : await maskBody(body, stats)
-    const outgoing = masked?.outgoing
-    if (outgoing !== undefined && config.debugMasked) log(`masked ${path}: ${outgoing}`)
-
     const headers: Record<string, string> = { 'accept-encoding': 'identity' }
     for (const [name, value] of Object.entries(req.headers)) {
       if (!HOP.has(name) && name !== TOKEN_HEADER && value !== undefined) headers[name] = Array.isArray(value) ? value.join(', ') : value
     }
     if (anthropic && config.anthropicApiKey !== undefined && headers['x-api-key'] === undefined && headers.authorization === undefined) headers['x-api-key'] = config.anthropicApiKey
     if (!anthropic && config.openaiApiKey !== undefined && headers.authorization === undefined) headers.authorization = `Bearer ${config.openaiApiKey}`
+    const client = clientScope(headers)
+
+    const masked = api === undefined ? undefined : await maskBody(body, stats, client)
+    const outgoing = masked?.outgoing
+    if (outgoing !== undefined && config.debugMasked) log(`masked ${path}: ${outgoing}`)
 
     const abort = new AbortController()
     res.on('close', () => abort.abort())
@@ -728,8 +807,7 @@ export function createProxyServer(
     })
     const remember = (id: string): void => {
       if (masked === undefined) return
-      continuations.set(id, { texts: masked.texts, userTexts: masked.userTexts })
-      if (continuations.size > CONTINUATIONS_MAX) continuations.delete(continuations.keys().next().value as string)
+      setNewest(continuations, `${client}:${id}`, { texts: masked.texts, userTexts: masked.userTexts }, CONTINUATIONS_MAX)
     }
     const done = (): void => {
       const counts = Object.entries(stats.masked).map(([category, n]) => `${category} ${n}`).join(', ')

@@ -357,6 +357,33 @@ describe('OpenAI Responses', () => {
   })
 })
 
+describe('state kept per client credential', () => {
+  const PASS = 'Tr0ub4dor&3x'
+
+  it('masks a value it restored earlier once later history drops the context that detected it', async () => {
+    reply = () => ({ json: { choices: [{ index: 0, message: { role: 'assistant', content: 'Noted. Use ⟦KEY_1⟧ to log in.' } }] } })
+    const first = await (await post('/v1/chat/completions', { model: 'm', messages: [{ role: 'user', content: `password: ${PASS}` }] }, { authorization: 'Bearer client-a' })).json() as any
+    const echo = first.choices[0].message.content
+    expect(echo).toBe(`Noted. Use ${PASS} to log in.`)
+    reply = () => ({ json: { choices: [] } })
+    const compacted = { model: 'm', messages: [{ role: 'assistant', content: echo }, { role: 'user', content: 'and the username?' }] }
+    await post('/v1/chat/completions', compacted, { authorization: 'Bearer client-a' })
+    expect(seen[1]!.raw).not.toContain(PASS)
+    expect(seen[1]!.body.messages[0].content).toBe('Noted. Use ⟦KEY_1⟧ to log in.')
+  })
+
+  it('refuses a continuation of another client\'s response', async () => {
+    reply = () => ({ json: { id: 'resp_client_a', output: [] } })
+    await post('/v1/responses', { model: 'm', input: `mail ${EMAIL}` }, { authorization: 'Bearer client-a' })
+    reply = () => ({ json: { id: 'resp_b', output: [{ type: 'message', content: [{ type: 'output_text', text: 'It was ⟦EMAIL_1⟧' }] }] } })
+    const other = await post('/v1/responses', { model: 'm', previous_response_id: 'resp_client_a', input: 'what address?' }, { authorization: 'Bearer client-b' })
+    expect(other.status).toBe(422)
+    expect(seen).toHaveLength(1)
+    const owner = await post('/v1/responses', { model: 'm', previous_response_id: 'resp_client_a', input: 'what address?' }, { authorization: 'Bearer client-a' })
+    expect((await owner.json() as any).output[0].content[0].text).toBe(`It was ${EMAIL}`)
+  })
+})
+
 describe('tool-call arguments', () => {
   // `E` is the email's placeholder, `P` the home path's. A placeholder inside a URL stays as written; elsewhere it is restored.
   const argumentsText = (E: string, P: string): string =>
