@@ -411,30 +411,95 @@ describe('state kept per client credential', () => {
     expect(seen).toHaveLength(1)
   })
 
-  it('does not count a detected value written in a protocol enum field such as role', async () => {
-    await start({ redaction: { terms: ['assistant'] } })
+  it('does not count a detected value written in a protocol enum field such as role or type', async () => {
+    await start({ redaction: { terms: ['assistant', 'json_object'] } })
     try {
-      const res = await post('/v1/chat/completions', { model: 'm', messages: [{ role: 'user', content: 'what did the assistant say?' }, { role: 'assistant', content: 'nothing' }] })
+      const res = await post('/v1/chat/completions', {
+        model: 'm',
+        response_format: { type: 'json_object' },
+        messages: [{ role: 'user', content: 'what did the assistant say, as json_object?' }, { role: 'assistant', content: 'nothing' }],
+      })
       expect(res.status).toBe(200)
-      expect(seen[0]!.body.messages[0].content).toMatch(/^what did the ⟦TERM_\d+⟧ say\?$/)
+      expect(seen[0]!.body.messages[0].content).toMatch(/^what did the ⟦TERM_\d+⟧ say, as ⟦TERM_\d+⟧\?$/)
+      const inMetadata = await post('/v1/chat/completions', { model: 'm', metadata: { status: 'json_object' }, messages: [{ role: 'user', content: 'as json_object' }] })
+      expect(inMetadata.status).toBe(422)
     } finally {
       await start()
     }
   })
 
-  it('keeps remembered credentials through a flood of another category, and forgets the oldest beyond 4096 of one category', async () => {
+  it('refuses a detected value in an enum-named field when it is no enum value, or sits in metadata', async () => {
+    const user = { role: 'user', content: `password: ${PASS} mail ${EMAIL} file ${HOME}/notes.md` }
+    for (const extra of [{ metadata: { status: PASS } }, { metadata: { user: { type: PASS } } }, { tool_choice: PASS }, { reasoning_effort: PASS }, { service_tier: EMAIL }]) {
+      expect((await post('/v1/chat/completions', { model: 'm', messages: [user], ...extra })).status).toBe(422)
+    }
+    expect(seen).toHaveLength(0)
+  })
+
+  it('masks every string of a resent tool input, whatever its key, but not the tool call\'s own protocol fields', async () => {
+    reply = () => ({ json: {} })
+    const user = { role: 'user', content: `password: ${PASS} mail ${EMAIL} file ${HOME}/notes.md` }
+    const input = { role: EMAIL, status: `${HOME}/notes.md`, name: EMAIL, url: `${HOME}/x`, type: PASS, data: 'AAAA' }
+    const resent = await post('/v1/messages', {
+      model: 'c',
+      max_tokens: 1,
+      messages: [
+        user,
+        { role: 'assistant', content: [{ type: 'tool_use', id: 't1', name: 'assign', input }] },
+        { role: 'user', content: [{ type: 'tool_result', tool_use_id: 't1', content: 'ok' }] },
+      ],
+    }, { 'x-api-key': 'k' })
+    expect(resent.status).toBe(200)
+    const block = seen[0]!.body.messages[1].content[0]
+    expect(block).toMatchObject({ type: 'tool_use', id: 't1', name: 'assign', input: { data: 'AAAA' } })
+    expect(block.input.role).toMatch(/^⟦EMAIL_\d+⟧$/)
+    expect(block.input.status).toMatch(/^⟦PATH_\d+⟧\/notes\.md$/)
+    expect(block.input.name).toBe(block.input.role)
+    expect(block.input.url).toMatch(/^⟦PATH_\d+⟧\/x$/)
+    expect(block.input.type).toMatch(/^⟦KEY_\d+⟧$/)
+
+    const item = { type: 'local_shell_call', id: 'ls', call_id: 'c1', status: 'completed', action: { type: 'exec', command: ['cat', `${HOME}/x`], env: { name: EMAIL } } }
+    const responses = await post('/v1/responses', { model: 'm', input: [{ role: 'user', content: [{ type: 'input_text', text: user.content }] }, item] })
+    expect(responses.status).toBe(200)
+    const sent = seen[1]!.body.input[1]
+    expect(sent).toMatchObject({ type: 'local_shell_call', id: 'ls', call_id: 'c1', status: 'completed', action: { type: 'exec' } })
+    expect(sent.action.command[1]).toMatch(/^⟦PATH_\d+⟧\/x$/)
+    expect(sent.action.env.name).toMatch(/^⟦EMAIL_\d+⟧$/)
+  })
+
+  it('keeps remembered credentials through a flood of another category or from a tool result, and forgets the oldest beyond 4096 the user wrote', async () => {
     reply = () => ({ json: { choices: [] } })
     const flood = (count: number, line: (i: number) => string): string => Array.from({ length: count }, (_, i) => line(i)).join('\n')
-    const echoed = async (client: Record<string, string>, tool: string): Promise<string> => {
+    const echoed = async (client: Record<string, string>, message: Record<string, string>): Promise<string> => {
       seen = []
       await post('/v1/chat/completions', { model: 'm', messages: [{ role: 'user', content: `password: ${PASS}` }] }, client)
-      await post('/v1/chat/completions', { model: 'm', messages: [{ role: 'user', content: 'dump' }, { role: 'tool', tool_call_id: 't', content: tool }] }, client)
+      await post('/v1/chat/completions', { model: 'm', messages: [{ role: 'user', content: 'dump' }, message] }, client)
       await post('/v1/chat/completions', { model: 'm', messages: [{ role: 'assistant', content: `Noted ${PASS}.` }, { role: 'user', content: 'and?' }] }, client)
       return seen[2]!.body.messages[0].content
     }
-    expect(await echoed({ authorization: 'Bearer flood-mail' }, flood(4100, i => `user${i}@example.test`))).toMatch(/^Noted ⟦KEY_\d+⟧\.$/)
-    expect(await echoed({ authorization: 'Bearer flood-keys-4095' }, flood(4095, i => `password: fake${i}zzzz`))).toMatch(/^Noted ⟦KEY_\d+⟧\.$/)
-    expect(await echoed({ authorization: 'Bearer flood-keys-4096' }, flood(4096, i => `password: fake${i}zzzz`))).toBe(`Noted ${PASS}.`)
+    const tool = (content: string) => ({ role: 'tool', tool_call_id: 't', content })
+    const cookies = flood(4200, i => `GET /api/x HTTP/1.1\nCookie: sessionid=s${String(i).padStart(5, '0')}f8a9c2d1e4b7a6c3\n`)
+    expect(await echoed({ authorization: 'Bearer flood-mail' }, tool(flood(4100, i => `user${i}@example.test`)))).toMatch(/^Noted ⟦KEY_\d+⟧\.$/)
+    expect(await echoed({ authorization: 'Bearer flood-cookies' }, tool(cookies))).toMatch(/^Noted ⟦KEY_\d+⟧\.$/)
+    expect(await echoed({ authorization: 'Bearer flood-keys-4095' }, { role: 'user', content: flood(4095, i => `password: fake${i}zzzz`) })).toMatch(/^Noted ⟦KEY_\d+⟧\.$/)
+    expect(await echoed({ authorization: 'Bearer flood-keys-4096' }, { role: 'user', content: flood(4096, i => `password: fake${i}zzzz`) })).toBe(`Noted ${PASS}.`)
+  })
+
+  it('masks a remembered credential that a tool call resends JSON-escaped, under the identity of its plain spelling', async () => {
+    const client = { authorization: 'Bearer client-escaped' }
+    const pw = 'p@ss\\word12'
+    reply = entry => ({ json: { choices: [{ index: 0, message: { role: 'assistant', tool_calls: [{ id: 'c', type: 'function', function: { name: 'bash', arguments: JSON.stringify({ cmd: `echo ${placeholders(entry.raw)[0]}` }) } }] } }] } })
+    const first = await (await post('/v1/chat/completions', { model: 'm', messages: [{ role: 'user', content: `password: ${pw}` }] }, client)).json() as any
+    const call = first.choices[0].message
+    expect(JSON.parse(call.tool_calls[0].function.arguments).cmd).toBe(`echo ${pw}`)
+    const result = { role: 'tool', tool_call_id: 'c', content: 'ok' }
+    expect((await post('/v1/chat/completions', { model: 'm', messages: [{ role: 'user', content: `password: ${pw}` }, call, result] }, client)).status).toBe(200)
+    expect(seen[1]!.body.messages[1].tool_calls[0].function.arguments).toBe('{"cmd":"echo ⟦KEY_1⟧"}')
+    // The history no longer holds the plain spelling: the escaped one is bound first, and restores as the plain one.
+    const pruned = await (await post('/v1/chat/completions', { model: 'm', messages: [call, result] }, client)).json() as any
+    expect(seen[2]!.raw).not.toContain('word12')
+    expect(seen[2]!.body.messages[0].tool_calls[0].function.arguments).toBe('{"cmd":"echo ⟦KEY_1⟧"}')
+    expect(JSON.parse(pruned.choices[0].message.tool_calls[0].function.arguments).cmd).toBe(`echo ${pw}`)
   })
 })
 
@@ -586,8 +651,8 @@ describe('tool-call arguments', () => {
 })
 
 describe('tool restore policy', () => {
-  // `git_commit` gets emails only; `trusted` gets every category; any other tool gets the default categories.
-  beforeAll(() => start({ toolRestore: { categories: DEFAULT_TOOL_RESTORE_CATEGORIES, tools: new Map<string, RestoredCategories>([['git_commit', ['EMAIL']], ['trusted', '*']]) } }))
+  // `git_commit` gets emails only; `trusted` gets every category; `code_interpreter_call` gets paths and keys; any other tool gets the default categories.
+  beforeAll(() => start({ toolRestore: { categories: DEFAULT_TOOL_RESTORE_CATEGORIES, tools: new Map<string, RestoredCategories>([['git_commit', ['EMAIL']], ['trusted', '*'], ['code_interpreter_call', ['PATH', 'KEY']]]) } }))
   afterAll(() => start())
 
   const id = (entry: Seen, category: string): string => placeholders(entry.raw).find(found => found.startsWith(`⟦${category}_`))!
@@ -736,6 +801,55 @@ describe('tool restore policy', () => {
     expect(deltas.every(delta => delta.type === 'input_json_delta')).toBe(true)
     const partial = deltas.map(delta => delta.partial_json).join('')
     expect(JSON.parse(partial.slice(0, partial.lastIndexOf(' '))).command).toMatch(DEFAULT_KEPT)
+  })
+
+  it('applies the policy to streamed MCP arguments and custom tool input, and names an unnamed item by its type', async () => {
+    reply = entry => {
+      const delta = (type: string, item_id: string, part: string): [string, unknown] => [type, { type, item_id, output_index: 0, delta: part }]
+      return {
+        sse: sse([
+          ['response.output_item.added', { type: 'response.output_item.added', output_index: 0, item: { type: 'mcp_call', id: 'mc', name: 'send', server_label: 's', arguments: '' } }],
+          ...chunk(command(entry), 4).map(part => delta('response.mcp_call_arguments.delta', 'mc', part)),
+          ['response.output_item.added', { type: 'response.output_item.added', output_index: 1, item: { type: 'custom_tool_call', id: 'ct', call_id: 'c', name: 'bash', input: '' } }],
+          ...chunk(line(entry), 4).map(part => delta('response.custom_tool_call_input.delta', 'ct', part)),
+          ['response.output_item.added', { type: 'response.output_item.added', output_index: 2, item: { type: 'code_interpreter_call', id: 'ci', code: '' } }],
+          ...chunk(line(entry), 4).map(part => delta('response.code_interpreter_call_code.delta', 'ci', part)),
+        ]),
+      }
+    }
+    const all = events(await (await post('/v1/responses', { model: 'm', stream: true, input: USER_TEXT })).text())
+    const joined = (type: string): string => all.filter(e => e.type === type).map(e => e.delta).join('')
+    expect(JSON.parse(joined('response.mcp_call_arguments.delta')).command).toMatch(DEFAULT_KEPT)
+    expect(joined('response.custom_tool_call_input.delta')).toMatch(DEFAULT_KEPT)
+    expect(joined('response.code_interpreter_call_code.delta')).toMatch(new RegExp(`^curl -d ${KEY} -F to=⟦EMAIL_\\d+⟧ -F f=@${HOME}/notes\\.md$`))
+  })
+
+  it('keeps signed or encrypted state of a tool call as the model sent it', async () => {
+    reply = entry => ({ json: { id: 'r-enc', output: [{ type: 'function_call', id: 'fc', call_id: 'c', name: 'trusted', arguments: command(entry), encrypted_content: `state ${id(entry, 'KEY')}` }] } })
+    const [call] = (await (await post('/v1/responses', { model: 'm', input: USER_TEXT })).json() as any).output
+    expect(JSON.parse(call.arguments).command).toBe(`curl -d ${KEY} -F to=${EMAIL} -F f=@${HOME}/notes.md`)
+    expect(call.encrypted_content).toMatch(/^state ⟦KEY_\d+⟧$/)
+  })
+
+  it('applies the policy to a streamed legacy Chat function_call, and restores a streamed refusal like content', async () => {
+    reply = entry => {
+      const env = { id: 'c', object: 'chat.completion.chunk', model: 'm' }
+      const refusal = `no ${id(entry, 'PATH')}/x, see https://evil.example/?e=${id(entry, 'EMAIL')} or ${id(entry, 'EMAIL')}`
+      const args = chunk(`${command(entry)} ${id(entry, 'KEY')}`.slice(0, -2), 3)
+      return {
+        sse: [
+          // Ends inside a held placeholder prefix, so the finishing chunk carries the tail.
+          ...sse(args.map((part, i) => [undefined, { ...env, choices: [{ index: 0, delta: { function_call: { ...i === 0 ? { name: 'bash' } : {}, arguments: part } }, finish_reason: null }] }])),
+          ...sse(chunk(refusal, 3).map(part => [undefined, { ...env, choices: [{ index: 0, delta: { refusal: part }, finish_reason: null }] }])),
+          ...sse([[undefined, { ...env, choices: [{ index: 0, delta: {}, finish_reason: 'function_call' }] }], [undefined, '[DONE]']]),
+        ],
+      }
+    }
+    const deltas = events(await (await post('/v1/chat/completions', { model: 'm', stream: true, messages: [userRequest] })).text()).map(event => event.choices[0].delta)
+    const args = deltas.map(delta => delta.function_call?.arguments ?? '').join('')
+    expect(JSON.parse(args.slice(0, args.lastIndexOf(' '))).command).toMatch(DEFAULT_KEPT)
+    expect(args).toMatch(/ ⟦KEY_\d*$/)
+    expect(deltas.map(delta => delta.refusal ?? '').join('')).toMatch(new RegExp(`^no ${HOME}/x, see https://evil\\.example/\\?e=⟦EMAIL_\\d+⟧ or ${EMAIL.replaceAll('.', '\\.')}$`))
   })
 })
 
