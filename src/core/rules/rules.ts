@@ -7,7 +7,7 @@
  * @module redaction-proxy/core/rules/rules
  */
 
-import { afterHighEscape, endsHighEscape, isAlnum, isAsciiPrintable, projectNfkc, shannon, unicodeEscapeForms } from './normalize.ts'
+import { ZERO_WIDTH, afterHighEscape, endsHighEscape, isAlnum, isAsciiPrintable, projectNfkc, shannon, unicodeEscapeForms } from './normalize.ts'
 import type { PushCandidate } from './candidate.ts'
 import { isTaiwanBusinessNumber, isTaiwanNationalId, luhn } from './checksum.ts'
 import { PRIORITY_ENTROPY, PRIORITY_PII, PRIORITY_SECRET, PRIORITY_TERM } from './candidate.ts'
@@ -667,9 +667,12 @@ const SPACED_WORD_CHAR = /^(?![\p{Script=Han}\p{Script=Hiragana}\p{Script=Kataka
 
 /**
  * Whether an occurrence is a whole word at both ends. An end is cut only when
- * the occurrence's character there and its neighbour outside are both letters
- * or digits of a spaced script, so `Lee` stands alone in `Lee's` but not in
- * `Leeds`, and `鴻遠科技` stands alone anywhere.
+ * the occurrence's character there and its neighbour outside are both letters,
+ * digits, or marks of a spaced script, so `Lee` stands alone in `Lee's` but
+ * not in `Leeds` or `Lee𝐝s`, and `鴻遠科技` stands alone anywhere. A combining
+ * mark after zero-width characters is the neighbour after the occurrence, as
+ * the NFKC projection joins it to the occurrence's last letter
+ * (`Orion\u200B\u0301` reads `Orioń`).
  * @param text - the text holding the occurrence.
  * @param start - inclusive UTF-16 start.
  * @param end - exclusive UTF-16 end.
@@ -677,5 +680,32 @@ const SPACED_WORD_CHAR = /^(?![\p{Script=Han}\p{Script=Hiragana}\p{Script=Kataka
  */
 export function standsAlone(text: string, start: number, end: number): boolean {
   const cuts = (inside: string, outside: string): boolean => SPACED_WORD_CHAR.test(inside) && SPACED_WORD_CHAR.test(outside)
-  return !cuts(text.charAt(start), text.charAt(start - 1)) && !cuts(text.charAt(end - 1), text.charAt(end))
+  let after = end
+  while (after < text.length && ZERO_WIDTH.has(text.charCodeAt(after))) after += 1
+  if (after === end || !COMBINING_MARK.test(pointAt(text, after))) after = end
+  return !cuts(pointAt(text, start), pointBefore(text, start)) && !cuts(pointBefore(text, end), pointAt(text, after))
+}
+
+const COMBINING_MARK = /^\p{M}$/u
+
+/**
+ * @param text - any text.
+ * @param at - a UTF-16 offset.
+ * @returns the code point starting at `at`, or `''` at the end.
+ */
+function pointAt(text: string, at: number): string {
+  const code = text.codePointAt(at)
+  return code === undefined ? '' : String.fromCodePoint(code)
+}
+
+/**
+ * @param text - any text.
+ * @param at - a UTF-16 offset.
+ * @returns the code point ending at `at`, or `''` at the start.
+ */
+function pointBefore(text: string, at: number): string {
+  if (at === 0) return ''
+  const low = text.charCodeAt(at - 1)
+  const pair = at >= 2 && low >= 0xdc00 && low <= 0xdfff && text.charCodeAt(at - 2) >= 0xd800 && text.charCodeAt(at - 2) <= 0xdbff
+  return text.slice(pair ? at - 2 : at - 1, at)
 }

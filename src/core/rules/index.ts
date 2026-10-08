@@ -86,7 +86,7 @@ export interface RulesRedactionConfig {
 }
 
 /** Detector version recorded with every scan; changes whenever a rule's matches change. */
-export const DETECTOR_VERSION = 'rules-11'
+export const DETECTOR_VERSION = 'rules-12'
 
 /** Shared addresses that are public by construction and carry no private value. */
 export const DEFAULT_ALLOWLIST: readonly string[] = ['git@github.com', 'noreply@github.com']

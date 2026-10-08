@@ -1125,6 +1125,28 @@ describe('tool restore policy', () => {
 })
 
 describe('refusals and screening', () => {
+  it('forwards a term whose last letter a combining mark after a zero-width character changes, without refusing the term written elsewhere', async () => {
+    await start({ redaction: { terms: ['Lin'], projectNames: ['Orion'] } })
+    try {
+      reply = () => ({ json: { choices: [] } })
+      const send = async (messages: unknown[], path = '/v1/chat/completions'): Promise<string> => {
+        seen = []
+        const res = await post(path, { model: 'm', max_tokens: 1, messages }, path === '/v1/messages' ? { 'x-api-key': 'k' } : {})
+        expect(res.status).toBe(200)
+        return seen[0]!.body.messages.at(-1).content
+      }
+      expect(await send([{ role: 'user', content: 'Orion ships Orion​́ soon' }])).toBe('⟦PROJECT_1⟧ ships Orion​́ soon')
+      expect(await send([{ role: 'user', content: 'Orion and Orion­́ x' }])).toBe('⟦PROJECT_1⟧ and Orion­́ x')
+      const history = [{ role: 'user', content: 'read the doc' }, { role: 'assistant', tool_calls: [{ id: 'c', type: 'function', function: { name: 'read', arguments: '{}' } }] }, { role: 'tool', tool_call_id: 'c', content: 'Project Orion​́ roadmap' }]
+      for (let turn = 1; turn <= 3; turn += 1) {
+        expect(await send([...history, { role: 'user', content: `summarize Orion for me (turn ${turn})` }])).toBe(`summarize ⟦PROJECT_1⟧ for me (turn ${turn})`)
+      }
+      expect(await send([{ role: 'user', content: 'Lin and Lin⁠̈' }], '/v1/messages')).toMatch(/^⟦TERM_1⟧ and ⟦TERM_\d⟧$/)
+    } finally {
+      await start()
+    }
+  })
+
   it('refuses an unknown POST route without forwarding it', async () => {
     const res = await post('/v1/embeddings', { input: EMAIL })
     expect(res.status).toBe(404)
