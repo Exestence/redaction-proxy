@@ -1,18 +1,23 @@
 /**
  * Opt-in rules that widen or tighten the default ones without changing them:
  * host names under further private suffixes, credential formats the `api-key`
- * rule does not know, credentials named in prose, and stricter variants of the
- * `card` and `entropy` rules. Hosts that persist a policy digest keep the
+ * rule does not know, credentials named in prose, stricter variants of the
+ * `card` and `entropy` rules, looser spellings of Taiwan identification and
+ * mobile numbers, passport and health-insurance card numbers after a keyword,
+ * escaped email addresses, and shared and unique local network addresses. Hosts that persist a policy digest keep the
  * default rules; the proxy, which persists none, enables these.
  *
  * @module redaction-proxy/core/rules/extended
  */
 
+import { isIPv6 } from 'node:net'
 import type { PushCandidate } from './candidate.ts'
-import { PRIORITY_SECRET } from './candidate.ts'
+import { PRIORITY_PII, PRIORITY_SECRET } from './candidate.ts'
+import { isTaiwanNationalId } from './checksum.ts'
+import type { OffsetProjection } from './normalize.ts'
 import { shannon } from './normalize.ts'
-import { collectHostCandidates } from './rules.ts'
-import { isCodeShape, trimValueEnd } from './secret.ts'
+import { KEYWORD_GAP, collectEmailCandidates, collectHostCandidates, runAll } from './rules.ts'
+import { CJK_SECRET_WORDS, collectCjkSecretValue, isCodeShape, trimValueEnd } from './secret.ts'
 
 /** Names of the opt-in extended rules. */
 export type ExtendedRuleName =
@@ -21,10 +26,16 @@ export type ExtendedRuleName =
   | 'private-host'
   | 'token-format'
   | 'credential-phrase'
+  | 'tw-national-id-loose'
+  | 'tw-passport-nhi'
+  | 'tw-mobile-loose'
+  | 'email-escaped'
+  | 'ip-cgnat-ula'
 
 /** Every extended rule name, in declaration order. */
 export const EXTENDED_RULE_NAMES: readonly ExtendedRuleName[] = [
   'card-strict', 'entropy-strict', 'private-host', 'token-format', 'credential-phrase',
+  'tw-national-id-loose', 'tw-passport-nhi', 'tw-mobile-loose', 'email-escaped', 'ip-cgnat-ula',
 ]
 
 /**
@@ -42,6 +53,11 @@ export const EXTENDED_RULE_CATEGORIES: Readonly<Record<ExtendedRuleName, readonl
   'private-host': ['HOST'],
   'token-format': ['KEY'],
   'credential-phrase': ['KEY'],
+  'tw-national-id-loose': ['TWID'],
+  'tw-passport-nhi': ['TWID'],
+  'tw-mobile-loose': ['PHONE'],
+  'email-escaped': ['EMAIL'],
+  'ip-cgnat-ula': ['IP'],
 }
 
 /**
@@ -124,18 +140,21 @@ const PASSWORD_WORD = 'password|passphrase|passcode|passwd|pwd|pw|passwort|mot d
  * A credential word in prose, an optional `is`, `was`, or `:` (or the same
  * word in the password word's language: `ist`, `est`, `es`, `é`, `是`, `は`,
  * `는`), and the word after it, quoted or not: `the secret is X`,
- * `here is my key: X`, `use token 'X'`, `密码是 X`. `key = X` assignments are
+ * `here is my key: X`, `use token 'X'`, `密码是 X`, and a quoted JSON key
+ * such as `"jwt": "X"`. `key = X` assignments are
  * the `api-key` rule's. Not a shell variable (`$PWD`), a
  * member (`this.key`), or a flag (`--password`), and the value ends at a
  * list separator, a placeholder, or the next query parameter (`&next=`).
  */
 const CREDENTIAL_PHRASE = new RegExp(
   '(?<![A-Za-z0-9_$.-])(?<word>api[ _-]?key|access[ _-]?key|secret[ _-]?key|access[ _-]?token|auth[ _-]?token'
-  + `|token|secret|key|${PASSWORD_WORD})(?![A-Za-z0-9_])`
-  + '(?:[ \\t]{1,4}(?:is|was|ist|est|es|é)[ \\t]{1,4}|[ \\t]{0,4}:[ \\t]{0,4}|[ \\t]{0,4}(?:是|為|为|は|는|은)[ \\t]{0,4}|[ \\t]{1,4})'
+  + `|token|secret|key|jwt|${PASSWORD_WORD})(?![A-Za-z0-9_])`
+  + '(?:[ \\t]{1,4}(?:is|was|ist|est|es|é)[ \\t]{1,4}|[\'"]?[ \\t]{0,4}:[ \\t]{0,4}|[ \\t]{0,4}(?:是|為|为|は|는|은)[ \\t]{0,4}|[ \\t]{1,4})'
   + '[\'"`]?(?<value>[^\\s\'"`<>()[\\]{},;⟦]{6,128})',
   'gi',
 )
+/** A quoted CJK credential key (`"密碼": "x"`): the closing quote keeps the `api-key` rule's `密碼: x` pattern from matching. */
+const QUOTED_CJK_SECRET_KEY = new RegExp(`["'](?:${CJK_SECRET_WORDS})["'][ \\t]*[:=][ \\t]*`, 'g')
 /** A member chain such as `process.env.TOKEN_2`, which names a value rather than being one. */
 const DOTTED_IDENTIFIER = /^[A-Za-z_$][\w$]*(?:\.[A-Za-z_$][\w$]*)+$/
 /** The next parameter of a query string, which ends a value read out of a URL. */
@@ -150,6 +169,39 @@ const GENERAL_ENTROPY_MIN = 3.5
 const PRINTABLE_ASCII = /^[!-~]+$/
 /** Shortest value a password word is read with. */
 const PASSWORD_VALUE_MIN = 6
+
+/** A no-break or narrow space (U+00A0, U+2007, U+2009, U+202F); NFKC folds each to a plain space. */
+const NARROW_SPACE = '[\\u00a0\\u2007\\u2009\\u202f]'
+const NARROW_SPACES = new RegExp(NARROW_SPACE, 'g')
+/**
+ * A Taiwan identification number with a lower-case letter, or with no-break
+ * or narrow spaces among its digits (`a123456789`, `A1234\u00a056789`),
+ * neither of which the `tw-national-id` rule reads. Matched on the submitted
+ * text only: on the NFKC projection those spaces are plain spaces.
+ */
+const TWID_LOOSE = new RegExp(`(?<![A-Za-z0-9])[A-Za-z](?:${NARROW_SPACE}?\\d){9}(?![A-Za-z0-9])`, 'g')
+/**
+ * A Taiwan passport number (nine digits) or National Health Insurance card
+ * number (twelve digits, optionally grouped 4-4-4) right after its keyword.
+ * Neither has a check digit, so neither is read without the keyword.
+ */
+const TW_PASSPORT = new RegExp(`(?:護照|护照|passport)${KEYWORD_GAP}(?<![A-Za-z0-9])(?<value>\\d{9})(?![A-Za-z0-9])`, 'gid')
+const TW_NHI_CARD = new RegExp(
+  `(?:健保卡|nhi card)${KEYWORD_GAP}(?<![A-Za-z0-9])(?<value>\\d{4}([- ]?)\\d{4}\\2\\d{4})(?![A-Za-z0-9]|[- ]\\d)`,
+  'gid',
+)
+/**
+ * A Taiwan mobile number grouped 4-3-3 by one `.` or `/` (a full-width `／`
+ * folds to `/`): `0912.345.678`. Not a part of a longer dotted or slashed run
+ * such as a version or a date.
+ */
+const TW_MOBILE_LOOSE = /(?<![A-Za-z0-9./])09\d{2}([./])\d{3}\1\d{3}(?![A-Za-z0-9]|[./]\d)/g
+/** An `@` escaped as an HTML character reference or a JSON escape: `&#64;`, `&#x40;`, `&commat;`, `\u0040`. */
+const ESCAPED_AT = /&#0*64;|&#x0*40;|&commat;|\\u0040/gi
+/** An address in the shared address space 100.64.0.0/10 (RFC 6598), used by carrier-grade NAT and Tailscale. */
+const SHARED_IPV4 = /(?<![\d.])100\.(?:6[4-9]|[7-9]\d|1[01]\d|12[0-7])\.\d{1,3}\.\d{1,3}(?![\d.])/g
+/** A unique local IPv6 address (fc00::/7, RFC 4193) such as `fd12:3456:789a::1`; `isIPv6` checks the groups. */
+const ULA_IPV6 = /(?<![A-Za-z0-9:])f[cd][0-9a-f]{2}(?::[0-9a-f]{0,4}){2,7}(?![A-Za-z0-9:])/gi
 
 /** One rule pass over one text. */
 export type ExtendedCollector = (text: string, push: PushCandidate, originalAt?: (offset: number) => string) => void
@@ -235,6 +287,102 @@ function collectCredentialPhraseCandidates(text: string, push: PushCandidate): v
     // The value may itself hold the next credential word (`token: key-…`), so scanning resumes right after the word.
     CREDENTIAL_PHRASE.lastIndex = match.index + word.length
   }
+  QUOTED_CJK_SECRET_KEY.lastIndex = 0
+  for (let match = QUOTED_CJK_SECRET_KEY.exec(text); match !== null; match = QUOTED_CJK_SECRET_KEY.exec(text)) {
+    collectCjkSecretValue(text, match.index + match[0].length, push)
+  }
+}
+
+/**
+ * Collect checksum-valid identification numbers in the spellings of {@link TWID_LOOSE}.
+ * @param text - text to scan.
+ * @param push - candidate sink.
+ */
+function collectLooseTaiwanIdCandidates(text: string, push: PushCandidate): void {
+  runAll(TWID_LOOSE, text, (match) => {
+    if (!isTaiwanNationalId(match[0].replaceAll(NARROW_SPACES, '').toUpperCase())) return
+    push(match.index, match.index + match[0].length, 'TWID', PRIORITY_PII)
+  })
+}
+
+/**
+ * Collect passport and health-insurance card numbers after their keywords.
+ * @param text - text to scan.
+ * @param push - candidate sink.
+ */
+function collectPassportAndNhiCandidates(text: string, push: PushCandidate): void {
+  for (const pattern of [TW_PASSPORT, TW_NHI_CARD]) {
+    runAll(pattern, text, (match) => {
+      // oxlint-disable-next-line typescript/no-non-null-assertion -- both patterns have a `value` group and the `d` flag.
+      const [start, end] = match.indices!.groups!.value!
+      push(start, end, 'TWID', PRIORITY_PII)
+    })
+  }
+}
+
+/**
+ * Collect mobile numbers grouped by `.` or `/`.
+ * @param text - text to scan.
+ * @param push - candidate sink.
+ */
+function collectLooseMobileCandidates(text: string, push: PushCandidate): void {
+  runAll(TW_MOBILE_LOOSE, text, (match) => {
+    push(match.index, match.index + match[0].length, 'PHONE', PRIORITY_PII)
+  })
+}
+
+/**
+ * Project a text with every escaped `@` decoded, each mapped to its whole escape.
+ * @param text - text holding at least one escape.
+ * @returns the projection.
+ */
+function projectEscapedAt(text: string): OffsetProjection {
+  let norm = ''
+  const startMap: number[] = []
+  const endMap: number[] = []
+  let copied = 0
+  const append = (chars: string, start: number, end: number): void => {
+    norm += chars
+    startMap.push(start)
+    endMap.push(end)
+  }
+  runAll(ESCAPED_AT, text, (match) => {
+    for (let at = copied; at < match.index; at += 1) append(text.charAt(at), at, at + 1)
+    append('@', match.index, match.index + match[0].length)
+    copied = match.index + match[0].length
+  })
+  for (let at = copied; at < text.length; at += 1) append(text.charAt(at), at, at + 1)
+  return { norm, startMap, endMap }
+}
+
+/**
+ * Collect email addresses whose `@` is escaped as in {@link ESCAPED_AT}.
+ * @param text - text to scan.
+ * @param push - candidate sink.
+ */
+function collectEscapedEmailCandidates(text: string, push: PushCandidate): void {
+  ESCAPED_AT.lastIndex = 0
+  if (!ESCAPED_AT.test(text)) return
+  const projection = projectEscapedAt(text)
+  collectEmailCandidates(projection.norm, (start, end, category, priority) => {
+    // oxlint-disable-next-line typescript/no-non-null-assertion -- both offsets are inside the projection.
+    push(projection.startMap[start]!, projection.endMap[end - 1]!, category, priority)
+  })
+}
+
+/**
+ * Collect shared IPv4 and unique local IPv6 addresses.
+ * @param text - text to scan.
+ * @param push - candidate sink.
+ */
+function collectSharedAndUniqueLocalCandidates(text: string, push: PushCandidate): void {
+  runAll(SHARED_IPV4, text, (match) => {
+    if (match[0].split('.').some(octet => Number(octet) > 255)) return
+    push(match.index, match.index + match[0].length, 'IP', PRIORITY_PII)
+  })
+  runAll(ULA_IPV6, text, (match) => {
+    if (isIPv6(match[0])) push(match.index, match.index + match[0].length, 'IP', PRIORITY_PII)
+  })
 }
 
 /**
@@ -245,4 +393,9 @@ export const EXTENDED_COLLECTORS: Readonly<Partial<Record<ExtendedRuleName, Exte
   'private-host': collectPrivateHostCandidates,
   'token-format': collectTokenFormatCandidates,
   'credential-phrase': collectCredentialPhraseCandidates,
+  'tw-national-id-loose': collectLooseTaiwanIdCandidates,
+  'tw-passport-nhi': collectPassportAndNhiCandidates,
+  'tw-mobile-loose': collectLooseMobileCandidates,
+  'email-escaped': collectEscapedEmailCandidates,
+  'ip-cgnat-ula': collectSharedAndUniqueLocalCandidates,
 }

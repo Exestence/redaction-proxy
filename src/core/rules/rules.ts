@@ -235,7 +235,7 @@ function validCardPrefix(digits: string): boolean {
  * @param text - text to scan.
  * @param handler - called once per match in source order.
  */
-function runAll(pattern: RegExp, text: string, handler: (match: RegExpExecArray) => void): void {
+export function runAll(pattern: RegExp, text: string, handler: (match: RegExpExecArray) => void): void {
   pattern.lastIndex = 0
   for (let match = pattern.exec(text); match !== null; match = pattern.exec(text)) handler(match)
 }
