@@ -427,16 +427,24 @@ function containsAnyOf(patterns: readonly string[]): (text: string) => boolean {
   }
 }
 
+/** Shortest remembered value other than a credential that counts glued to other characters. */
+const GLUED_LEAK_MIN = 8
+
 /**
  * Refuse a masked body that still holds a detected value: in a field the
  * proxy does not rewrite (metadata, an image URL), or an occurrence masking
  * could not cover. A name-model value is matched as its propagation matches
  * it, as a whole word for spaced scripts (`Lee` inside `Leeds` is no leak),
- * and only from two code points. Every other value counts anywhere, at any
- * length and in any ASCII case, so a rules value glued to other characters
- * (`tel0912345678`) or upper-cased still fails closed. Keys are checked too;
- * an {@link ENUM_VALUE} under one of the {@link ENUM_FIELDS} is not, except in
- * client data: `metadata`, `stop`, and tool input.
+ * and only from two code points. Every other value this request bound counts
+ * anywhere, at any length and in any ASCII case, so a rules value glued to
+ * other characters (`tel0912345678`) or upper-cased still fails closed. A
+ * value remembered from an earlier request counts the same way when it is a
+ * credential or at least {@link GLUED_LEAK_MIN} code units long
+ * (`xTr0ub4dor&3xy`); a shorter one counts only as a whole word, so a
+ * remembered `Nimbus` does not refuse every later request holding `Nimbusx`.
+ * Keys are checked too; an {@link ENUM_VALUE} under one of the
+ * {@link ENUM_FIELDS} is not, except in client data: `metadata`, `stop`, and
+ * tool input.
  * @param body - the masked request body.
  * @param bound - every spelling the mask call bound, mapped to its category.
  * @param modelValues - the originals the name model bound.
@@ -446,9 +454,14 @@ function containsAnyOf(patterns: readonly string[]): (text: string) => boolean {
 function refuseLeaks(body: Json, bound: ReadonlyMap<string, string>, modelValues: ReadonlySet<string>, known: ReadonlyMap<string, string> | undefined): void {
   // A value inside a JSON-text string (`arguments`) is written JSON-escaped.
   const forms = (original: string): string[] => [original, JSON.stringify(original).slice(1, -1)]
-  const words = [...modelValues].filter(isSearchedValue).flatMap(forms)
-  const holdsSubstring = containsAnyOf([...bound.keys()].filter(original => !modelValues.has(original)).flatMap(forms))
-  const leaks = (text: string): boolean => holdsSubstring(text) || words.some(form => containsStandingAlone(text, form))
+  const values = new Map([...known ?? [], ...bound])
+  const isWord = (original: string, category: string): boolean => bound.has(original)
+    ? modelValues.has(original)
+    : MODEL_CATEGORIES.has(category) || (category !== 'KEY' && original.length < GLUED_LEAK_MIN)
+  const words = [...values].filter(([original, category]) => isWord(original, category) && isSearchedValue(original)).flatMap(([original]) => forms(original))
+  const holdsWord = containsAnyOf(words)
+  const holdsSubstring = containsAnyOf([...values].filter(([original, category]) => !isWord(original, category)).flatMap(([original]) => forms(original)))
+  const leaks = (text: string): boolean => holdsSubstring(text) || (holdsWord(text) && words.some(form => containsStandingAlone(text, form)))
   const where: Array<[path: string, text: string]> = []
   const walk = (value: unknown, path: string, key: string, data: boolean): void => {
     if (typeof value === 'string') {
@@ -466,12 +479,12 @@ function refuseLeaks(body: Json, bound: ReadonlyMap<string, string>, modelValues
   walk(body, '', '', false)
   if (where.length === 0) return
   // The refusal path alone looks up which value each text holds, the way `leaks` matches it.
-  const holds = (text: string, original: string): boolean => modelValues.has(original)
+  const holds = (text: string, original: string, category: string): boolean => isWord(original, category)
     ? isSearchedValue(original) && forms(original).some(form => containsStandingAlone(text, form))
     : forms(original).some(form => foldAsciiCase(text).includes(foldAsciiCase(form)))
   const describe = ([path, text]: [string, string]): string => {
-    // oxlint-disable-next-line typescript/no-non-null-assertion -- `leaks` found some bound original in the text.
-    const [original, category] = [...bound].find(([candidate]) => holds(text, candidate))!
+    // oxlint-disable-next-line typescript/no-non-null-assertion -- `leaks` found some bound or remembered original in the text.
+    const [original, category] = [...values].find(([candidate, of]) => holds(text, candidate, of))!
     return `${path} (${category}${known?.has(original) === true ? ', remembered from an earlier request' : ''})`
   }
   throw new Refusal(422, `a detected value is still unmasked at ${where.slice(0, 5).map(describe).join(', ')}; the request was not forwarded`)
