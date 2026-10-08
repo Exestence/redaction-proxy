@@ -1,7 +1,8 @@
 // Measure what the default rules mask in a public source corpus that holds no
 // working credential. Run `pnpm bench` (it builds first). The corpus is the
 // DeepSeek Harness repository at a pinned commit, exported read-only with
-// `git archive`; override with CORPUS_REPO and CORPUS_REF.
+// `git archive`: CORPUS_REPO names a local checkout (required), CORPUS_REF the
+// commit (default master).
 //
 // Headline metric, unchanged from the dsh-addons gate: KEY (credential) spans
 // per 1,000 lines of code files (.ts .json .sh .py). Every such span is a false
@@ -19,7 +20,11 @@ import { join, relative } from 'node:path'
 import { RULE_NAMES, RedactionError, RulesDetector, emptyRedactionIndex, mask, restore } from '../lib/core/index.js'
 import { PROXY_DEFAULT_RULES } from '../lib/proxy/config.js'
 
-const REPO = process.env.CORPUS_REPO ?? '/path/to/deepseek-harness'
+const REPO = process.env.CORPUS_REPO
+if (REPO === undefined || REPO === '') {
+  console.log('set CORPUS_REPO to a local checkout of DeepSeek Harness (the published numbers use commit 6d3b7608bf)')
+  process.exit(1)
+}
 const REF = process.env.CORPUS_REF ?? 'master'
 const SKIP = /(?:^|\/)(?:snapshots?|sessions?|fixtures?|__fixtures__|node_modules|lib|dist|coverage)(?:\/|$)/
 const TEXT = /\.(?:ts|md|ya?ml|json|sh|py)$/
