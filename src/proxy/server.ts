@@ -827,24 +827,93 @@ function restorers(ctx: Restoring) {
 type Json = Record<string, any>
 
 /**
+ * The objects of an upstream array; other entries, which the transformer passes through unchanged, are skipped.
+ * @param value - a parsed upstream value.
+ * @returns its object entries, or none when it is not an array.
+ */
+function records(value: unknown): Json[] {
+  return Array.isArray(value) ? value.filter((item): item is Json => item !== null && typeof item === 'object') : []
+}
+
+/**
  * Build the SSE transformer for one API. It restores text deltas through
  * keyed stream restorers, writes any held tail as a synthetic delta just
  * before the event that closes its field, and restores every other event whole.
  * @param api - wire API of the stream.
  * @param ctx - the request's restoring context.
  * @param onResponseId - receives the id of a completed Responses response.
- * @returns a function mapping one parsed event to the blocks to send.
+ * @returns `event`, mapping one parsed event to the blocks to send, and `end`,
+ * the synthetic deltas of every tail still held when the stream ends without closing its field.
  */
 function sseTransformer(api: Api, ctx: Restoring, onResponseId: (id: string) => void) {
   const r = restorers(ctx)
   const toolBlocks = new Set<string>()
   /** Chat restorer keys of custom tool calls, whose held tail belongs in `custom.input`. */
   const customCalls = new Set<string>()
-  return (lines: string[], event: Json): string => {
+  /** The identifying fields of the last Chat chunk, repeated on a synthetic one. */
+  let chatChunk: Json = {}
+  /** The last Responses delta event per restorer key, the template of a synthetic one. */
+  const lastDelta = new Map<string, Json>()
+  /**
+   * Append a flushed Chat tail to its choice's delta.
+   * @param delta - the choice's delta.
+   * @param at - the choice's key prefix.
+   * @param key - the restorer key.
+   * @param text - the tail.
+   */
+  const appendChatTail = (delta: Json, at: string, key: string, text: string): void => {
+    const field = key.slice(at.length)
+    if (field.startsWith('tool:')) {
+      const index = Number(field.slice(5))
+      const [kind, input] = customCalls.has(key) ? ['custom', 'input'] : ['function', 'arguments']
+      const calls = (delta.tool_calls ??= []) as Json[]
+      const call = calls.find(item => item.index === index)
+      if (call === undefined) calls.push({ index, [kind]: { [input]: text } })
+      else call[kind] = { ...call[kind], [input]: (call[kind]?.[input] ?? '') + text }
+    } else if (field === 'function_call') {
+      delta.function_call = { ...delta.function_call, arguments: (delta.function_call?.arguments ?? '') + text }
+    } else {
+      delta[field] = (delta[field] ?? '') + text
+    }
+  }
+  /**
+   * The Anthropic delta event carrying a block's tail.
+   * @param at - the block index as a restorer key.
+   * @param tail - the tail, possibly empty.
+   * @returns the event, or `''` for an empty tail.
+   */
+  const messagesTail = (at: string, tail: string): string => {
+    if (tail === '') return ''
+    const delta = toolBlocks.has(at) ? { type: 'input_json_delta', partial_json: tail } : { type: 'text_delta', text: tail }
+    return formatEvent(['event: content_block_delta'], { type: 'content_block_delta', index: Number(at), delta })
+  }
+  const end = (): string => {
+    const tails = r.flushPrefix('').filter(([, text]) => text !== '')
+    if (api === 'messages') return tails.map(([at, tail]) => messagesTail(at, tail)).join('')
+    if (api === 'responses') {
+      return tails.map(([key, tail]) => {
+        // oxlint-disable-next-line typescript/no-non-null-assertion -- a Responses restorer opens only on a delta event.
+        const last = lastDelta.get(key)!
+        return formatEvent([`event: ${last.type}`], { ...last, delta: tail })
+      }).join('')
+    }
+    const deltas = new Map<string, Json>()
+    for (const [key, text] of tails) {
+      const at = key.slice(0, key.indexOf(':') + 1)
+      const delta = deltas.get(at) ?? {}
+      deltas.set(at, delta)
+      appendChatTail(delta, at, key, text)
+    }
+    if (deltas.size === 0) return ''
+    return formatEvent([], { ...chatChunk, choices: [...deltas].map(([at, delta]) => ({ index: Number(at.slice(0, -1)), delta })) })
+  }
+  const transform = (lines: string[], event: Json): string => {
     let before = ''
     if (api === 'chat') {
-      for (const choice of (event.choices ?? []) as Json[]) {
+      chatChunk = { id: event.id, object: event.object, created: event.created, model: event.model }
+      for (const choice of records(event.choices)) {
         const delta = (choice.delta ??= {}) as Json
+        if (typeof delta !== 'object') continue
         const at = `${choice.index}:`
         for (const field of CHAT_TEXT) {
           if (typeof delta[field] === 'string') delta[field] = r.push(`${at}${field}`, delta[field])
@@ -853,7 +922,7 @@ function sseTransformer(api: Api, ctx: Restoring, onResponseId: (id: string) => 
         const legacy = delta.function_call as Json | undefined
         if (typeof legacy?.name === 'string') ctx.toolNames.set(`${at}function_call`, legacy.name)
         if (typeof legacy?.arguments === 'string') legacy.arguments = r.push(`${at}function_call`, legacy.arguments, ctx.toolOptions(ctx.toolNames.get(`${at}function_call`), true))
-        for (const call of (delta.tool_calls ?? []) as Json[]) {
+        for (const call of records(delta.tool_calls)) {
           const key = `${at}tool:${call.index}`
           const name = call.function?.name ?? call.custom?.name
           if (typeof name === 'string') ctx.toolNames.set(key, name)
@@ -866,20 +935,7 @@ function sseTransformer(api: Api, ctx: Restoring, onResponseId: (id: string) => 
         if (choice.finish_reason == null) continue
         // The finishing chunk may carry text of its own, so a held tail is appended to it, not sent ahead.
         for (const [key, text] of r.flushPrefix(at)) {
-          if (text === '') continue
-          const field = key.slice(at.length)
-          if (field.startsWith('tool:')) {
-            const index = Number(field.slice(5))
-            const [kind, input] = customCalls.has(key) ? ['custom', 'input'] : ['function', 'arguments']
-            const calls = (delta.tool_calls ??= []) as Json[]
-            const call = calls.find(item => item.index === index)
-            if (call === undefined) calls.push({ index, [kind]: { [input]: text } })
-            else call[kind] = { ...call[kind], [input]: (call[kind]?.[input] ?? '') + text }
-          } else if (field === 'function_call') {
-            delta.function_call = { ...delta.function_call, arguments: (delta.function_call?.arguments ?? '') + text }
-          } else {
-            delta[field] = (delta[field] ?? '') + text
-          }
+          if (text !== '') appendChatTail(delta, at, key, text)
         }
       }
       return before + formatEvent(lines, event)
@@ -897,22 +953,17 @@ function sseTransformer(api: Api, ctx: Restoring, onResponseId: (id: string) => 
         event.content_block = restoreDeep(block, ctx)
         return formatEvent(lines, event)
       }
-      if (event.type === 'content_block_delta' && event.delta?.type === 'text_delta') {
+      if (event.type === 'content_block_delta' && event.delta?.type === 'text_delta' && typeof event.delta.text === 'string') {
         event.delta.text = r.push(at, event.delta.text)
         return formatEvent(lines, event)
       }
-      if (event.type === 'content_block_delta' && event.delta?.type === 'input_json_delta') {
+      if (event.type === 'content_block_delta' && event.delta?.type === 'input_json_delta' && typeof event.delta.partial_json === 'string') {
         toolBlocks.add(at)
         event.delta.partial_json = r.push(at, event.delta.partial_json, ctx.toolOptions(undefined, true))
         return formatEvent(lines, event)
       }
       if (event.type === 'content_block_delta') return formatEvent(lines, event)
-      if (event.type === 'content_block_stop') {
-        const tail = r.flush(at)
-        const delta = toolBlocks.has(at) ? { type: 'input_json_delta', partial_json: tail } : { type: 'text_delta', text: tail }
-        if (tail !== '') before = formatEvent(['event: content_block_delta'], { type: 'content_block_delta', index: event.index, delta })
-        return before + formatEvent(lines, event)
-      }
+      if (event.type === 'content_block_stop') return messagesTail(at, r.flush(at)) + formatEvent(lines, event)
       return formatEvent(lines, restoreDeep(event, ctx))
     }
     // Responses
@@ -923,15 +974,18 @@ function sseTransformer(api: Api, ctx: Restoring, onResponseId: (id: string) => 
     const json = tool && type.includes('_arguments.')
     if (type.endsWith('.delta') && typeof event.delta === 'string') {
       event.delta = r.push(deltaKey, event.delta, tool ? ctx.toolOptions(ctx.toolNames.get(event.item_id), json) : {})
+      lastDelta.set(deltaKey, event)
       return formatEvent(lines, event)
     }
     if (type.endsWith('.done')) {
+      lastDelta.delete(deltaKey)
       const tail = r.flush(deltaKey)
       if (tail !== '') before = formatEvent([`event: ${type.replace(/\.done$/, '.delta')}`], { ...event, type: type.replace(/\.done$/, '.delta'), delta: tail, text: undefined, arguments: undefined, input: undefined })
     }
     if (type === 'response.completed' && typeof event.response?.id === 'string') onResponseId(event.response.id)
     return before + formatEvent(lines, restoreDeep(event, ctx))
   }
+  return { event: transform, end }
 }
 
 /**
@@ -1134,7 +1188,10 @@ export function createProxyServer(
     if (!anthropic && config.openaiApiKey !== undefined && headers.authorization === undefined) headers.authorization = `Bearer ${config.openaiApiKey}`
     const client = clientScope(headers)
 
-    const masked = api === undefined ? undefined : await maskBody(body, stats, client)
+    const masked = api === undefined ? undefined : await maskBody(body, stats, client).catch((error: unknown) => {
+      // The body's recursive walks overflow the call stack on nesting that deep.
+      throw error instanceof RangeError ? new Refusal(400, 'request body is nested too deeply to mask; it was not forwarded') : error
+    })
     const outgoing = masked?.outgoing
     if (outgoing !== undefined && config.debugMasked) log(`masked ${path}: ${outgoing}`)
 
@@ -1145,8 +1202,14 @@ export function createProxyServer(
       headers,
       // Only masked routes carry a body; everything else relayed is a GET.
       ...(outgoing === undefined ? {} : { body: outgoing }),
+      // Following a redirect would send the client's credential to the host the upstream names, over any scheme.
+      redirect: 'manual',
       signal: abort.signal,
     })
+    if (upstream.status >= 300 && upstream.status < 400 && upstream.headers.has('location')) {
+      await upstream.body?.cancel()
+      throw new Refusal(502, `the upstream answered ${upstream.status} with a redirect; the proxy does not follow redirects`)
+    }
     // The proxy, not the upstream, decides which browser origins may read the reply.
     const out: Record<string, string> = { ...cors }
     upstream.headers.forEach((value, name) => {
@@ -1190,6 +1253,8 @@ export function createProxyServer(
     const decoder = new TextDecoder()
     let buffer = ''
     const drain = (final: boolean): void => {
+      // A last event without its blank line is still restored.
+      if (final && buffer.trim() !== '') buffer += '\n\n'
       buffer = buffer.replace(/\r\n|\r(?=.)/gs, '\n')
       let cut = buffer.indexOf('\n\n')
       while (cut >= 0) {
@@ -1202,10 +1267,11 @@ export function createProxyServer(
         } catch {
           parsed = undefined
         }
-        res.write(parsed !== null && typeof parsed === 'object' ? transform(lines, parsed as Json) : `${block}\n\n`)
+        // A stream that ends without closing a field still gets its held tail, before `[DONE]` if one comes.
+        if (parsed !== null && typeof parsed === 'object') res.write(transform.event(lines, parsed as Json))
+        else res.write(`${data === '[DONE]' ? transform.end() : ''}${block}\n\n`)
         cut = buffer.indexOf('\n\n')
       }
-      if (final && buffer.trim() !== '') res.write(`${buffer}\n\n`)
     }
     for await (const chunk of upstream.body) {
       buffer += decoder.decode(chunk as Uint8Array, { stream: true })
@@ -1213,6 +1279,7 @@ export function createProxyServer(
     }
     buffer += decoder.decode()
     drain(true)
+    res.write(transform.end())
     res.end()
     done()
   }
@@ -1276,8 +1343,10 @@ export function createProxyServer(
       if (size > BODY_MAX_BYTES) return
       forward(req, res, path, api, Buffer.concat(chunks), cors).catch((error: unknown) => {
         if (error instanceof Refusal) fail(error.status, error.message)
-        else if (abortedByClient(error)) res.destroy()
-        else fail(502, `upstream request failed: ${error instanceof Error ? (error.cause as { code?: string } | undefined)?.code ?? error.name : 'error'}`)
+        else if (abortedByClient(error)) {
+          log(`${req.method} ${path}${res.headersSent ? ` -> ${res.statusCode}` : ''} aborted by the client`)
+          res.destroy()
+        } else fail(502, `upstream request failed: ${error instanceof Error ? (error.cause as { code?: string } | undefined)?.code ?? error.name : 'error'}`)
       })
     })
   })

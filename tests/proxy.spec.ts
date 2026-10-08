@@ -24,7 +24,7 @@ interface Seen {
   body: any
 }
 
-type Reply = (seen: Seen) => { json?: unknown; sse?: string[]; status?: number }
+type Reply = (seen: Seen) => { json?: unknown; sse?: string[]; status?: number; headers?: Record<string, string> }
 
 let upstream: Server
 let proxy: Server
@@ -84,7 +84,7 @@ beforeAll(async () => {
         pump()
         return
       }
-      res.writeHead(answer.status ?? 200, { 'content-type': 'application/json' })
+      res.writeHead(answer.status ?? 200, { 'content-type': 'application/json', ...answer.headers })
       res.end(JSON.stringify(answer.json))
     })
   })
@@ -1295,5 +1295,108 @@ describe('refusals and screening', () => {
     } finally {
       await start()
     }
+  })
+})
+
+describe('upstream failures', () => {
+  it('refuses an upstream redirect with 502 instead of following it with the client credential', async () => {
+    const landed: IncomingHttpHeaders[] = []
+    const other = createServer((req, res) => {
+      landed.push(req.headers)
+      req.resume()
+      res.end('{}')
+    })
+    await new Promise<void>(resolve => other.listen(0, '127.0.0.1', resolve))
+    try {
+      const location = `http://127.0.0.1:${(other.address() as { port: number }).port}/landed`
+      for (const status of [302, 307, 308]) {
+        reply = () => ({ status, headers: { location }, json: {} })
+        const res = await post('/v1/messages', { model: 'c', max_tokens: 1, messages: [{ role: 'user', content: `mail ${EMAIL}` }] }, { 'x-api-key': 'sk-ant-fictional' })
+        expect(res.status).toBe(502)
+        expect(await res.text()).toContain('redirect')
+      }
+      expect((await fetch(`${base}/v1/models`, { headers: { authorization: 'Bearer k' } })).status).toBe(502)
+      expect(landed).toHaveLength(0)
+      expect(logs.filter(line => line.includes('-> 502'))).toHaveLength(4)
+    } finally {
+      await new Promise(resolve => other.close(resolve))
+    }
+  })
+
+  it('relays a 304 to a GET unchanged', async () => {
+    reply = () => ({ status: 304 })
+    expect((await fetch(`${base}/v1/models`, { headers: { authorization: 'Bearer k' } })).status).toBe(304)
+  })
+
+  it('sends a held tail when the upstream stream ends without a finish event', async () => {
+    reply = () => ({ sse: sse([[undefined, { id: 'c1', choices: [{ index: 0, delta: { content: 'hello ⟦EM' }, finish_reason: null }] }]]) })
+    const chat = events(await (await post('/v1/chat/completions', { model: 'm', stream: true, messages: [{ role: 'user', content: 'hi' }] })).text())
+    expect(chat.map(event => event.choices[0].delta.content).join('')).toBe('hello ⟦EM')
+    expect(chat.at(-1).id).toBe('c1')
+
+    reply = () => ({ sse: sse([
+      ['content_block_start', { type: 'content_block_start', index: 0, content_block: { type: 'text', text: '' } }],
+      ['content_block_delta', { type: 'content_block_delta', index: 0, delta: { type: 'text_delta', text: 'hello ⟦EM' } }],
+    ]) })
+    const messages = events(await (await post('/v1/messages', { model: 'c', max_tokens: 1, stream: true, messages: [{ role: 'user', content: 'hi' }] }, { 'x-api-key': 'k' })).text())
+    expect(messages.filter(event => event.type === 'content_block_delta').map(event => event.delta.text).join('')).toBe('hello ⟦EM')
+
+    reply = () => ({ sse: sse([['response.output_text.delta', { type: 'response.output_text.delta', item_id: 'i1', output_index: 0, content_index: 0, delta: 'hello ⟦EM' }]]) })
+    const responses = events(await (await post('/v1/responses', { model: 'm', stream: true, input: 'hi' })).text())
+    expect(responses.map(event => event.delta).join('')).toBe('hello ⟦EM')
+    expect(responses.at(-1)).toMatchObject({ type: 'response.output_text.delta', item_id: 'i1', content_index: 0 })
+  })
+
+  it('passes malformed stream events through and keeps restoring the rest', async () => {
+    reply = entry => ({ sse: sse([
+      [undefined, { choices: [null] }],
+      [undefined, { choices: 'x' }],
+      [undefined, { choices: [{ index: 0, delta: { tool_calls: [null, 'y'] } }] }],
+      [undefined, { choices: [{ index: 0, delta: 'z', finish_reason: 'stop' }] }],
+      [undefined, { choices: [{ index: 1, delta: { content: `to ${placeholders(entry.raw)[0]}` }, finish_reason: 'stop' }] }],
+      [undefined, '[DONE]'],
+    ]) })
+    const res = await post('/v1/chat/completions', { model: 'm', stream: true, messages: [{ role: 'user', content: `mail ${EMAIL}` }] })
+    const text = await res.text()
+    expect(text).toContain('{"choices":[null]}')
+    expect(text).toContain('{"choices":"x"}')
+    expect(text).toContain(`to ${EMAIL}`)
+    expect(text).toContain('data: [DONE]')
+    expect(logs.some(line => line.startsWith('POST /v1/chat/completions -> 200 masked 1'))).toBe(true)
+  })
+
+  it('logs a stream the client abandons', async () => {
+    const hung = createServer((req, res) => {
+      req.resume()
+      res.writeHead(200, { 'content-type': 'text/event-stream' })
+      res.write(`data: ${JSON.stringify({ choices: [{ index: 0, delta: { content: 'a' } }] })}\n\n`)
+    })
+    await new Promise<void>(resolve => hung.listen(0, '127.0.0.1', resolve))
+    try {
+      await start({ openaiUpstream: `http://127.0.0.1:${(hung.address() as { port: number }).port}` })
+      await new Promise<void>((resolve, reject) => {
+        const req = request(`${base}/v1/chat/completions`, { method: 'POST', headers: { 'content-type': 'application/json' } }, res => {
+          res.once('data', () => req.destroy())
+          res.on('close', resolve)
+        })
+        req.on('error', () => {})
+        req.on('close', resolve)
+        req.end(JSON.stringify({ model: 'm', stream: true, messages: [{ role: 'user', content: 'hi' }] }))
+        setTimeout(reject, 5_000)
+      })
+      await vi.waitFor(() => expect(logs).toContain('POST /v1/chat/completions -> 200 aborted by the client'))
+    } finally {
+      hung.closeAllConnections()
+      await new Promise(resolve => hung.close(resolve))
+      await start()
+    }
+  })
+
+  it('refuses a body nested too deeply to mask, without forwarding it', async () => {
+    const depth = 200_000
+    const res = await fetch(`${base}/v1/chat/completions`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: `{"model":"m","messages":${'['.repeat(depth)}${']'.repeat(depth)}}` })
+    expect(res.status).toBe(400)
+    expect(await res.text()).toContain('nested too deeply')
+    expect(seen).toHaveLength(0)
   })
 })

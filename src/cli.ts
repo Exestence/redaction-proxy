@@ -4,7 +4,9 @@
  * to run the keyless demo and exit. The config path may also
  * come from `REDACTION_PROXY_CONFIG`; `REDACTION_PROXY_*` variables override it.
  * A configured name model is loaded before the port opens, so a missing file
- * stops startup instead of failing the first request. SIGINT and SIGTERM
+ * stops startup instead of failing the first request. A startup failure (an
+ * unknown option, a bad config, a port in use) prints one `redaction-proxy: …`
+ * line and exits with code 1. SIGINT and SIGTERM
  * close the server and release the model before the process exits.
  *
  * @module redaction-proxy/cli
@@ -24,7 +26,12 @@ function exitWith(error: unknown): never {
   process.exit(1)
 }
 
-const { values } = parseArgs({ options: { config: { type: 'string', short: 'c' }, demo: { type: 'boolean' } } })
+let values
+try {
+  values = parseArgs({ options: { config: { type: 'string', short: 'c' }, demo: { type: 'boolean' } } }).values
+} catch (error) {
+  exitWith(error)
+}
 if (values.demo) {
   const { runDemo } = await import('./demo.ts')
   await runDemo()
@@ -38,7 +45,10 @@ try {
 }
 const nameModel = config.nameModel === undefined ? undefined : await loadNameModel(config.nameModel).catch(exitWith)
 const server = createProxyServer(config, undefined, nameModel)
-const port = await listen(server, config.port, config.host)
+const port = await listen(server, config.port, config.host).catch(async (error: unknown) => {
+  await nameModel?.release()
+  exitWith(error)
+})
 for (const signal of ['SIGINT', 'SIGTERM'] as const) {
   process.once(signal, () => void closeProxy(server, nameModel))
 }

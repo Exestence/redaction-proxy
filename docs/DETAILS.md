@@ -212,6 +212,7 @@ flowchart TD
 | 狀態碼 | 何時 | 訊息內容 |
 | --- | --- | --- |
 | 400 | 遮罩路由的請求本文不是 JSON。 | `request body is not JSON` |
+| 400 | 遮罩路由的請求本文巢狀太深，遞迴走訪會耗盡呼叫堆疊（約數千層以上）。不轉送。 | 固定訊息 |
 | 403 | 帶有 `Origin`，但它既不是本機的 `http(s)` 來源，也不在 `allowedOrigins` 中（網頁發出的請求，含 `Origin: null`）；或未設 `authToken` 且 `Host` 不是本機名稱（`localhost`、`127.0.0.0/8`、`[::1]`；DNS rebinding）。在任何路由檢查之前。 | 固定訊息 |
 | 401 | 設了 `authToken`，但請求沒帶 `x-redaction-proxy-token`，或值不符。以 SHA-256 摘要做固定時間比較。帶正確權杖時不檢查 `Host`。 | 固定訊息 |
 | 204 | 允許的來源發出的 CORS 預檢（`OPTIONS` 帶 `Access-Control-Request-Method`）。不需權杖，不轉送。 | 無本文 |
@@ -222,6 +223,7 @@ flowchart TD
 | 422 | 帶 `previous_response_id`，但代理沒有這個用戶端憑證的先前輸入（重啟、被擠出、從未經過代理，或屬於另一個用戶端）。 | 固定訊息 |
 | 422 | 與 `previous_response_id` 先前輸入合併後 `mask` 拋出 `RedactionError`。 | 錯誤代碼 |
 | 502 | 連不上上游。 | 網路錯誤代碼 |
+| 502 | 上游回 3xx 並帶 `Location`（重新導向）。代理不跟隨，不把請求送往別處；不帶 `Location` 的 `304` 照常轉回。 | 狀態碼 |
 
 外洩檢查會在以下情況觸發：偵測到的值也出現在不遮的欄位（第 5 節），或該值出現在較長的詞中間而未被遮。只出現在不遮欄位或物件鍵中、別處沒有出現的值，不會被偵測，照原樣送出。拒絕訊息只指出欄位，絕不含值：陣列索引照寫（`/messages/1/content`）；本身含有偵測值的鍵，以及不是小寫識別字（`[a-z][a-z0-9_]*`，最多 40 字元）的鍵，都寫成 `<key>`。拒絕時請求不會送出。
 
@@ -238,7 +240,7 @@ flowchart TD
 | `GET` 任何路徑 | 原樣轉送 | 帶 `x-api-key` 或 `anthropic-version` 標頭時走 Anthropic，否則走 OpenAI |
 | `OPTIONS`（CORS 預檢） | 允許的來源回 204，不轉送 | — |
 
-上游 URL 為設定的 base 加上用戶端的原始路徑與查詢字串。用戶端的 `authorization`、`x-api-key`、`anthropic-*` 等標頭原樣轉送，代理從不儲存。`host`、`connection`、`content-length`、`content-encoding`、`accept-encoding` 等逐跳標頭不轉送，送往上游時固定 `accept-encoding: identity`。`x-redaction-proxy-token` 不轉送。上游回應的 `access-control-*` 標頭不轉回；來自允許來源的請求，由代理自己回 `access-control-allow-origin: <該來源>`。用戶端斷線時，代理會中止上游請求。
+上游 URL 為設定的 base 加上用戶端的原始路徑與查詢字串。用戶端的 `authorization`、`x-api-key`、`anthropic-*` 等標頭原樣轉送，代理從不儲存。`host`、`connection`、`content-length`、`content-encoding`、`accept-encoding` 等逐跳標頭不轉送，送往上游時固定 `accept-encoding: identity`。`x-redaction-proxy-token` 不轉送。上游回應的 `access-control-*` 標頭不轉回；來自允許來源的請求，由代理自己回 `access-control-allow-origin: <該來源>`。用戶端斷線時，代理會中止上游請求。代理不跟隨上游的重新導向（回 502），所以用戶端的憑證與請求只送往設定的上游，即使 `Location` 指向別的主機或 `http://`。
 
 ## 7. 串流還原
 
@@ -273,7 +275,9 @@ sequenceDiagram
 | Anthropic Messages | 每個 content block 的 `text_delta` 與 `input_json_delta`（沒有 `content_block_start` 的 `input_json_delta` 也當工具參數，套用預設類別） | 在 `content_block_stop` 之前插入一個合成的 `content_block_delta` |
 | Responses | 依 `item_id`、`content_index` 或 `summary_index` 與事件類型區分的每個 `.delta` | 在對應的 `.done` 之前插入一個合成的 `.delta` |
 
-其他事件（以及非串流的 JSON 回應）以 `restoreDeep` 整份還原。上游送回非 JSON 本文（例如 HTML 錯誤頁）時原樣轉送。SSE 解析會把 `\r\n` 正規化為 `\n`，無法解析的事件原樣轉送。
+上游串流在欄位結束前就停止（沒有 `finish_reason`、`content_block_stop` 或 `.done`）時，仍扣住的殘留以同樣的合成 delta 在 `[DONE]` 之前或串流最後送出。
+
+其他事件（以及非串流的 JSON 回應）以 `restoreDeep` 整份還原。上游送回非 JSON 本文（例如 HTML 錯誤頁）時原樣轉送。SSE 解析會把 `\r\n` 正規化為 `\n`，無法解析的事件原樣轉送；`choices`、`tool_calls` 不是陣列時，以及其中不是物件的項目，也原樣轉送。
 
 還原只認標準的 `⟦CATEGORY_n⟧`。模型若改寫成 `EMAIL_1`、`[EMAIL_1]`、`〚EMAIL_1〛`，用戶端會原樣看到。還原只填佔位符，從不把原始值送往上游。
 
@@ -351,7 +355,7 @@ URL 內的佔位符不論類別一律保持原樣；回覆文字（含 reasoning
 
 ## 10. 日誌
 
-日誌寫到 stderr，每個請求一行：方法、路徑（不含查詢字串）、狀態碼、各類別遮罩數、還原數、未知佔位符數與耗時。被拒絕的請求記錄狀態碼與拒絕原因。日誌絕不包含原始值或標頭。
+日誌寫到 stderr，每個請求一行：方法、路徑（不含查詢字串）、狀態碼、各類別遮罩數、還原數、未知佔位符數與耗時。被拒絕的請求記錄狀態碼與拒絕原因。用戶端中途斷線的請求記一行 `aborted by the client`；上游中途斷線記為 502。日誌絕不包含原始值或標頭。
 
 ```text
 POST /v1/chat/completions -> 200 masked 3 (EMAIL 1, TWID 1, PATH 1) restored 3 unknown 0 7ms
@@ -382,6 +386,8 @@ POST /v1/messages tool arguments: kept by the tool restore policy KEY_1 in bash 
 - 輸入者刻意規避（例如用規則不會折疊的字元拆開一個值）。
 
 代理預設只綁定 `127.0.0.1`，此時 `authToken` 可不設。`host` 設成非本機位址（例如容器內的 `0.0.0.0`）時必須設 `authToken`，否則拒絕啟動：連得到該埠的主機若沒有權杖，就無法透過代理使用它轉送的憑證（包括環境變數中的備援金鑰）。權杖放在專用標頭 `x-redaction-proxy-token`，因為 `authorization` 與 `x-api-key` 要帶上游金鑰；代理不轉送它。帶正確權杖的請求不檢查 `Host`，所以其他容器可以用服務名稱連線；DNS rebinding 的網頁拿不到權杖，而自訂標頭會觸發只有允許來源才通過的 CORS 預檢。權杖以明文 HTTP 傳送，只在可信任的網路（本機、容器網路）上使用。
+
+上游視為可信，但代理不跟隨它的重新導向（第 6 節），所以用戶端的金鑰只送往設定的上游主機。
 
 品質影響：需要直接操作被遮值的任務（把絕對路徑改成相對路徑、對地點做推理）可能變差。這類失敗看得見（回覆中會出現佔位符或錯誤的推論），不是把錯誤的值靜默寫回。
 
@@ -448,8 +454,9 @@ POST /v1/messages tool arguments: kept by the tool restore policy KEY_1 in bash 
 | `rules-extended` | 延伸規則：每條規則的正例與反例（程式碼、套件名、檔名、命名空間、環境變數、資源路徑、成員鏈、版本範圍、純數字 UUID）、預設 `card`、`entropy` 的結果不變、偵測器版本與摘要，以及 32 種 200 KB 病態輸入。 |
 | `engine` | 遮罩引擎：編號、保留 id、索引重用、嚴格還原。 |
 | `adversarial` | 洩漏與往返、失敗即關閉的篩檢、54 種 200 KB 病態輸入與 3 種 1 MB 的 `password=` 行各須在 2 秒 CPU 時間內（量測 worker 行程的 CPU 時間而非經過時間，平行執行的其他測試不計入）、串流回覆的所有 2 段與 3 段切法、100 KB 串流以 4 字元為單位。 |
-| `proxy` | 對本機假上游的端對端測試：Chat Completions、Responses、Anthropic Messages 的 JSON 與 SSE，佔位符跨越分塊邊界並出現在工具呼叫 JSON 中；413、未知接續的 422、鍵中原始值寫成 `<key>`。 |
+| `proxy` | 對本機假上游的端對端測試：Chat Completions、Responses、Anthropic Messages 的 JSON 與 SSE，佔位符跨越分塊邊界並出現在工具呼叫 JSON 中；413、未知接續的 422、鍵中原始值寫成 `<key>`；上游重新導向回 502、巢狀過深的本文回 400、未結束或格式錯誤的串流仍送出殘留與其餘事件、用戶端中途斷線也記一行日誌。 |
 | `proxy-host`、`restore-urls` | 綁定位址、權杖、`allowedOrigins` 與設定錯誤即拒絕啟動；403（`Host`、`Origin`）與 401；工具呼叫參數中 URL 內的佔位符不還原，其他還原的佔位符回報 JSON 指標而不含原始值。 |
+| `cli` | 未知選項、多餘的位置參數與埠已被占用時，只印一行 `redaction-proxy: …` 並以代碼 1 結束。 |
 
 `pnpm typecheck` 做型別檢查。CI（`.github/workflows/ci.yml`）在 ubuntu 與 macOS、Node 22 與 24 上跑型別檢查、測試、建置、`--demo` 與 `npm pack --dry-run`，不安裝人名模型的選用依賴；真實服務的驗證（`e2e-real.yml`）只能手動觸發，金鑰來自 repository secrets。所有端對端測試與 `pnpm demo` 都只用本機假上游，尚未對真實 API 或真實用戶端驗證。
 
@@ -457,7 +464,7 @@ POST /v1/messages tool arguments: kept by the tool restore policy KEY_1 in bash 
 
 `pnpm bench`（`bench/false-positives.mjs`）：
 
-1. 以 `git archive` 匯出語料倉庫指定 commit 的 `packages`、`docs`、`scripts`（預設 `/path/to/deepseek-harness` 的 `master`；以 `CORPUS_REPO`、`CORPUS_REF` 覆寫）到 `.corpus-work`，結束後刪除。
+1. 以 `git archive` 匯出語料倉庫指定 commit 的 `packages`、`docs`、`scripts`（DeepSeek Harness 在 commit `6d3b7608bf` 的本機 checkout，以 `CORPUS_REPO` 指定，必填；`CORPUS_REF` 預設 `master`）到 `.corpus-work`，結束後刪除。
 2. 選取 `.ts .md .yml .yaml .json .sh .py`、小於 512 KB 的檔案，排除 snapshot、session、fixture、`node_modules`、`lib`、`dist`、`coverage`。
 3. 每個檔案以預設規則整份 `mask`，再以嚴格 `restore` 確認逐位元組還原。
 4. 主要指標：程式碼檔（`.md`、`.yml`、`.yaml` 以外）中的 `KEY` 數量除以程式碼行數。原始碼不含可用的憑證，所以每一個都是誤遮。其他類別以全部行數與程式碼行數各計一次，是誤遮的上限，因為文件裡確實有應被遮的範例路徑與地址。預設設定不含 `terms`，所以 `TERM`、`PROJECT` 不出現。
@@ -561,6 +568,7 @@ node scripts/fetch-name-model.mjs ~/models/nym       # 從 Hugging Face 下載�
 | 本機預設沒有驗證 | 預設只綁定 `127.0.0.1`；沒設 `authToken` 時，你電腦上的任何程式都能使用它。網頁的請求（不允許的 `Origin`、DNS rebinding）以 403 拒絕。 |
 | 工具參數只還原允許的類別 | 回應中 URL 內的佔位符保持原樣（合法的 `https://host/⟦PATH_1⟧` 也一樣）。工具參數只還原 `toolRestore` 允許的類別（預設 `PATH`、`TERM`、`PROJECT`），需要其他值的工具拿到佔位符，可能失敗，直到使用者為它開放。允許的類別照常還原並記入日誌，所以 shell 指令等仍可能把它們送出。 |
 | 請求大小 | 本文超過 64 MiB 以 413 拒絕。 |
+| 沒有上游逾時 | 代理不限制等待上游的時間；上游不回應時，請求一直等到用戶端自己的逾時或斷線，代理隨即中止上游請求。 |
 | 尚未對真實服務測試 | 測試與示範都用本機假上游，尚未對 OpenAI、Anthropic、DeepSeek 或真實用戶端驗證。驗證工具已備妥（[e2e/real](../e2e/real/README.md)），尚未執行。 |
 
 ## 18. 實測數字
