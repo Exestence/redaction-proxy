@@ -38,13 +38,17 @@ const ROUTES: Readonly<Record<string, Api>> = {
 /**
  * Request keys whose string values are never masked: identifiers, enums,
  * names the API matches exactly, binary payloads, and signed or encrypted
- * model state that must be resent byte for byte.
+ * model state that must be resent byte for byte. An object or array under
+ * one of them is searched like any other.
  */
 const SKIP_MASK = new Set([
   'model', 'role', 'type', 'id', 'call_id', 'tool_call_id', 'tool_use_id', 'name', 'previous_response_id',
   'signature', 'thinking', 'data', 'encrypted_content', 'media_type', 'url', 'image_url', 'file_id', 'file_data',
-  'metadata', 'cache_control', 'format', 'status', 'service_tier', 'reasoning_effort', 'tool_choice', 'stop',
+  'cache_control', 'format', 'status', 'service_tier', 'reasoning_effort', 'tool_choice',
 ])
+
+/** Request keys whose whole value is forwarded unmasked: caller metadata and exact stop strings. */
+const SKIP_SUBTREE = new Set(['metadata', 'stop'])
 
 /** Response keys whose strings stay as the model sent them: signed or encrypted state. */
 const SKIP_RESTORE = new Set(['signature', 'thinking', 'data', 'encrypted_content'])
@@ -169,12 +173,24 @@ function collectSlots(value: unknown, path: string, out: Slot[]): void {
   const keys = Object.keys(record)
   const ordered = path === '' ? [...HEAD_FIRST.filter(key => key in record), ...keys.filter(key => !HEAD_FIRST.includes(key))] : keys
   for (const key of ordered) {
-    if (SKIP_MASK.has(key)) continue
+    if (SKIP_SUBTREE.has(key)) continue
     const item = record[key]
     const at = `${path}/${pointerSegment(key)}`
-    if (typeof item === 'string') out.push({ parent: record, key, path: at })
-    else collectSlots(item, at, out)
+    if (typeof item !== 'string') collectSlots(item, at, out)
+    else if (!SKIP_MASK.has(key) || isTextSource(record, key)) out.push({ parent: record, key, path: at })
   }
+}
+
+/**
+ * Whether `record[key]` is the text of a plain-text document source, such as
+ * Anthropic's `{ type: 'text', media_type: 'text/plain', data }`, rather than
+ * base64 bytes.
+ * @param record - a request object.
+ * @param key - one of its keys.
+ * @returns whether the value is document text.
+ */
+function isTextSource(record: Record<string, unknown>, key: string): boolean {
+  return key === 'data' && record.type === 'text'
 }
 
 /**

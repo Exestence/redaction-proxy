@@ -295,6 +295,24 @@ describe('Anthropic Messages', () => {
     expect(body.content[2].input).toEqual({ path: `${HOME}/c.md`, tags: [QUOTED] })
   })
 
+  it('masks a plain-text document and objects under keys whose strings it skips', async () => {
+    reply = () => ({ json: { content: [] } })
+    const document = { type: 'document', source: { type: 'text', media_type: 'text/plain', data: `Customer file. Email ${EMAIL}, ID ${TWID}` } }
+    const properties = { name: { type: 'string', description: `defaults to ${EMAIL}` }, data: { type: 'string', description: `owner ${TWID}` } }
+    const res = await post('/v1/messages', {
+      model: 'claude', max_tokens: 1, stop_sequences: ['END'], metadata: { user_id: 'user_abc' },
+      tools: [{ name: 'lookup', input_schema: { type: 'object', properties } }],
+      messages: [{ role: 'user', content: [document, { type: 'text', text: 'Summarize the file.' }] }],
+    }, { 'x-api-key': 'k' })
+    expect(res.status).toBe(200)
+    const [entry] = seen
+    expect(entry!.raw).not.toContain(EMAIL)
+    expect(entry!.raw).not.toContain(TWID)
+    expect(entry!.body.messages[0].content[0].source).toEqual({ type: 'text', media_type: 'text/plain', data: 'Customer file. Email ⟦EMAIL_1⟧, ID ⟦TWID_1⟧' })
+    expect(entry!.body.stop_sequences).toEqual(['END'])
+    expect(entry!.body.metadata).toEqual({ user_id: 'user_abc' })
+  })
+
   it('masks count_tokens requests too', async () => {
     reply = () => ({ json: { input_tokens: 42 } })
     const res = await post('/v1/messages/count_tokens', request, { 'x-api-key': 'k' })

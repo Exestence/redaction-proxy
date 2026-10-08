@@ -209,7 +209,7 @@ REDACTION_PROXY_NAME_MODEL_DIR=$HOME/models/nym node lib/cli.js
 
 - **語意。** 雲端仍讀得到佔位符周圍的一切：`⟦PATH_1⟧/clients/acme-layoffs.md` 依然透露很多。
 - **人名、地址、病況、薪資**，除非你列進 `terms` 或人名模型找到。
-- **圖片、PDF、音訊、`url` 欄位、`metadata`、`stop` 序列、`name` 欄位（工具與參與者名稱）、帶簽章的 thinking。** 這些原樣轉送且不掃描，JSON 物件的鍵也是：在被遮的文字中偵測到的值若也出現在其中，整個請求以 422 拒絕；只出現在這些地方的值則照原樣送出。
+- **圖片、PDF 等 base64 檔案（純文字文件的內容照常遮罩）、音訊、`url` 欄位、`metadata`、`stop` 序列、`name` 欄位（工具與參與者名稱）、帶簽章的 thinking。** 這些原樣轉送且不掃描，JSON 物件的鍵也是：在被遮的文字中偵測到的值若也出現在其中，整個請求以 422 拒絕；只出現在這些地方的值則照原樣送出。
 - **少見的寫法。** 有些拆開或編碼過的寫法抓不到，例如有空白的 `name @ domain`、`name at domain`、小寫的 IBAN、編碼兩次的百分比編碼。
 - **Cursor**，以及任何從自家伺服器發出請求的工具。
 - **你電腦上的其他程式。** 代理預設只綁定 `127.0.0.1`；沒設 `authToken` 時，你電腦上的任何程式都能使用它。網頁的請求以 403 拒絕，除非來源（Origin）是本機 `http(s)` 網頁或列在 `allowedOrigins`；指名其他主機名稱的請求（DNS rebinding）也以 403 拒絕。

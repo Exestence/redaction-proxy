@@ -210,7 +210,7 @@ REDACTION_PROXY_NAME_MODEL_DIR=$HOME/models/nym node lib/cli.js
 
 - **语义。** 云端仍能读到占位符周围的全部内容：`⟦PATH_1⟧/clients/acme-layoffs.md` 照样透露很多。
 - **人名、地址、病情、薪资**，除非你写进 `terms` 或人名模型识别出来。
-- **图片、PDF、音频、`url` 字段、`metadata`、`stop` 序列、`name` 字段（工具名与参与者名）、带签名的 thinking。** 这些原样转发且不扫描，JSON 对象的键也一样：在被遮的文本中检测到的值如果也出现在其中，整个请求以 422 拒绝；只出现在这些地方的值则原样发出。
+- **图片、PDF 等 base64 文件（纯文本文档的内容照常遮罩）、音频、`url` 字段、`metadata`、`stop` 序列、`name` 字段（工具名与参与者名）、带签名的 thinking。** 这些原样转发且不扫描，JSON 对象的键也一样：在被遮的文本中检测到的值如果也出现在其中，整个请求以 422 拒绝；只出现在这些地方的值则原样发出。
 - **少见的写法。** 有些拆开或编码过的写法识别不了，比如带空格的 `name @ domain`、`name at domain`、小写的 IBAN、两次百分号编码的值。
 - **Cursor**，以及任何从自家服务器发请求的工具。
 - **本机上的其他程序。** 代理默认只监听 `127.0.0.1`；没设 `authToken` 时，本机上的任何程序都能使用它。网页的请求以 403 拒绝，除非来源（Origin）是本机 `http(s)` 网页或列在 `allowedOrigins` 中；指定其他主机名的请求（DNS rebinding）也以 403 拒绝。

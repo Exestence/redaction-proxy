@@ -209,7 +209,7 @@ Full tables: [held-out v2 results](bench/results/public-bench-held-out-v2.md). T
 
 - **Meaning.** The cloud still reads everything around the placeholders: `⟦PATH_1⟧/clients/acme-layoffs.md` still says a lot.
 - **Names, addresses, health details, salaries**, unless you list them in `terms` or the name model finds them.
-- **Images, PDFs, audio, `url` fields, `metadata`, `stop` sequences, `name` fields (tool and participant names), signed thinking.** These are forwarded unchanged and never scanned, nor are JSON object keys: a value found in the masked text that also appears in one makes the proxy refuse the whole request with 422, but a value that appears only there is sent as is.
+- **Images, PDFs and other base64 files (a plain-text document's text is masked), audio, `url` fields, `metadata`, `stop` sequences, `name` fields (tool and participant names), signed thinking.** These are forwarded unchanged and never scanned, nor are JSON object keys: a value found in the masked text that also appears in one makes the proxy refuse the whole request with 422, but a value that appears only there is sent as is.
 - **Unusual spellings.** Some split or encoded forms slip through, such as `name @ domain` with spaces, `name at domain`, a lower-case IBAN, or a double percent-encoded value.
 - **Cursor**, or any tool that sends requests from its own servers.
 - **Other programs on your machine.** The proxy binds `127.0.0.1` by default; without `authToken`, any program on your machine can use it. Web pages are refused with 403 unless their origin is a loopback `http(s)` page or in `allowedOrigins`, and so are requests for other host names (DNS rebinding).
