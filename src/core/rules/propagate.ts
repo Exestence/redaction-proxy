@@ -71,8 +71,8 @@ export function propagateValues(
 ): PropagatedRange[] {
   const indexed: string[] = []
   const long: string[] = []
-  for (const value of values.keys()) {
-    if (!isPropagatableValue(value)) continue
+  for (const [value, category] of values) {
+    if (!isPropagatableValue(value, category)) continue
     if (value.length <= TRIE_MAX) indexed.push(value)
     else long.push(value)
   }

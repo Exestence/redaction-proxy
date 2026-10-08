@@ -600,11 +600,15 @@ export function collectSecretCandidates(text: string, push: PushCandidate, after
 /**
  * Whether a detected original is long and distinctive enough to propagate.
  * Without this guard `王` masks inside `國王` and `12345678` inside `123456789`.
+ * A credential propagates at any length: its restored echo in a later request
+ * must be masked again, or the proxy's leak scan refuses every later request.
  * @param value - a detected original.
+ * @param category - the category it is masked under.
  * @returns whether the value may be searched for elsewhere.
  */
-export function isPropagatableValue(value: string): boolean {
+export function isPropagatableValue(value: string, category: string): boolean {
   if (isKeywordValue(value)) return false
+  if (category === 'KEY') return true
   if (isAsciiPrintable(value)) return value.length >= 6
   // oxlint-disable-next-line typescript/no-misused-spread -- the guard counts code points, not graphemes.
   return [...value].length >= 2

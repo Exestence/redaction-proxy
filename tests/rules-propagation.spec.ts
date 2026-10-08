@@ -34,6 +34,14 @@ async function maskOne(text: string, start: number, end: number, id = 'TERM_1'):
 }
 
 describe('value propagation', () => {
+  it('propagates a short credential, so its later echo is masked instead of refused', async () => {
+    const result = await service.mask([
+      { seq: SessionSeq(1), path: '/content/0/text', text: 'password: abc12' },
+      { seq: SessionSeq(2), path: '/content/0/text', text: 'I set it to abc12 yesterday' },
+    ], emptyRedactionIndex())
+    expect(result.masked).toEqual(['password: ⟦KEY_1⟧', 'I set it to ⟦KEY_1⟧ yesterday'])
+  })
+
   it.each([
     ['王的國王', 0, 1, '⟦TERM_1⟧的國王'],
     ['Li visits Library', 0, 2, '⟦TERM_1⟧ visits Library'],
