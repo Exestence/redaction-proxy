@@ -176,21 +176,53 @@ describe('configured term boundaries', () => {
     ['Orion​cloud', '⟦PROJECT_1⟧cloud'],
     ['Lin­ux', '⟦TERM_1⟧ux'],
     ['x​Lin', 'x​⟦TERM_1⟧'],
+    ['Lin😀x', '⟦TERM_1⟧😀x'],
+    ['Lin\u2060\u0335', '⟦TERM_1⟧'],
   ])('masks a term the text shows as a whole word although its projection does not: %j', async (text, expected) => {
     expect(await mask(text, symbols)).toBe(expected)
   })
 
-  it.each(['ＡLin', 'Lin１', 'Linux', 'Liń'])('leaves a term glued to a letter or digit in the text: %j', async (text) => {
+  it('masks a multi-part term the text shows as a whole word although its projection does not', async () => {
+    const parts = new RulesRedactionService(new Context(), { terms: ['Margaret Holloway'], projectNames: ['Nimbus-7'] })
+    expect(await mask('Nimbus-7™ and Margaret Holloway™', parts)).toBe('⟦PROJECT_1⟧™ and ⟦TERM_1⟧™')
+  })
+
+  it.each(['ＡLin', 'Lin１', 'Linux', 'Liń', 'Lin𝐀bc', '𝐀𝐁Lin', 'Lin𝟙2', 'Orion\u200B\u0301', 'Orion\u00AD\u0301'])('leaves a term glued to a letter, digit, or mark in the text: %j', async (text) => {
     expect(await mask(text, symbols)).toBe(text)
   })
 
-  it.each(['Orion™ ships', 'Orion ships Orion™', 'Lin№5', 'Lin™x', 'a%20Lin', 'Orion​cloud', 'Lin﻿', 'ＡLin', 'Linux'])(
+  it.each(['Orion™ ships', 'Orion ships Orion™', 'Lin№5', 'Lin™x', 'a%20Lin', 'Orion​cloud', 'Lin﻿', 'ＡLin', 'Linux', 'Lin𝐀bc', 'Orion ships Orion\u200B\u0301', 'Lin and Lin\uFEFF\u0301', 'Lin and Lin\u180E\u0301'])(
     'leaves no occurrence the leak scan would flag: %j',
     async (text) => {
       const masked = await mask(text, symbols)
       for (const term of ['Lin', 'Orion', 'Nimbus']) expect(containsStandingAlone(masked, term)).toBe(false)
     },
   )
+
+  it('leaves no occurrence the leak scan would flag around randomly glued terms', async () => {
+    const terms = ['Lin', 'Orion', 'Nimbus-7', 'Margaret Holloway', 'Élodie', '林小姐', 'K9']
+    const glue = ['', ' ', 'x', '1', '-', "'", '™', '№', 'Ａ', '１', '林', '𝐀', '𝟙', '🔑', '%41', '%20', '\u00AD', '\u200B', '\u200C', '\u200D', '\u2060', '\uFEFF', '\u180E', '\u0301', '\u0308', '\u0335']
+    const fuzzed = new RulesRedactionService(new Context(), { terms })
+    // mulberry32: a fixed seed keeps every run on the same samples.
+    let seed = 0x5eed
+    const random = (n: number): number => {
+      seed = (seed + 0x6d2b79f5) | 0
+      let t = Math.imul(seed ^ (seed >>> 15), seed | 1)
+      t ^= t + Math.imul(t ^ (t >>> 7), t | 61)
+      return Math.floor((((t ^ (t >>> 14)) >>> 0) / 2 ** 32) * n)
+    }
+    const around = (): string => Array.from({ length: random(4) }, () => glue[random(glue.length)]).join('')
+    const fold = (text: string): string => text.replace(/[A-Z]+/g, run => run.toLowerCase())
+    for (let sample = 0; sample < 4000; sample += 1) {
+      const term = terms[random(terms.length)]!
+      const spelled = random(2) === 0 ? term : term.toUpperCase()
+      const text = `${around()}${spelled}${around()} and ${around()}${spelled}${around()}`
+      const result = await fuzzed.mask([{ seq: SessionSeq(1), path: '/content/0/text', text }], emptyRedactionIndex())
+      for (const id of result.registry.ids()) {
+        expect(containsStandingAlone(fold(result.masked[0]!), fold(result.registry.original(id)!)), text).toBe(false)
+      }
+    }
+  })
 
   it('propagates a bound term only where its edges stand free', async () => {
     const result = await named.mask([

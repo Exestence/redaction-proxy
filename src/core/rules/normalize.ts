@@ -8,8 +8,8 @@
  * @module redaction-proxy/core/rules/normalize
  */
 
-// Invisible characters the NFKC projection removes: zero-width characters and the soft hyphen.
-const ZERO_WIDTH = new Set([0x00ad, 0x200b, 0x200c, 0x200d, 0x2060, 0xfeff])
+/** Invisible characters the NFKC projection removes: zero-width characters and the soft hyphen. */
+export const ZERO_WIDTH: ReadonlySet<number> = new Set([0x00ad, 0x200b, 0x200c, 0x200d, 0x2060, 0xfeff])
 const ZERO_WIDTH_PATTERN = /[\u00ad\u200b-\u200d\u2060\ufeff]/g
 const COMBINING_MARK = /\p{M}/u
 const ALNUM = /[A-Za-z0-9]/

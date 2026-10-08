@@ -634,6 +634,33 @@ describe('state kept per client credential', () => {
     }
   })
 
+  it('keeps a credential from tool output that the user later writes in another case through a flood of tool output, without extending its time to live', async () => {
+    vi.useFakeTimers({ toFake: ['Date'] })
+    try {
+      await start({ knownOriginalsTtlSeconds: 60 })
+      reply = () => ({ json: { choices: [] } })
+      const client = { authorization: 'Bearer client-tool-echo-case' }
+      const tool = (content: string) => [{ role: 'user', content: 'dump' }, { role: 'tool', tool_call_id: 't', content }]
+      const echo = async (value: string): Promise<string> => {
+        seen = []
+        await post('/v1/chat/completions', { model: 'm', messages: [{ role: 'user', content: `again ${value}` }] }, client)
+        return seen[0]!.body.messages[0].content
+      }
+      await post('/v1/chat/completions', { model: 'm', messages: tool(`password: ${PASS}`) }, client)
+      vi.advanceTimersByTime(30_000)
+      expect(await echo(PASS.toUpperCase())).toMatch(/^again ⟦KEY_\d+⟧$/)
+      await post('/v1/chat/completions', { model: 'm', messages: tool(Array.from({ length: 4096 }, (_, i) => `password: fl${String(i).padStart(5, '0')}Zq`).join('\n')) }, client)
+      vi.advanceTimersByTime(29_000)
+      expect(await echo(PASS.toUpperCase())).toMatch(/^again ⟦KEY_\d+⟧$/)
+      expect(await echo(PASS)).toMatch(/^again ⟦KEY_\d+⟧$/)
+      vi.advanceTimersByTime(1_000)
+      expect(await echo(PASS.toUpperCase())).toBe(`again ${PASS.toUpperCase()}`)
+    } finally {
+      vi.useRealTimers()
+      await start()
+    }
+  })
+
   it('never refuses a remembered value whose occurrence another detection splits, nor the same value detected earlier in the request', async () => {
     reply = () => ({ json: { choices: [] } })
     const client = { authorization: 'Bearer client-split' }
@@ -643,6 +670,22 @@ describe('state kept per client credential', () => {
     expect(seen[1]!.raw).not.toContain('0912345678')
     expect((await post('/v1/chat/completions', { model: 'm', messages: [{ role: 'user', content: 'password: pw-0912345678' }, split] })).status).toBe(200)
     expect(seen[2]!.raw).not.toContain('0912345678')
+    const upper = { role: 'user', content: 'call PW-0912345678 today; the pw-reset flow is broken' }
+    expect((await post('/v1/chat/completions', { model: 'm', messages: [upper] }, client)).status).toBe(200)
+    expect(seen[3]!.raw).not.toContain('0912345678')
+    expect((await post('/v1/chat/completions', { model: 'm', messages: [upper], metadata: { note: 'PW-' } }, client)).status).toBe(200)
+  })
+
+  it('still refuses a detected value inside a split remembered value, and a whole value split in the same request, but not that value\'s part', async () => {
+    reply = () => ({ json: { choices: [] } })
+    const client = { authorization: 'Bearer client-split-scan' }
+    await post('/v1/chat/completions', { model: 'm', messages: [{ role: 'user', content: 'password: pw-0912345678' }] }, client)
+    const remembered = { model: 'm', messages: [{ role: 'user', content: 'call pw-0912345678 today' }] }
+    expect((await post('/v1/chat/completions', { ...remembered, metadata: { note: '0912345678' } }, client)).status).toBe(422)
+    const same = { model: 'm', messages: [{ role: 'user', content: 'password: hunter2zz-0912345678; call hunter2zz-0912345678 later' }] }
+    expect((await post('/v1/chat/completions', { ...same, metadata: { note: 'hunter2zz-0912345678' } })).status).toBe(422)
+    // Documented in DETAILS §8: a part of a value detected in the same request is not refused.
+    expect((await post('/v1/chat/completions', { ...same, metadata: { note: 'hunter2zz-' } })).status).toBe(200)
   })
 
   it('keeps two credentials apart when one is the other\'s JSON-escaped spelling', async () => {
@@ -1082,6 +1125,28 @@ describe('tool restore policy', () => {
 })
 
 describe('refusals and screening', () => {
+  it('forwards a term whose last letter a combining mark after a zero-width character changes, without refusing the term written elsewhere', async () => {
+    await start({ redaction: { terms: ['Lin'], projectNames: ['Orion'] } })
+    try {
+      reply = () => ({ json: { choices: [] } })
+      const send = async (messages: unknown[], path = '/v1/chat/completions'): Promise<string> => {
+        seen = []
+        const res = await post(path, { model: 'm', max_tokens: 1, messages }, path === '/v1/messages' ? { 'x-api-key': 'k' } : {})
+        expect(res.status).toBe(200)
+        return seen[0]!.body.messages.at(-1).content
+      }
+      expect(await send([{ role: 'user', content: 'Orion ships Orion​́ soon' }])).toBe('⟦PROJECT_1⟧ ships Orion​́ soon')
+      expect(await send([{ role: 'user', content: 'Orion and Orion­́ x' }])).toBe('⟦PROJECT_1⟧ and Orion­́ x')
+      const history = [{ role: 'user', content: 'read the doc' }, { role: 'assistant', tool_calls: [{ id: 'c', type: 'function', function: { name: 'read', arguments: '{}' } }] }, { role: 'tool', tool_call_id: 'c', content: 'Project Orion​́ roadmap' }]
+      for (let turn = 1; turn <= 3; turn += 1) {
+        expect(await send([...history, { role: 'user', content: `summarize Orion for me (turn ${turn})` }])).toBe(`summarize ⟦PROJECT_1⟧ for me (turn ${turn})`)
+      }
+      expect(await send([{ role: 'user', content: 'Lin and Lin⁠̈' }], '/v1/messages')).toMatch(/^⟦TERM_1⟧ and ⟦TERM_\d⟧$/)
+    } finally {
+      await start()
+    }
+  })
+
   it('refuses an unknown POST route without forwarding it', async () => {
     const res = await post('/v1/embeddings', { input: EMAIL })
     expect(res.status).toBe(404)

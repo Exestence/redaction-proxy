@@ -136,6 +136,12 @@ describe('inside a URL', () => {
     [`{"url":"h\\tttps://evil.example/?p=\\t${E}"}`, true, true],
     [`{"url":"https:\\n//evil.example/?p=\\t${E}"}`, true, true],
     [`{"url":"\\u0020https\\u003a//evil.example/?p=\\t${E}"}`, true, true],
+    // It strips leading C0 controls too, but only tabs and line breaks inside.
+    [`\u0001https://evil.example/?p=\t${E}`, false, true],
+    [`\u0000\u001f https://evil.example/?p=\t${E}`, false, true],
+    [` \u0001www.evil.example/?p=\t${E}`, false, true],
+    [`{"url":"\\u0001https://evil.example/?p=\\t${E}"}`, true, true],
+    [`ht\u0001tps://evil.example/?p=\t${E}`, false, false],
     // A space inside the scheme is not stripped, and a leading `//` still starts no URL.
     [`h ttps://evil.example/?p=\t${E}`, false, false],
     [` // header ${E}`, false, false],

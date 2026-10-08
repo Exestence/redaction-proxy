@@ -17,10 +17,11 @@
  * JSON string unrestored. In tool input, a URL that starts the text or a JSON
  * string with a scheme (`https://`) or `www.` ends only at the end of that
  * text or string: a tool given `https://…?p=\t⟦PATH_1⟧` would strip the tab
- * and fetch the original. URL parsing strips leading whitespace and every
- * tab or line break, so they are skipped while the token read so far is still
- * the start of an `http://`, `https://`, `ftp://`, `ws://`, `wss://`,
- * `file://`, or `www.` (` https://`, `h\tttps://`, `https:\n//`); a token that
+ * and fetch the original. URL parsing strips leading whitespace and C0
+ * controls and every tab or line break, so they are skipped while the token
+ * read so far is still the start of an `http://`, `https://`, `ftp://`,
+ * `ws://`, `wss://`, `file://`, or `www.` (` https://`, `\u0001https://`,
+ * `h\tttps://`, `https:\n//`); a token that
  * skipped one and then leaves those prefixes starts no URL there
  * (`Notes:\nhttps://…`, ` mailto:`). A leading `//` or `\\` does not
  * (`// header`).
@@ -175,7 +176,7 @@ export class TextCursor {
   /** Read one character of string content. */
   private readChar(char: string): void {
     if (this.inKey && this.key.length < KEY_KEPT) this.key += char
-    if (this.closer === FIELD_END && !this.url && (this.tokenLength === 0 ? /\s/ : /[\t\n\r]/).test(char) && this.mayStartFieldUrl()) {
+    if (this.closer === FIELD_END && !this.url && (this.tokenLength === 0 ? /[\s\x00-\x1f]/ : /[\t\n\r]/).test(char) && this.mayStartFieldUrl()) {
       this.stripped = true
       return
     }

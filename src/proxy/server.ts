@@ -966,6 +966,7 @@ export function createProxyServer(
    * Remember every {@link isRememberable} original a request detected, for the client's later requests.
    * A value only memory supplied keeps its time to live, which runs from its last detection; bound in
    * text the client wrote, it also moves into the client's bucket, so tool output cannot evict it.
+   * A credential written in another ASCII case keeps the remembered spelling's time to live.
    * @param client - the client scope.
    * @param registry - bindings of the request's mask call.
    * @param clientBound - the identities bound in text the client wrote ({@link isClientText}).
@@ -974,14 +975,25 @@ export function createProxyServer(
   const rememberOriginals = (client: string, registry: RedactionRegistry, clientBound: ReadonlySet<RedactionId>, detected: ReadonlySet<string>): void => {
     const known = knownOriginals.get(client) ?? new Map<string, Map<string, KnownOriginal>>()
     const expires = Date.now() + config.knownOriginalsTtlSeconds * 1000
+    let keys: Map<string, number> | undefined
+    const kept = (original: string, category: string): number => {
+      if (category !== 'KEY') return Math.max(0, ...[category, `client ${category}`].map(name => known.get(name)?.get(original)?.expires ?? 0))
+      if (keys === undefined) {
+        keys = new Map()
+        for (const [spelling, { expires: until }] of [...known.get('KEY') ?? [], ...known.get('client KEY') ?? []]) {
+          const folded = foldAsciiCase(spelling)
+          keys.set(folded, Math.max(keys.get(folded) ?? 0, until))
+        }
+      }
+      return keys.get(foldAsciiCase(original)) ?? 0
+    }
     for (const id of registry.ids()) {
       // oxlint-disable-next-line typescript/no-non-null-assertion -- every listed identity is bound.
       const original = registry.original(id)!
       if (!isRememberable(original)) continue
       const category = categoryOf(id)
       const fromClient = clientBound.has(id)
-      const kept = Math.max(0, ...[category, `client ${category}`].map(name => known.get(name)?.get(original)?.expires ?? 0))
-      const until = detected.has(original) ? expires : fromClient ? kept : 0
+      const until = detected.has(original) ? expires : fromClient ? kept(original, category) : 0
       if (until === 0) continue
       const name = fromClient ? `client ${category}` : category
       const bucket = known.get(name) ?? new Map<string, KnownOriginal>()
@@ -1068,16 +1080,26 @@ export function createProxyServer(
       return !detected.has(plain) && (known?.has(plain) === true || rememberedKeys.has(foldAsciiCase(plain)))
     }
     // A value repeated where another detection splits it binds each uncovered part on its own (`pw-` of `pw-0912345678`, a phone number inside); such a part is never refused.
+    // A remembered credential's part is found in any ASCII case, as the credential itself is.
     const values = [...detected, ...known?.keys() ?? [], ...escaped.keys()]
+    const folded = new Map<string, string>()
+    const within = (text: string, part: string, start: number, value: string): boolean => {
+      if (value.length <= part.length) return false
+      for (let at = value.indexOf(part); at >= 0 && at <= start; at = value.indexOf(part, at + 1)) {
+        if (text.startsWith(value, start - at)) return true
+      }
+      return false
+    }
     const isPart = (text: string, start: number, end: number): boolean => {
       const part = text.slice(start, end)
-      return !detected.has(part) && values.some(value => {
-        if (value.length <= part.length) return false
-        for (let at = value.indexOf(part); at >= 0 && at <= start; at = value.indexOf(part, at + 1)) {
-          if (text.startsWith(value, start - at)) return true
-        }
-        return false
-      })
+      if (detected.has(part)) return false
+      if (values.some(value => within(text, part, start, value))) return true
+      if (rememberedKeys.size === 0) return false
+      let lower = folded.get(text)
+      if (lower === undefined) folded.set(text, lower = foldAsciiCase(text))
+      const lowerPart = foldAsciiCase(part)
+      for (const value of rememberedKeys) if (within(lower, lowerPart, start, value)) return true
+      return false
     }
     const modelValues = new Set<string>()
     const bound = new Map<string, string>()
