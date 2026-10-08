@@ -222,6 +222,7 @@ flowchart TD
 | 422 | 帶 `previous_response_id`，但代理沒有這個用戶端憑證的先前輸入（重啟、被擠出、從未經過代理，或屬於另一個用戶端）。 | 固定訊息 |
 | 422 | 與 `previous_response_id` 先前輸入合併後 `mask` 拋出 `RedactionError`。 | 錯誤代碼 |
 | 502 | 連不上上游。 | 網路錯誤代碼 |
+| 502 | 上游回 3xx 並帶 `Location`（重新導向）。代理不跟隨，不把請求送往別處；不帶 `Location` 的 `304` 照常轉回。 | 狀態碼 |
 
 外洩檢查會在以下情況觸發：偵測到的值也出現在不遮的欄位（第 5 節），或該值出現在較長的詞中間而未被遮。只出現在不遮欄位或物件鍵中、別處沒有出現的值，不會被偵測，照原樣送出。拒絕訊息只指出欄位，絕不含值：陣列索引照寫（`/messages/1/content`）；本身含有偵測值的鍵，以及不是小寫識別字（`[a-z][a-z0-9_]*`，最多 40 字元）的鍵，都寫成 `<key>`。拒絕時請求不會送出。
 
@@ -238,7 +239,7 @@ flowchart TD
 | `GET` 任何路徑 | 原樣轉送 | 帶 `x-api-key` 或 `anthropic-version` 標頭時走 Anthropic，否則走 OpenAI |
 | `OPTIONS`（CORS 預檢） | 允許的來源回 204，不轉送 | — |
 
-上游 URL 為設定的 base 加上用戶端的原始路徑與查詢字串。用戶端的 `authorization`、`x-api-key`、`anthropic-*` 等標頭原樣轉送，代理從不儲存。`host`、`connection`、`content-length`、`content-encoding`、`accept-encoding` 等逐跳標頭不轉送，送往上游時固定 `accept-encoding: identity`。`x-redaction-proxy-token` 不轉送。上游回應的 `access-control-*` 標頭不轉回；來自允許來源的請求，由代理自己回 `access-control-allow-origin: <該來源>`。用戶端斷線時，代理會中止上游請求。
+上游 URL 為設定的 base 加上用戶端的原始路徑與查詢字串。用戶端的 `authorization`、`x-api-key`、`anthropic-*` 等標頭原樣轉送，代理從不儲存。`host`、`connection`、`content-length`、`content-encoding`、`accept-encoding` 等逐跳標頭不轉送，送往上游時固定 `accept-encoding: identity`。`x-redaction-proxy-token` 不轉送。上游回應的 `access-control-*` 標頭不轉回；來自允許來源的請求，由代理自己回 `access-control-allow-origin: <該來源>`。用戶端斷線時，代理會中止上游請求。代理不跟隨上游的重新導向（回 502），所以用戶端的憑證與請求只送往設定的上游，即使 `Location` 指向別的主機或 `http://`。
 
 ## 7. 串流還原
 
@@ -382,6 +383,8 @@ POST /v1/messages tool arguments: kept by the tool restore policy KEY_1 in bash 
 - 輸入者刻意規避（例如用規則不會折疊的字元拆開一個值）。
 
 代理預設只綁定 `127.0.0.1`，此時 `authToken` 可不設。`host` 設成非本機位址（例如容器內的 `0.0.0.0`）時必須設 `authToken`，否則拒絕啟動：連得到該埠的主機若沒有權杖，就無法透過代理使用它轉送的憑證（包括環境變數中的備援金鑰）。權杖放在專用標頭 `x-redaction-proxy-token`，因為 `authorization` 與 `x-api-key` 要帶上游金鑰；代理不轉送它。帶正確權杖的請求不檢查 `Host`，所以其他容器可以用服務名稱連線；DNS rebinding 的網頁拿不到權杖，而自訂標頭會觸發只有允許來源才通過的 CORS 預檢。權杖以明文 HTTP 傳送，只在可信任的網路（本機、容器網路）上使用。
+
+上游視為可信，但代理不跟隨它的重新導向（第 6 節），所以用戶端的金鑰只送往設定的上游主機。
 
 品質影響：需要直接操作被遮值的任務（把絕對路徑改成相對路徑、對地點做推理）可能變差。這類失敗看得見（回覆中會出現佔位符或錯誤的推論），不是把錯誤的值靜默寫回。
 

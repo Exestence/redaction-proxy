@@ -24,7 +24,7 @@ interface Seen {
   body: any
 }
 
-type Reply = (seen: Seen) => { json?: unknown; sse?: string[]; status?: number }
+type Reply = (seen: Seen) => { json?: unknown; sse?: string[]; status?: number; headers?: Record<string, string> }
 
 let upstream: Server
 let proxy: Server
@@ -84,7 +84,7 @@ beforeAll(async () => {
         pump()
         return
       }
-      res.writeHead(answer.status ?? 200, { 'content-type': 'application/json' })
+      res.writeHead(answer.status ?? 200, { 'content-type': 'application/json', ...answer.headers })
       res.end(JSON.stringify(answer.json))
     })
   })
@@ -1295,5 +1295,36 @@ describe('refusals and screening', () => {
     } finally {
       await start()
     }
+  })
+})
+
+describe('upstream failures', () => {
+  it('refuses an upstream redirect with 502 instead of following it with the client credential', async () => {
+    const landed: IncomingHttpHeaders[] = []
+    const other = createServer((req, res) => {
+      landed.push(req.headers)
+      req.resume()
+      res.end('{}')
+    })
+    await new Promise<void>(resolve => other.listen(0, '127.0.0.1', resolve))
+    try {
+      const location = `http://127.0.0.1:${(other.address() as { port: number }).port}/landed`
+      for (const status of [302, 307, 308]) {
+        reply = () => ({ status, headers: { location }, json: {} })
+        const res = await post('/v1/messages', { model: 'c', max_tokens: 1, messages: [{ role: 'user', content: `mail ${EMAIL}` }] }, { 'x-api-key': 'sk-ant-fictional' })
+        expect(res.status).toBe(502)
+        expect(await res.text()).toContain('redirect')
+      }
+      expect((await fetch(`${base}/v1/models`, { headers: { authorization: 'Bearer k' } })).status).toBe(502)
+      expect(landed).toHaveLength(0)
+      expect(logs.filter(line => line.includes('-> 502'))).toHaveLength(4)
+    } finally {
+      await new Promise(resolve => other.close(resolve))
+    }
+  })
+
+  it('relays a 304 to a GET unchanged', async () => {
+    reply = () => ({ status: 304 })
+    expect((await fetch(`${base}/v1/models`, { headers: { authorization: 'Bearer k' } })).status).toBe(304)
   })
 })

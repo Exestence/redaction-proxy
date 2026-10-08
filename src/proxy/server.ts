@@ -1145,8 +1145,14 @@ export function createProxyServer(
       headers,
       // Only masked routes carry a body; everything else relayed is a GET.
       ...(outgoing === undefined ? {} : { body: outgoing }),
+      // Following a redirect would send the client's credential to the host the upstream names, over any scheme.
+      redirect: 'manual',
       signal: abort.signal,
     })
+    if (upstream.status >= 300 && upstream.status < 400 && upstream.headers.has('location')) {
+      await upstream.body?.cancel()
+      throw new Refusal(502, `the upstream answered ${upstream.status} with a redirect; the proxy does not follow redirects`)
+    }
     // The proxy, not the upstream, decides which browser origins may read the reply.
     const out: Record<string, string> = { ...cors }
     upstream.headers.forEach((value, name) => {
