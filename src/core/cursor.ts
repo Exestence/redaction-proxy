@@ -13,8 +13,11 @@
  * or at `>` (`href="…"`, `<https://…>`), not at whitespace: browsers strip a
  * tab or newline from such a URL and percent-encode other whitespace, so an
  * `<img src="…?e=\t⟦EMAIL_1⟧">` would fetch the original without a click.
- * Past {@link DELIMITED_URL_MAX} characters of its token, whitespace ends it
- * again, so an unclosed quote keeps placeholders unrestored only that far.
+ * An unclosed quote therefore keeps every later placeholder of its text or
+ * JSON string unrestored. In tool input, a URL that starts the text or a JSON
+ * string with a scheme (`https://`) or `www.` ends only at the end of that
+ * text or string: a tool given `https://…?p=\t⟦PATH_1⟧` would strip the tab
+ * and fetch the original. A leading `//` or `\\` does not (`// header`).
  * Every other quote or bracket is part of the URL, as browsers and CommonMark
  * keep it. Placeholders inside a UNC
  * path (`\\host\share\…`) or after an escaped `C:\\` therefore stay
@@ -32,8 +35,8 @@ const URL_END = /[\s"'`<>]/
 /** The character that ends a URL starting right after each delimiter. */
 const CLOSER: Partial<Record<string, string>> = { '"': '"', "'": "'", '`': '`', '<': '>' }
 
-/** Characters of a token after which whitespace ends a URL that started right after a quote or `<`. */
-const DELIMITED_URL_MAX = 2048
+/** The closer of a URL that starts tool-input text or a JSON string in it, which no character equals: only the end of the text or string ends it. */
+const FIELD_END = ''
 
 /** A slash or a backslash, which URL parsing reads as a slash. */
 const SLASH = /[/\\]/
@@ -73,8 +76,11 @@ export class TextCursor {
 
   /**
    * @param json - whether the text is JSON text rather than a plain string.
+   * @param toolInput - whether the text is tool input, where a URL that starts the text or a JSON string ends only at its end.
    */
-  constructor(private readonly json: boolean) {}
+  constructor(private readonly json: boolean, private readonly toolInput: boolean) {
+    if (toolInput) this.closer = FIELD_END
+  }
 
   /** Whether the next character would be inside a URL. */
   get inUrl(): boolean {
@@ -109,6 +115,7 @@ export class TextCursor {
         this.inString = true
         this.inKey = top?.kind === 'object' && this.expectKey
         this.key = ''
+        if (this.toolInput) this.closer = FIELD_END
       } else if (char === '{') {
         this.frames.push({ kind: 'object', key: undefined })
         this.expectKey = true
@@ -155,14 +162,15 @@ export class TextCursor {
   /** Read one character of string content. */
   private readChar(char: string): void {
     if (this.inKey && this.key.length < KEY_KEPT) this.key += char
-    const whitespaceEnds = this.closer === undefined || this.tokenLength >= DELIMITED_URL_MAX
-    if (this.url ? char === this.closer || (whitespaceEnds && /\s/.test(char)) : URL_END.test(char)) {
+    if (this.url ? char === this.closer || (this.closer === undefined && /\s/.test(char)) : URL_END.test(char)) {
       this.endToken(CLOSER[char])
       return
     }
     this.tail = (this.tail + char).slice(-5)
     this.tokenLength += 1
     if (this.url) return
+    // Only a scheme or `www.` makes a field-start URL; a leading `//` or `\\` does not.
+    if (this.tokenLength === 1 && this.closer === FIELD_END && !/[A-Za-z]/.test(char)) this.closer = undefined
     if (this.schemeLength === this.tokenLength - 1 && SCHEME_CHAR.test(char)) this.schemeLength = this.tokenLength
     if (SLASH.test(char) && SLASH.test(this.tail.at(-2) ?? '') && !PATH_CHAR.test(this.tail.at(-3) ?? '')) this.startUrl(this.schemeLength === this.tokenLength - 2)
     else if (this.tail.slice(-4).toLowerCase() === 'www.' && (this.tokenLength === 4 || !HOST_CHAR.test(this.tail.at(-5) ?? ''))) this.startUrl(this.tokenLength === 4)

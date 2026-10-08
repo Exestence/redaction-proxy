@@ -32,7 +32,12 @@ export interface StreamRestoreOptions {
    * client fetches, renders, or follows would carry the original to its host.
    */
   keepInUrls?: boolean
-  /** Whether a bound placeholder may be restored; one it refuses is kept as written. Absent means every one may. */
+  /**
+   * Whether a bound placeholder may be restored; one it refuses is kept as
+   * written. Absent means every one may. Present marks the stream as tool
+   * input, where {@link TextCursor} ends a URL that starts the text or a JSON
+   * string only at its end.
+   */
   restores?: (id: RedactionId) => boolean
   /** Receives each bound placeholder after it is restored or kept; never the original. */
   onPlaceholder?: (event: PlaceholderEvent) => void
@@ -86,7 +91,7 @@ export function createStreamRestorer(registry: RedactionRegistry, options: Strea
   const encode = options.json === true
     ? (value: string): string => JSON.stringify(value).slice(1, -1)
     : (value: string): string => value
-  const cursor = options.keepInUrls === true || options.onPlaceholder !== undefined ? new TextCursor(options.json === true) : undefined
+  const cursor = options.keepInUrls === true || options.onPlaceholder !== undefined ? new TextCursor(options.json === true, options.restores !== undefined) : undefined
   let out = ''
   const emit = (text: string): void => {
     out += text
