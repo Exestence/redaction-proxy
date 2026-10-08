@@ -67,7 +67,7 @@ describe('settings that fail loud', () => {
     for (const knownOriginalsTtlSeconds of ['60', -1, 1.5, null]) {
       expect(() => loadConfig(configFile({ knownOriginalsTtlSeconds }), {})).toThrow('knownOriginalsTtlSeconds must be a whole number')
     }
-    expect(() => loadConfig(undefined, { REDACTION_PROXY_KNOWN_ORIGINALS_TTL_SECONDS: '1h' })).toThrow('must be a whole number of seconds')
+    for (const env of ['1h', '1e3']) expect(() => loadConfig(undefined, { REDACTION_PROXY_KNOWN_ORIGINALS_TTL_SECONDS: env })).toThrow('must be a whole number of seconds')
   })
 
   it('refuses plain http:// to an upstream that is not loopback unless allowed', () => {
