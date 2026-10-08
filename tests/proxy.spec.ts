@@ -501,6 +501,109 @@ describe('state kept per client credential', () => {
     expect(seen[2]!.body.messages[0].tool_calls[0].function.arguments).toBe('{"cmd":"echo ⟦KEY_1⟧"}')
     expect(JSON.parse(pruned.choices[0].message.tool_calls[0].function.arguments).cmd).toBe(`echo ${pw}`)
   })
+
+  it('masks a resent tool input under keys named data, thinking, signature, or encrypted_content, at any depth', async () => {
+    reply = () => ({ json: {} })
+    const user = { role: 'user', content: `password: ${PASS} mail ${EMAIL} file ${HOME}/notes.md` }
+    const input = { data: `home is ${HOME}`, thinking: EMAIL, signature: PASS, encrypted_content: EMAIL, payload: { data: `${HOME}/x` }, files: [{ data: `${HOME}/a` }] }
+    const resent = await post('/v1/messages', {
+      model: 'c',
+      max_tokens: 1,
+      messages: [
+        user,
+        { role: 'assistant', content: [{ type: 'tool_use', id: 't1', name: 'write_file', input }] },
+        { role: 'user', content: [{ type: 'tool_result', tool_use_id: 't1', content: 'ok' }] },
+      ],
+    }, { 'x-api-key': 'k' })
+    expect(resent.status).toBe(200)
+    const sent = seen[0]!.body.messages[1].content[0].input
+    expect(sent.data).toMatch(/^home is ⟦PATH_\d+⟧$/)
+    expect(sent.thinking).toMatch(/^⟦EMAIL_\d+⟧$/)
+    expect(sent.signature).toMatch(/^⟦KEY_\d+⟧$/)
+    expect(sent.encrypted_content).toBe(sent.thinking)
+    expect(sent.payload.data).toMatch(/^⟦PATH_\d+⟧\/x$/)
+    expect(sent.files[0].data).toMatch(/^⟦PATH_\d+⟧\/a$/)
+
+    const item = { type: 'local_shell_call', id: 'ls', call_id: 'c1', status: 'completed', action: { type: 'exec', command: ['ls'], env: { data: `${HOME}/y` } } }
+    expect((await post('/v1/responses', { model: 'm', input: [user, item] })).status).toBe(200)
+    expect(seen[1]!.body.input[1].action.env.data).toMatch(/^⟦PATH_\d+⟧\/y$/)
+  })
+
+  it('refuses a bound value glued into an enum-like string under tool input', async () => {
+    const res = await post('/v1/messages', {
+      model: 'c',
+      max_tokens: 1,
+      messages: [
+        { role: 'user', content: 'password: secret_token1' },
+        { role: 'assistant', content: [{ type: 'tool_use', id: 't1', name: 'set', input: { type: 'xsecret_token1' } }] },
+        { role: 'user', content: [{ type: 'tool_result', tool_use_id: 't1', content: 'ok' }] },
+      ],
+    }, { 'x-api-key': 'k' })
+    expect(res.status).toBe(422)
+    expect((await res.json() as any).error.message).toContain('/messages/1/content/0/input/type (KEY)')
+  })
+
+  it('refuses a remembered credential that propagation misses: glued, suffixed, or upper-cased and JSON-escaped', async () => {
+    const client = { authorization: 'Bearer client-glued' }
+    const pw = 'p@ss\\word12'
+    await post('/v1/chat/completions', { model: 'm', messages: [{ role: 'user', content: `password: ${PASS} and password: ${pw}` }] }, client)
+    const call = (args: string) => [{ role: 'user', content: 'go' }, { role: 'assistant', tool_calls: [{ id: 'c', type: 'function', function: { name: 'bash', arguments: args } }] }, { role: 'tool', tool_call_id: 'c', content: 'ok' }]
+    for (const messages of [[{ role: 'user', content: `is it x${PASS}y?` }], [{ role: 'user', content: `maybe ${PASS}2` }], call('{"cmd":"echo P@SS\\\\WORD12"}')]) {
+      const res = await post('/v1/chat/completions', { model: 'm', messages }, client)
+      expect(res.status).toBe(422)
+      expect((await res.json() as any).error.message).toContain('(KEY, remembered from an earlier request)')
+    }
+    expect(seen).toHaveLength(1)
+  })
+
+  it('refuses a remembered value shorter than 8 characters glued to a word only when it is a credential', async () => {
+    await start({ redaction: { terms: ['Nimbus'] } })
+    try {
+      const client = { authorization: 'Bearer client-short-glued' }
+      await post('/v1/chat/completions', { model: 'm', messages: [{ role: 'user', content: 'project Nimbus, password: ab1234' }] }, client)
+      const send = async (metadata: Record<string, string>) => (await post('/v1/chat/completions', { model: 'm', metadata, messages: [{ role: 'user', content: 'hi' }] }, client)).status
+      expect(await send({ note: 'Nimbusx' })).toBe(200)
+      expect(await send({ note: 'the Nimbus plan' })).toBe(422)
+      expect(await send({ note: 'id ab12345' })).toBe(422)
+    } finally {
+      await start()
+    }
+  })
+
+  it('keeps two credentials apart when one is the other\'s JSON-escaped spelling', async () => {
+    const client = { authorization: 'Bearer client-backslash' }
+    const one = 'ab\\cd12ef'
+    const two = 'ab\\\\cd12ef'
+    reply = entry => ({ json: { choices: [{ index: 0, message: { role: 'assistant', content: placeholders(entry.raw).join(' ') } }] } })
+    const ask = async (content: string) => (await (await post('/v1/chat/completions', { model: 'm', messages: [{ role: 'user', content }] }, client)).json() as any).choices[0].message.content
+    expect(await ask(`password: ${one}`)).toBe(one)
+    expect(await ask(`my new password: ${two}`)).toBe(two)
+    expect(await ask(`old password: ${one}\nnew password: ${two}`)).toBe(`${one} ${two}`)
+  })
+
+  it('masks a value resent in tool arguments with \\uXXXX or \\/ escapes, and leaves an escaped backslash alone', async () => {
+    reply = () => ({ json: { choices: [] } })
+    const resend = async (args: string): Promise<string> => {
+      seen = []
+      const messages = [{ role: 'user', content: `password: ${PASS} file ${HOME}/notes.md` }, { role: 'assistant', tool_calls: [{ id: 'c', type: 'function', function: { name: 'bash', arguments: args } }] }, { role: 'tool', tool_call_id: 'c', content: 'ok' }]
+      expect((await post('/v1/chat/completions', { model: 'm', messages })).status).toBe(200)
+      return seen[0]!.body.messages[1].tool_calls[0].function.arguments
+    }
+    expect(await resend('{"cmd":"echo Tr0ub4dor\\u00263x"}')).toBe('{"cmd":"echo ⟦KEY_1⟧"}')
+    expect(await resend('{"path":"\\/Users\\/fictional-user\\/notes.md"}')).toBe('{"path":"⟦PATH_1⟧/notes.md"}')
+    expect(await resend('{"path":"\\u002fUsers\\u002Ffictional-user","q":"\\"\\u0022\\u0001\\ud83d\\ude00"}')).toBe('{"path":"⟦PATH_1⟧","q":"\\"\\u0022\\u0001\\ud83d\\ude00"}')
+    expect(await resend('{"cmd":"a\\\\u0026b \\\\/"}')).toBe('{"cmd":"a\\\\u0026b \\\\/"}')
+  })
+
+  it('keeps a credential from the system prompt through a flood of tool output', async () => {
+    reply = () => ({ json: { choices: [] } })
+    const client = { authorization: 'Bearer flood-system' }
+    const cookies = Array.from({ length: 4200 }, (_, i) => `Cookie: sessionid=s${String(i).padStart(5, '0')}f8a9c2d1e4b7a6c3`).join('\n')
+    await post('/v1/chat/completions', { model: 'm', messages: [{ role: 'system', content: `Use password: ${PASS} for the db` }, { role: 'user', content: 'hi' }] }, client)
+    await post('/v1/chat/completions', { model: 'm', messages: [{ role: 'user', content: 'dump' }, { role: 'tool', tool_call_id: 't', content: cookies }] }, client)
+    await post('/v1/chat/completions', { model: 'm', messages: [{ role: 'user', content: `Noted ${PASS}.` }] }, client)
+    expect(seen[2]!.body.messages[0].content).toMatch(/^Noted ⟦KEY_\d+⟧\.$/)
+  })
 })
 
 describe('tool-call arguments', () => {

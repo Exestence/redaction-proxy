@@ -219,10 +219,11 @@ function foldAsciiCase(text: string): string {
  * A remembered credential is also found in any ASCII case: `TR0UB4DOR&3X`
  * repeats `Tr0ub4dor&3x`, and is masked under its own identity. Every value
  * is also found JSON-escaped, as a resent tool call's `arguments` writes it
- * (`p@ss\\word`), under the identity of its plain spelling.
+ * (`p@ss\\word`), under the identity of its plain spelling, unless that
+ * spelling is itself a bound or remembered value.
  * @param detector - the request's detector.
  * @param known - the client's known originals, mapped to their categories.
- * @param escaped - receives each JSON-escaped spelling searched for, mapped to its plain spelling.
+ * @param escaped - receives each JSON-escaped spelling searched for, mapped to its plain spelling; no other value binds these.
  * @returns the detector to mask with.
  */
 function withKnownOriginals(detector: RedactionDetector, known: ReadonlyMap<string, string> | undefined, escaped: Map<string, string>): RedactionDetector {
@@ -237,7 +238,8 @@ function withKnownOriginals(detector: RedactionDetector, known: ReadonlyMap<stri
       const spellings = new Map<string, string>()
       for (const [original, category] of all) {
         const spelling = JSON.stringify(original).slice(1, -1)
-        if (spelling === original) continue
+        // A spelling that is itself bound or remembered is a value of its own: `ab\\cd` typed beside `ab\cd`.
+        if (spelling === original || all.has(spelling)) continue
         escaped.set(spelling, original)
         spellings.set(spelling, category)
       }
@@ -299,8 +301,8 @@ class Refusal extends Error {
 /**
  * Collect every maskable string of a request body in a stable order. Inside
  * tool input ({@link isToolInput}) every string is masked whatever its key,
- * except the keys a reply's tool call keeps as sent ({@link SKIP_RESTORE}),
- * since restore may have written an original under any other key.
+ * since restore writes originals into every string of a reply's tool input
+ * and no signed state lives there.
  * @param value - parsed JSON value.
  * @param path - JSON pointer of `value`.
  * @param out - slot sink.
@@ -323,7 +325,7 @@ function collectSlots(value: unknown, path: string, out: Slot[], tool = false): 
     const item = record[key]
     const at = `${path}/${pointerSegment(key)}`
     if (typeof item !== 'string') collectSlots(item, at, out, tool || isToolInput(record, key))
-    else if (tool ? !SKIP_RESTORE.has(key) : !SKIP_MASK.has(key) || isTextSource(record, key)) out.push({ parent: record, key, path: at })
+    else if (tool || !SKIP_MASK.has(key) || isTextSource(record, key)) out.push({ parent: record, key, path: at })
   }
 }
 
@@ -354,21 +356,42 @@ function isToolInput(record: Record<string, unknown>, key: string): boolean {
 }
 
 /**
- * Whether a request string is text the user wrote: a user message's string
- * content or one of its text parts, or a Responses string `input`. Tool
- * results, system prompts, and assistant turns are not.
+ * Whether a request string is message text of one of the given roles: a
+ * message's string content or one of its text parts, or a Responses string
+ * `input`, which is the user's. Tool results are not.
  * @param body - the parsed request body.
  * @param path - JSON pointer of the string.
- * @returns whether the name model reads it.
+ * @param roles - the message roles that count.
+ * @returns whether the string is such text.
  */
-function isUserText(body: Json, path: string): boolean {
+function isRoleText(body: Json, path: string, roles: ReadonlySet<string>): boolean {
   if (path === '/input') return true
   const match = MESSAGE_TEXT_PATH.exec(path)
   if (match === null) return false
   const [, list, message, part] = match
   const item = (body[list as string] as Json[] | undefined)?.[Number(message)]
-  if (item?.role !== 'user') return false
+  if (item === undefined || !roles.has(item.role)) return false
   return part === undefined || USER_TEXT_PARTS.has((item.content as Json[])[Number(part)]?.type)
+}
+
+/** The role whose text the name model reads. */
+const USER_ROLE: ReadonlySet<string> = new Set(['user'])
+
+/** Roles whose text the client itself wrote: the user's messages and the system or developer prompt. */
+const CLIENT_ROLES: ReadonlySet<string> = new Set(['user', 'system', 'developer'])
+
+/** The top-level system prompt: Anthropic `system` as a string or text blocks, Responses `instructions`. */
+const SYSTEM_PATH = /^\/(system(\/\d+\/text)?|instructions)$/
+
+/**
+ * Whether a request string is text the client itself wrote rather than tool
+ * output or a model turn: user text ({@link isRoleText}) or a system or developer prompt.
+ * @param body - the parsed request body.
+ * @param path - JSON pointer of the string.
+ * @returns whether a value bound in it is remembered apart from tool output.
+ */
+function isClientText(body: Json, path: string): boolean {
+  return SYSTEM_PATH.test(path) || isRoleText(body, path, CLIENT_ROLES)
 }
 
 /**
@@ -427,16 +450,24 @@ function containsAnyOf(patterns: readonly string[]): (text: string) => boolean {
   }
 }
 
+/** Shortest remembered value other than a credential that counts glued to other characters. */
+const GLUED_LEAK_MIN = 8
+
 /**
  * Refuse a masked body that still holds a detected value: in a field the
  * proxy does not rewrite (metadata, an image URL), or an occurrence masking
  * could not cover. A name-model value is matched as its propagation matches
  * it, as a whole word for spaced scripts (`Lee` inside `Leeds` is no leak),
- * and only from two code points. Every other value counts anywhere, at any
- * length and in any ASCII case, so a rules value glued to other characters
- * (`tel0912345678`) or upper-cased still fails closed. Keys are checked too;
- * an {@link ENUM_VALUE} under one of the {@link ENUM_FIELDS} is not, except in
- * client data: `metadata`, `stop`, and tool input.
+ * and only from two code points. Every other value this request bound counts
+ * anywhere, at any length and in any ASCII case, so a rules value glued to
+ * other characters (`tel0912345678`) or upper-cased still fails closed. A
+ * value remembered from an earlier request counts the same way when it is a
+ * credential or at least {@link GLUED_LEAK_MIN} code units long
+ * (`xTr0ub4dor&3xy`); a shorter one counts only as a whole word, so a
+ * remembered `Nimbus` does not refuse every later request holding `Nimbusx`.
+ * Keys are checked too; an {@link ENUM_VALUE} under one of the
+ * {@link ENUM_FIELDS} is not, except in client data: `metadata`, `stop`, and
+ * tool input.
  * @param body - the masked request body.
  * @param bound - every spelling the mask call bound, mapped to its category.
  * @param modelValues - the originals the name model bound.
@@ -446,9 +477,14 @@ function containsAnyOf(patterns: readonly string[]): (text: string) => boolean {
 function refuseLeaks(body: Json, bound: ReadonlyMap<string, string>, modelValues: ReadonlySet<string>, known: ReadonlyMap<string, string> | undefined): void {
   // A value inside a JSON-text string (`arguments`) is written JSON-escaped.
   const forms = (original: string): string[] => [original, JSON.stringify(original).slice(1, -1)]
-  const words = [...modelValues].filter(isSearchedValue).flatMap(forms)
-  const holdsSubstring = containsAnyOf([...bound.keys()].filter(original => !modelValues.has(original)).flatMap(forms))
-  const leaks = (text: string): boolean => holdsSubstring(text) || words.some(form => containsStandingAlone(text, form))
+  const values = new Map([...known ?? [], ...bound])
+  const isWord = (original: string, category: string): boolean => bound.has(original)
+    ? modelValues.has(original)
+    : MODEL_CATEGORIES.has(category) || (category !== 'KEY' && original.length < GLUED_LEAK_MIN)
+  const words = [...values].filter(([original, category]) => isWord(original, category) && isSearchedValue(original)).flatMap(([original]) => forms(original))
+  const holdsWord = containsAnyOf(words)
+  const holdsSubstring = containsAnyOf([...values].filter(([original, category]) => !isWord(original, category)).flatMap(([original]) => forms(original)))
+  const leaks = (text: string): boolean => holdsSubstring(text) || (holdsWord(text) && words.some(form => containsStandingAlone(text, form)))
   const where: Array<[path: string, text: string]> = []
   const walk = (value: unknown, path: string, key: string, data: boolean): void => {
     if (typeof value === 'string') {
@@ -466,12 +502,12 @@ function refuseLeaks(body: Json, bound: ReadonlyMap<string, string>, modelValues
   walk(body, '', '', false)
   if (where.length === 0) return
   // The refusal path alone looks up which value each text holds, the way `leaks` matches it.
-  const holds = (text: string, original: string): boolean => modelValues.has(original)
+  const holds = (text: string, original: string, category: string): boolean => isWord(original, category)
     ? isSearchedValue(original) && forms(original).some(form => containsStandingAlone(text, form))
     : forms(original).some(form => foldAsciiCase(text).includes(foldAsciiCase(form)))
   const describe = ([path, text]: [string, string]): string => {
-    // oxlint-disable-next-line typescript/no-non-null-assertion -- `leaks` found some bound original in the text.
-    const [original, category] = [...bound].find(([candidate]) => holds(text, candidate))!
+    // oxlint-disable-next-line typescript/no-non-null-assertion -- `leaks` found some bound or remembered original in the text.
+    const [original, category] = [...values].find(([candidate, of]) => holds(text, candidate, of))!
     return `${path} (${category}${known?.has(original) === true ? ', remembered from an earlier request' : ''})`
   }
   throw new Refusal(422, `a detected value is still unmasked at ${where.slice(0, 5).map(describe).join(', ')}; the request was not forwarded`)
@@ -490,6 +526,24 @@ function replaceUnscreenable(text: string): string {
     .replace(/[\u0080-\u009f�]|[\ud800-\udbff](?![\udc00-\udfff])|(?<![\ud800-\udbff])[\udc00-\udfff]/g, '␦')
     .replaceAll('⟦', '⟪')
     .replaceAll('⟧', '⟫')
+}
+
+/**
+ * Write the `\uXXXX` and `\/` escapes of a JSON text as the characters they
+ * stand for, as `JSON.stringify` writes them, so masking finds a value whose
+ * characters a client's encoder escaped (Go writes `&` as `\u0026`, PHP `/` as
+ * `\/`). A quote, backslash, control character, U+FFFD, or surrogate stays
+ * escaped. The text need not parse.
+ * @param text - JSON text, such as a resent tool call's `arguments`.
+ * @returns the text with those escapes decoded.
+ */
+function decodeJsonEscapes(text: string): string {
+  return text.replace(/\\(u[0-9a-fA-F]{4}|.)/gs, (escape, code: string) => {
+    if (code === '/') return '/'
+    if (code.length === 1) return escape
+    const char = String.fromCharCode(Number.parseInt(code.slice(1), 16))
+    return /[\u0000-\u001f"\\\u007f-\u009f\ud800-\udfff\ufffd]/.test(char) ? escape : char
+  })
 }
 
 /** What restoring one response needs. */
@@ -879,8 +933,8 @@ export function createProxyServer(
   /**
    * Originals each client scope bound, by bucket, each mapped to its category, oldest first.
    * One bucket per category, so a bulk tool result of emails cannot evict a remembered credential,
-   * and per category one more for values bound in text the user wrote, so a tool result full of
-   * cookies cannot evict the password the user typed.
+   * and per category one more for values bound in text the client wrote (its user messages and
+   * system prompt), so a tool result full of cookies cannot evict the password the user typed.
    */
   const knownOriginals = new Map<string, Map<string, Map<string, string>>>()
   const tokenDigest = config.authToken === undefined ? undefined : createHash('sha256').update(config.authToken).digest()
@@ -890,16 +944,16 @@ export function createProxyServer(
    * Remember every {@link isRememberable} original a request bound, for the client's later requests.
    * @param client - the client scope.
    * @param registry - bindings of the request's mask call.
-   * @param userBound - the identities bound in text the user wrote.
+   * @param clientBound - the identities bound in text the client wrote ({@link isClientText}).
    */
-  const rememberOriginals = (client: string, registry: RedactionRegistry, userBound: ReadonlySet<RedactionId>): void => {
+  const rememberOriginals = (client: string, registry: RedactionRegistry, clientBound: ReadonlySet<RedactionId>): void => {
     const known = knownOriginals.get(client) ?? new Map<string, Map<string, string>>()
     for (const id of registry.ids()) {
       // oxlint-disable-next-line typescript/no-non-null-assertion -- every listed identity is bound.
       const original = registry.original(id)!
       if (!isRememberable(original)) continue
       const category = categoryOf(id)
-      const name = userBound.has(id) ? `user ${category}` : category
+      const name = clientBound.has(id) ? `client ${category}` : category
       const bucket = known.get(name) ?? new Map<string, string>()
       known.set(name, bucket)
       setNewest(bucket, original, category, KNOWN_ORIGINALS_MAX)
@@ -935,7 +989,8 @@ export function createProxyServer(
     const slots: Slot[] = []
     collectSlots(parsed, '', slots)
     const texts = slots.map(slot => {
-      const text = (slot.parent as Record<string | number, string>)[slot.key] as string
+      const written = (slot.parent as Record<string | number, string>)[slot.key] as string
+      const text = typeof slot.key === 'string' && JSON_TEXT.has(slot.key) ? decodeJsonEscapes(written) : written
       if (config.screen === 'replace') return replaceUnscreenable(text)
       const refusal = screenText(text) ?? (text.includes('⟦') || text.includes('⟧') ? { reason: 'placeholder delimiter' } : undefined)
       if (refusal !== undefined) throw new Refusal(422, `request text at ${slot.path} holds a ${refusal.reason} and cannot be masked (screen: "refuse")`)
@@ -948,7 +1003,8 @@ export function createProxyServer(
     }
     const priorTexts = prior?.texts ?? []
     const all = [...priorTexts, ...texts]
-    const userTexts = new Set([...prior?.userTexts ?? [], ...texts.filter((_, i) => isUserText(parsed, (slots[i] as Slot).path))])
+    const userTexts = new Set([...prior?.userTexts ?? [], ...texts.filter((_, i) => isRoleText(parsed, (slots[i] as Slot).path, USER_ROLE))])
+    const clientTexts = new Set([...userTexts, ...texts.filter((_, i) => isClientText(parsed, (slots[i] as Slot).path))])
     const known = knownTo(client)
     const escaped = new Map<string, string>()
     let result
@@ -967,18 +1023,18 @@ export function createProxyServer(
     })
     const modelValues = new Set<string>()
     const bound = new Map<string, string>()
-    const userBound = new Set<RedactionId>()
+    const clientBound = new Set<RedactionId>()
     for (const span of result.applied) {
       const category = categoryOf(span.id)
       const original = (all[span.seq] as string).slice(span.start, span.end)
       bound.set(original, category)
-      if (userTexts.has(all[span.seq] as string)) userBound.add(span.id)
+      if (clientTexts.has(all[span.seq] as string)) clientBound.add(span.id)
       if (MODEL_CATEGORIES.has(category)) modelValues.add(original)
       if (span.seq >= priorTexts.length) stats.masked[category] = (stats.masked[category] ?? 0) + 1
     }
     refuseLeaks(parsed, bound, modelValues, known)
     const registry = unescaping(result.registry, escaped)
-    rememberOriginals(client, registry, userBound)
+    rememberOriginals(client, registry, clientBound)
     return { outgoing: JSON.stringify(parsed), registry, texts: all, userTexts }
   }
 
