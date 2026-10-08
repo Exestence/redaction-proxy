@@ -8,7 +8,7 @@ A small proxy on your own machine that replaces emails, API keys, ID numbers, an
 
 It works with any OpenAI- or Anthropic-compatible client, streaming included, and needs no local model. It **reduces** leaks of personal data and secrets; it does **not** make a conversation private.
 
-> **Status:** pre-release, not on npm. Tested only against a local fake upstream; nothing has been verified with a real service or client yet.
+> **Status:** pre-release, not on npm. Verified against the real DeepSeek Chat Completions API (2026-10-08, see below); OpenAI, Anthropic and real clients such as Claude Code are not verified yet.
 
 ## Intro video
 
@@ -63,7 +63,7 @@ npx redaction-proxy           # the proxy, on http://127.0.0.1:8787 (loopback: n
 
 ## Point your tool at it
 
-> **Untested with real clients.** Only `pnpm demo` and the tests against a fake upstream have run. A harness for real services exists ([e2e/real](e2e/real/README.md)) but has not been run yet.
+> **Real services: DeepSeek only so far.** On 2026-10-08 the [real-service harness](e2e/real/README.md) passed 4 of 4 scenarios against DeepSeek (Chat Completions; JSON and streaming; plain text and a forced tool call): the upstream saw only placeholders and all 5 values were restored each time. OpenAI and Anthropic were skipped (no key), and no real client has been tried.
 
 Your tool keeps sending its own API key; the proxy forwards it and never stores it.
 
@@ -72,7 +72,7 @@ Your tool keeps sending its own API key; the proxy forwards it and never stores 
 | Claude Code | `ANTHROPIC_BASE_URL=http://127.0.0.1:8787 claude` | Untested |
 | Anthropic SDK | `ANTHROPIC_BASE_URL=http://127.0.0.1:8787` (no `/v1`) | Untested |
 | OpenAI SDK and most compatible tools | `OPENAI_BASE_URL=http://127.0.0.1:8787/v1` (with `/v1`) | Untested |
-| DeepSeek | Start the proxy with `REDACTION_PROXY_OPENAI_UPSTREAM=https://api.deepseek.com node lib/cli.js`, then use `OPENAI_BASE_URL=http://127.0.0.1:8787/v1` with your DeepSeek key. This replaces the OpenAI upstream. | Untested |
+| DeepSeek | Start the proxy with `REDACTION_PROXY_OPENAI_UPSTREAM=https://api.deepseek.com node lib/cli.js`, then use `OPENAI_BASE_URL=http://127.0.0.1:8787/v1` with your DeepSeek key. This replaces the OpenAI upstream. | Verified with the real-service harness (API only) |
 | Cursor | Not supported: Cursor sends custom base-URL requests from its own servers, which cannot reach your `127.0.0.1`. | — |
 
 <details><summary>curl example and configuration file</summary>

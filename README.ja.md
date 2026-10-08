@@ -8,7 +8,7 @@
 
 OpenAI 互換・Anthropic 互換のクライアントならストリーミングも含めてそのまま使え、ローカルモデルは不要です。個人情報や認証情報の漏えいを**減らします**が、会話を**秘密にするものではありません**。
 
-> **ステータス：** 正式リリース前で、npm には公開していません。テストはローカルのダミー上流サーバーに対してのみで、実際のサービスやクライアントでの検証はまだです。
+> **ステータス：** 正式リリース前で、npm には公開していません。実サービスでは DeepSeek の Chat Completions API で検証済みです（2026-10-08、下記参照）。OpenAI・Anthropic と Claude Code などの実クライアントは未検証です。
 
 ## 紹介動画
 
@@ -63,7 +63,7 @@ npx redaction-proxy           # プロキシを http://127.0.0.1:8787 で起動�
 
 ## ツールの接続先を変える
 
-> **実際のクライアントでは未検証です。** 実行済みなのは `pnpm demo` とダミー上流に対するテストだけです。実サービス向けの検証ツール（[e2e/real](e2e/real/README.md)）は用意してありますが、まだ実行していません。
+> **実サービスは今のところ DeepSeek のみ検証済みです。** 2026-10-08 に[実サービス検証ツール](e2e/real/README.md)で DeepSeek に対して 4 つのシナリオ（Chat Completions、通常とストリーミング、テキストと強制ツール呼び出し）を実行し、すべて合格しました。上流が見たのはプレースホルダーだけで、毎回 5 つの値が正しく復元されました。OpenAI と Anthropic はキーがないためスキップし、実クライアントはまだ試していません。
 
 API キーはこれまでどおりツールから送ってください。プロキシはそのまま転送し、保存しません。
 
@@ -72,7 +72,7 @@ API キーはこれまでどおりツールから送ってください。プロ�
 | Claude Code | `ANTHROPIC_BASE_URL=http://127.0.0.1:8787 claude` | 未検証 |
 | Anthropic SDK | `ANTHROPIC_BASE_URL=http://127.0.0.1:8787`（`/v1` なし） | 未検証 |
 | OpenAI SDK と多くの互換ツール | `OPENAI_BASE_URL=http://127.0.0.1:8787/v1`（`/v1` あり） | 未検証 |
-| DeepSeek | `REDACTION_PROXY_OPENAI_UPSTREAM=https://api.deepseek.com node lib/cli.js` でプロキシを起動し、DeepSeek のキーと `OPENAI_BASE_URL=http://127.0.0.1:8787/v1` を使います。OpenAI の上流はこれで置き換わります。 | 未検証 |
+| DeepSeek | `REDACTION_PROXY_OPENAI_UPSTREAM=https://api.deepseek.com node lib/cli.js` でプロキシを起動し、DeepSeek のキーと `OPENAI_BASE_URL=http://127.0.0.1:8787/v1` を使います。OpenAI の上流はこれで置き換わります。 | 実サービス検証ツールで検証済み（API のみ） |
 | Cursor | 非対応：Cursor はカスタム base URL へのリクエストを Cursor 自身のサーバーから送るため、手元の `127.0.0.1` に届きません。 | — |
 
 <details><summary>curl の例と設定ファイル</summary>

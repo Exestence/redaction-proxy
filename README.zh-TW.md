@@ -8,7 +8,7 @@
 
 適用任何 OpenAI 或 Anthropic 相容的用戶端，串流回覆也一樣，不需要本機模型。它**減少**個資與機密外洩，但**不會**讓對話變成私密的。
 
-> **狀態：** 尚未正式發布，沒有上 npm。只對本機假上游測試過，尚未在任何真實服務或用戶端上驗證。
+> **狀態：** 尚未正式發布，沒有上 npm。已對真實的 DeepSeek Chat Completions API 驗證（2026-10-08，見下方）；OpenAI、Anthropic 與 Claude Code 等真實用戶端尚未驗證。
 
 ## 介紹影片
 
@@ -63,7 +63,7 @@ npx redaction-proxy           # 啟動代理，位址 http://127.0.0.1:8787（�
 
 ## 讓你的工具走代理
 
-> **尚未在真實用戶端測試。** 只有 `pnpm demo` 與對假上游的測試實際跑過。真實服務的驗證工具已備妥（[e2e/real](e2e/real/README.md)），但還沒執行。
+> **真實服務目前只驗證了 DeepSeek。** 2026-10-08 用[真實服務驗證工具](e2e/real/README.md)對 DeepSeek 跑了 4 個情境（Chat Completions；一般與串流；純文字與強制工具呼叫），全部通過：上游只看到佔位符，每次 5 個值都正確還原。OpenAI、Anthropic 因沒有金鑰而略過，也還沒試過真實用戶端。
 
 工具照常送出自己的 API 金鑰；代理原樣轉送，從不儲存。
 
@@ -72,7 +72,7 @@ npx redaction-proxy           # 啟動代理，位址 http://127.0.0.1:8787（�
 | Claude Code | `ANTHROPIC_BASE_URL=http://127.0.0.1:8787 claude` | 未測試 |
 | Anthropic SDK | `ANTHROPIC_BASE_URL=http://127.0.0.1:8787`（不加 `/v1`） | 未測試 |
 | OpenAI SDK 與多數相容工具 | `OPENAI_BASE_URL=http://127.0.0.1:8787/v1`（要加 `/v1`） | 未測試 |
-| DeepSeek | 以 `REDACTION_PROXY_OPENAI_UPSTREAM=https://api.deepseek.com node lib/cli.js` 啟動代理，再用 `OPENAI_BASE_URL=http://127.0.0.1:8787/v1` 搭配你的 DeepSeek 金鑰。這會取代 OpenAI 上游。 | 未測試 |
+| DeepSeek | 以 `REDACTION_PROXY_OPENAI_UPSTREAM=https://api.deepseek.com node lib/cli.js` 啟動代理，再用 `OPENAI_BASE_URL=http://127.0.0.1:8787/v1` 搭配你的 DeepSeek 金鑰。這會取代 OpenAI 上游。 | 已用真實服務驗證工具驗證（僅 API） |
 | Cursor | 不支援：Cursor 的自訂 base URL 請求從 Cursor 自己的伺服器發出，連不到你的 `127.0.0.1`。 | — |
 
 <details><summary>curl 範例與設定檔</summary>
