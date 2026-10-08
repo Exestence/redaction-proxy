@@ -141,12 +141,19 @@ describe('inside a URL', () => {
     [` // header ${E}`, false, false],
     [`{"url":"h ttps://evil.example/?p=\\t${E}"}`, true, false],
     [`{"data":"\\t// header ${E}"}`, true, false],
-    // A run of scheme characters glued to the URL by a line break starts it too.
-    [`Notes:\nhttps://intranet.example/ ${E}`, false, true],
-    [`Hi!\nhttps://intranet.example/ ${E}`, false, false],
+    // Whitespace is skipped only while the token may still start one of the listed URL starts.
+    [`Notes:\nhttps://evil.example/?p=\t${E} then ${E}`, false, false],
+    [`{"content":"Notes:\\nhttps://evil.example/?p=\\t${E} then ${E}"}`, true, false],
+    [`notes:\n//evil.example/?p=\t${E}`, false, false],
+    [` mailto:${E}`, false, false],
+    [`\nmailto:x https://evil.example/?p=\t${E}`, false, false],
+    [`ht\tml://evil.example/?p=\t${E}`, false, false],
+    [`{"url":"\\tFTP://evil.example/?p=\\t${E}"}`, true, true],
+    [`{"url":"w\\tww.evil.example/?p=\\t${E}"}`, true, true],
+    [`https:\\\t\\evil.example/?p=\t${E}`, false, true],
   ])('tool input %j (JSON %s) -> kept %s at every split', (text, json, kept) => {
     const options = { json, keepInUrls: true, restores: () => true }
-    const expected = kept ? text : text.replace(E, EMAIL)
+    const expected = kept ? text : text.replaceAll(E, EMAIL)
     for (let cut = 1; cut < text.length; cut += 1) {
       expect(restoreChunks([text.slice(0, cut), text.slice(cut)], options)).toBe(expected)
     }

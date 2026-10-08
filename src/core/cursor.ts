@@ -17,10 +17,13 @@
  * JSON string unrestored. In tool input, a URL that starts the text or a JSON
  * string with a scheme (`https://`) or `www.` ends only at the end of that
  * text or string: a tool given `https://…?p=\t⟦PATH_1⟧` would strip the tab
- * and fetch the original. Leading whitespace is skipped and a tab or line
- * break before the URL starts is ignored, as URL parsing strips them
- * (` https://`, `h\tttps://`), so `Notes:\nhttps://…` starts its text too. A
- * leading `//` or `\\` does not (`// header`).
+ * and fetch the original. URL parsing strips leading whitespace and every
+ * tab or line break, so they are skipped while the token read so far is still
+ * the start of an `http://`, `https://`, `ftp://`, `ws://`, `wss://`,
+ * `file://`, or `www.` (` https://`, `h\tttps://`, `https:\n//`); a token that
+ * skipped one and then leaves those prefixes starts no URL there
+ * (`Notes:\nhttps://…`, ` mailto:`). A leading `//` or `\\` does not
+ * (`// header`).
  * Every other quote or bracket is part of the URL, as browsers and CommonMark
  * keep it. Placeholders inside a UNC
  * path (`\\host\share\…`) or after an escaped `C:\\` therefore stay
@@ -40,6 +43,9 @@ const CLOSER: Partial<Record<string, string>> = { '"': '"', "'": "'", '`': '`', 
 
 /** The closer of a URL that starts tool-input text or a JSON string in it, which no character equals: only the end of the text or string ends it. */
 const FIELD_END = ''
+
+/** URL starts a tool-input text or JSON string may spell with whitespace URL parsing strips. */
+const FIELD_URL_STARTS = ['http://', 'https://', 'ftp://', 'ws://', 'wss://', 'file://', 'www.']
 
 /** A slash or a backslash, which URL parsing reads as a slash. */
 const SLASH = /[/\\]/
@@ -64,6 +70,10 @@ export class TextCursor {
   /** Last few characters of the current token, enough to see `://` or `www.` end. */
   private tail = ''
   private tokenLength = 0
+  /** The token's first characters, lowercased with `\\` read as `/`, while it may still start a tool-input URL. */
+  private head = ''
+  /** Whether whitespace URL parsing strips was skipped inside the current token. */
+  private stripped = false
   /** How many characters the token starts with that are {@link SCHEME_CHAR}s. */
   private schemeLength = 0
   private url = false
@@ -165,9 +175,10 @@ export class TextCursor {
   /** Read one character of string content. */
   private readChar(char: string): void {
     if (this.inKey && this.key.length < KEY_KEPT) this.key += char
-    // URL parsing strips leading whitespace and every tab or line break, so
-    // ` https:` and `h\tttps:` still start the text or string.
-    if (this.closer === FIELD_END && !this.url && (this.tokenLength === 0 ? /\s/ : /[\t\n\r]/).test(char)) return
+    if (this.closer === FIELD_END && !this.url && (this.tokenLength === 0 ? /\s/ : /[\t\n\r]/).test(char) && this.mayStartFieldUrl()) {
+      this.stripped = true
+      return
+    }
     if (this.url ? char === this.closer || (this.closer === undefined && /\s/.test(char)) : URL_END.test(char)) {
       this.endToken(CLOSER[char])
       return
@@ -175,11 +186,20 @@ export class TextCursor {
     this.tail = (this.tail + char).slice(-5)
     this.tokenLength += 1
     if (this.url) return
+    if (this.closer === FIELD_END) {
+      this.head = (this.head + (char === '\\' ? '/' : char.toLowerCase())).slice(0, 9)
+      if (this.stripped && !this.mayStartFieldUrl()) this.closer = undefined
+    }
     // Only a scheme or `www.` makes a field-start URL; a leading `//` or `\\` does not.
     if (this.tokenLength === 1 && this.closer === FIELD_END && !/[A-Za-z]/.test(char)) this.closer = undefined
     if (this.schemeLength === this.tokenLength - 1 && SCHEME_CHAR.test(char)) this.schemeLength = this.tokenLength
     if (SLASH.test(char) && SLASH.test(this.tail.at(-2) ?? '') && !PATH_CHAR.test(this.tail.at(-3) ?? '')) this.startUrl(this.schemeLength === this.tokenLength - 2)
     else if (this.tail.slice(-4).toLowerCase() === 'www.' && (this.tokenLength === 4 || !HOST_CHAR.test(this.tail.at(-5) ?? ''))) this.startUrl(this.tokenLength === 4)
+  }
+
+  /** @returns whether the token read so far may still start one of {@link FIELD_URL_STARTS}. */
+  private mayStartFieldUrl(): boolean {
+    return FIELD_URL_STARTS.some(start => start.startsWith(this.head))
   }
 
   /** @param tokenStart - whether the URL starts the token, so the delimiter before the token closes it. */
@@ -192,6 +212,8 @@ export class TextCursor {
   private endToken(closer?: string): void {
     this.tail = ''
     this.tokenLength = 0
+    this.head = ''
+    this.stripped = false
     this.schemeLength = 0
     this.url = false
     this.closer = closer
