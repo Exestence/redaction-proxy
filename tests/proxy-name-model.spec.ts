@@ -106,7 +106,7 @@ describe('proxy with the name model', () => {
     })
     expect(leak.status).toBe(422)
     const message = (await leak.json()).error.message
-    expect(message).toBe('a detected value is still unmasked at /metadata/owner; the request was not forwarded')
+    expect(message).toBe('a detected value is still unmasked at /metadata/owner (NAME); the request was not forwarded')
     expect(received).toHaveLength(1)
   })
 
@@ -121,7 +121,7 @@ describe('proxy with the name model', () => {
       }),
     })
     expect(leak.status).toBe(422)
-    expect((await leak.json()).error.message).toBe('a detected value is still unmasked at /metadata/owner; the request was not forwarded')
+    expect((await leak.json()).error.message).toBe('a detected value is still unmasked at /metadata/owner (NAME); the request was not forwarded')
     expect(received).toHaveLength(0)
   })
 

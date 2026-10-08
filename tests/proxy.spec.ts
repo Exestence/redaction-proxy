@@ -384,6 +384,58 @@ describe('state kept per client credential', () => {
     const owner = await post('/v1/responses', { model: 'm', previous_response_id: 'resp_client_a', input: 'what address?' }, { authorization: 'Bearer client-a' })
     expect((await owner.json() as any).output[0].content[0].text).toBe(`It was ${EMAIL}`)
   })
+
+  it('masks a remembered credential in any ASCII case', async () => {
+    const client = { authorization: 'Bearer client-case' }
+    await post('/v1/chat/completions', { model: 'm', messages: [{ role: 'user', content: `password: ${PASS}` }] }, client)
+    await post('/v1/chat/completions', { model: 'm', messages: [{ role: 'assistant', content: `use ${PASS.toLowerCase()} or ${PASS.toUpperCase()}` }, { role: 'user', content: 'ok' }] }, client)
+    expect(seen[1]!.raw.toLowerCase()).not.toContain(PASS.toLowerCase())
+    expect(seen[1]!.body.messages[0].content).toMatch(/^use ⟦KEY_\d+⟧ or ⟦KEY_\d+⟧$/)
+  })
+
+  it('remembers only values long enough to propagate on their own, while masking a short credential throughout its own request', async () => {
+    const client = { authorization: 'Bearer client-short' }
+    await post('/v1/chat/completions', { model: 'm', messages: [{ role: 'user', content: 'password: ab12x, again ab12x' }] }, client)
+    expect(seen[0]!.body.messages[0].content).toMatch(/^password: ⟦KEY_1⟧, again ⟦KEY_1⟧$/)
+    await post('/v1/chat/completions', { model: 'm', messages: [{ role: 'user', content: 'the label ab12x' }] }, client)
+    expect(seen[1]!.body.messages[0].content).toBe('the label ab12x')
+  })
+
+  it('names the category of a leaked value and whether an earlier request bound it, never the value', async () => {
+    const client = { authorization: 'Bearer client-leak' }
+    await post('/v1/chat/completions', { model: 'm', messages: [{ role: 'user', content: `password: ${PASS}` }] }, client)
+    const res = await post('/v1/chat/completions', { model: 'm', metadata: { note: PASS, owner: EMAIL }, messages: [{ role: 'user', content: `echo ${PASS} to ${EMAIL}` }] }, client)
+    expect(res.status).toBe(422)
+    const { message } = (await res.json() as any).error
+    expect(message).toBe('a detected value is still unmasked at /metadata/note (KEY, remembered from an earlier request), /metadata/owner (EMAIL); the request was not forwarded')
+    expect(seen).toHaveLength(1)
+  })
+
+  it('does not count a detected value written in a protocol enum field such as role', async () => {
+    await start({ redaction: { terms: ['assistant'] } })
+    try {
+      const res = await post('/v1/chat/completions', { model: 'm', messages: [{ role: 'user', content: 'what did the assistant say?' }, { role: 'assistant', content: 'nothing' }] })
+      expect(res.status).toBe(200)
+      expect(seen[0]!.body.messages[0].content).toMatch(/^what did the ⟦TERM_\d+⟧ say\?$/)
+    } finally {
+      await start()
+    }
+  })
+
+  it('keeps remembered credentials through a flood of another category, and forgets the oldest beyond 4096 of one category', async () => {
+    reply = () => ({ json: { choices: [] } })
+    const flood = (count: number, line: (i: number) => string): string => Array.from({ length: count }, (_, i) => line(i)).join('\n')
+    const echoed = async (client: Record<string, string>, tool: string): Promise<string> => {
+      seen = []
+      await post('/v1/chat/completions', { model: 'm', messages: [{ role: 'user', content: `password: ${PASS}` }] }, client)
+      await post('/v1/chat/completions', { model: 'm', messages: [{ role: 'user', content: 'dump' }, { role: 'tool', tool_call_id: 't', content: tool }] }, client)
+      await post('/v1/chat/completions', { model: 'm', messages: [{ role: 'assistant', content: `Noted ${PASS}.` }, { role: 'user', content: 'and?' }] }, client)
+      return seen[2]!.body.messages[0].content
+    }
+    expect(await echoed({ authorization: 'Bearer flood-mail' }, flood(4100, i => `user${i}@example.test`))).toMatch(/^Noted ⟦KEY_\d+⟧\.$/)
+    expect(await echoed({ authorization: 'Bearer flood-keys-4095' }, flood(4095, i => `password: fake${i}zzzz`))).toMatch(/^Noted ⟦KEY_\d+⟧\.$/)
+    expect(await echoed({ authorization: 'Bearer flood-keys-4096' }, flood(4096, i => `password: fake${i}zzzz`))).toBe(`Noted ${PASS}.`)
+  })
 })
 
 describe('tool-call arguments', () => {
@@ -603,6 +655,87 @@ describe('tool restore policy', () => {
     const streamed = JSON.parse(all.filter(e => e.type === 'response.function_call_arguments.delta').map(e => e.delta).join('')).command
     expect(streamed).toBe(JSON.parse(all.find(e => e.type === 'response.function_call_arguments.done').arguments).command)
     expect(streamed).toMatch(new RegExp(`^curl -d ⟦KEY_\\d+⟧ -F to=${EMAIL.replaceAll('.', '\\.')} -F f=@⟦PATH_\\d+⟧/notes\\.md$`))
+  })
+
+  // What the default categories leave of `line`: the key and the email kept, the path restored.
+  const line = (entry: Seen): string => JSON.parse(command(entry)).command
+  const DEFAULT_KEPT = new RegExp(`^curl -d ⟦KEY_\\d+⟧ -F to=⟦EMAIL_\\d+⟧ -F f=@${HOME}/notes\\.md$`)
+
+  it('applies the policy to every Responses output item whose type ends in _call, named by its type when it has no name', async () => {
+    const items = (entry: Seen) => [
+      { type: 'local_shell_call', id: 'ls', call_id: 'c1', status: 'completed', action: { type: 'exec', command: ['bash', '-lc', line(entry)] } },
+      { type: 'shell_call', id: 'sh', call_id: 'c2', action: { commands: [line(entry)] } },
+      { type: 'computer_call', id: 'cc', call_id: 'c3', action: { type: 'type', text: line(entry) } },
+      { type: 'apply_patch_call', id: 'ap', call_id: 'c4', operation: { type: 'create_file', path: 'x.txt', diff: line(entry) } },
+      { type: 'custom_tool_call', id: 'ct', call_id: 'c5', name: 'bash', input: line(entry) },
+    ]
+    const payloads = (output: any[]): string[] => {
+      const [shell, shells, computer, patch, custom] = output
+      return [shell.action.command[2], shells.action.commands[0], computer.action.text, patch.operation.diff, custom.input]
+    }
+    reply = entry => ({ json: { id: 'r-calls', output: items(entry) } })
+    const body = await (await post('/v1/responses', { model: 'm', input: USER_TEXT })).json() as any
+    for (const payload of payloads(body.output)) expect(payload).toMatch(DEFAULT_KEPT)
+    expect(logs).toEqual(expect.arrayContaining([expect.stringMatching(/kept by the tool restore policy KEY_\d+ in local_shell_call at \/action\/command\/2$/)]))
+
+    reply = entry => ({
+      sse: sse([
+        ...items(entry).map((item, index): [string, unknown] => ['response.output_item.done', { type: 'response.output_item.done', output_index: index, item }]),
+        ['response.completed', { type: 'response.completed', response: { id: 'r-calls-stream', output: items(entry) } }],
+      ]),
+    })
+    const all = events(await (await post('/v1/responses', { model: 'm', stream: true, input: USER_TEXT })).text())
+    for (const payload of payloads(all.filter(e => e.type === 'response.output_item.done').map(e => e.item))) expect(payload).toMatch(DEFAULT_KEPT)
+    for (const payload of payloads(all.find(e => e.type === 'response.completed').response.output)) expect(payload).toMatch(DEFAULT_KEPT)
+  })
+
+  it('applies the policy to a Chat custom tool call, in a JSON reply and in a stream', async () => {
+    reply = entry => ({ json: { choices: [{ index: 0, message: { role: 'assistant', tool_calls: [{ id: 't', type: 'custom', custom: { name: 'bash', input: line(entry) } }] } }] } })
+    const body = await (await post('/v1/chat/completions', { model: 'm', messages: [userRequest] })).json() as any
+    expect(body.choices[0].message.tool_calls[0].custom.input).toMatch(DEFAULT_KEPT)
+
+    reply = entry => {
+      const env = { id: 'c', object: 'chat.completion.chunk', model: 'm' }
+      const call = (part: string, first: boolean) => ({ index: 0, ...first ? { id: 't', type: 'custom' } : {}, custom: { ...first ? { name: 'bash' } : {}, input: part } })
+      return {
+        sse: [
+          // Ends inside a held placeholder prefix, so the finishing chunk carries the tail.
+          ...sse(chunk(`${line(entry)} ${id(entry, 'KEY')}`.slice(0, -2), 3).map((part, i) => [undefined, { ...env, choices: [{ index: 0, delta: { tool_calls: [call(part, i === 0)] }, finish_reason: null }] }])),
+          ...sse([[undefined, { ...env, choices: [{ index: 0, delta: {}, finish_reason: 'tool_calls' }] }], [undefined, '[DONE]']]),
+        ],
+      }
+    }
+    const text = await (await post('/v1/chat/completions', { model: 'm', stream: true, messages: [userRequest] })).text()
+    const calls = events(text).flatMap(event => event.choices[0].delta.tool_calls ?? [])
+    expect(calls.every((call: any) => call.function === undefined)).toBe(true)
+    const input = calls.map((call: any) => call.custom.input).join('')
+    expect(input.slice(0, input.lastIndexOf(' '))).toMatch(DEFAULT_KEPT)
+    expect(input).toMatch(/ ⟦KEY_\d*$/)
+  })
+
+  it('looks up a per-tool override by trimmed, case-folded name', async () => {
+    reply = entry => ({ json: { choices: [{ index: 0, message: { role: 'assistant', tool_calls: ['Git_Commit', ' git_commit '].map((name, i) => ({ id: `t${i}`, type: 'function', function: { name, arguments: command(entry) } })) } }] } })
+    const body = await (await post('/v1/chat/completions', { model: 'm', messages: [userRequest] })).json() as any
+    for (const call of body.choices[0].message.tool_calls) {
+      expect(JSON.parse(call.function.arguments).command).toMatch(new RegExp(`^curl -d ⟦KEY_\\d+⟧ -F to=${EMAIL.replaceAll('.', '\\.')} -F f=@⟦PATH_\\d+⟧/notes\\.md$`))
+    }
+  })
+
+  it('applies the default policy to Anthropic input_json_delta events without a content_block_start', async () => {
+    reply = entry => ({
+      sse: sse([
+        ['message_start', { type: 'message_start', message: { id: 'm', role: 'assistant', content: [] } }],
+        // Ends inside a held placeholder prefix, so the stop event's tail must be tool input too.
+        ...chunk(`${command(entry)} ${id(entry, 'KEY')}`.slice(0, -2), 2).map((part): [string, unknown] => ['content_block_delta', { type: 'content_block_delta', index: 0, delta: { type: 'input_json_delta', partial_json: part } }]),
+        ['content_block_stop', { type: 'content_block_stop', index: 0 }],
+        ['message_stop', { type: 'message_stop' }],
+      ]),
+    })
+    const text = await (await post('/v1/messages', { model: 'c', max_tokens: 1, stream: true, messages: [userRequest] }, { 'x-api-key': 'k' })).text()
+    const deltas = events(text).filter(e => e.type === 'content_block_delta').map(e => e.delta)
+    expect(deltas.every(delta => delta.type === 'input_json_delta')).toBe(true)
+    const partial = deltas.map(delta => delta.partial_json).join('')
+    expect(JSON.parse(partial.slice(0, partial.lastIndexOf(' '))).command).toMatch(DEFAULT_KEPT)
   })
 })
 
