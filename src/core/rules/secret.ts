@@ -142,9 +142,9 @@ const PLACEHOLDER_VALUE_WORDS = new Set([
 
 /**
  * Words chat-API field names are built from: `max_tokens`, `tool_calls`,
- * `stop_sequences`, `content_block`, `finish_reason`. A snake_case value made
- * only of these and {@link PLACEHOLDER_VALUE_WORDS} is a field name, while
- * `blue_horse_battery` is a passphrase.
+ * `stop_sequences`, `content_block`, `finish_reason`. They are also the words
+ * of real passwords such as `data_store` and `web_server`, so they decide only
+ * what {@link isProtocolFieldName} reports, not what is masked.
  */
 const PROTOCOL_FIELD_WORDS = new Set([
   'max', 'min', 'tokens', 'token', 'calls', 'call', 'choice', 'choices', 'stop', 'sequence', 'sequences',
@@ -157,11 +157,38 @@ const PROTOCOL_FIELD_WORDS = new Set([
   'document', 'citations', 'annotations', 'item', 'items', 'store', 'instructions', 'detail',
 ])
 
+/**
+ * Chat-API field names written as a bare value, as in `password: max_tokens`.
+ * Masking one would also flag the request's own JSON key of that name and
+ * refuse the request. A quoted or `.env` value of the same spelling is masked.
+ */
+const PROTOCOL_FIELD_NAMES = new Set([
+  'max_tokens', 'max_completion_tokens', 'max_output_tokens', 'tool_calls', 'tool_choice', 'tool_call_id',
+  'tool_use_id', 'stop_sequences', 'stop_reason', 'finish_reason', 'response_format', 'content_block',
+  'input_text', 'output_text', 'cache_control', 'previous_response_id', 'parallel_tool_calls',
+])
+
+/**
+ * Whether a value is a snake_case name built only from chat-API field and
+ * placeholder words, such as `max_tokens` or `data_store`. Such a value is
+ * masked where it is bound but must not be searched for in later requests,
+ * whose JSON keys and enum values spell the same names.
+ * @param value - a bound original.
+ * @returns whether the value reads as a protocol field name.
+ */
+export function isProtocolFieldName(value: string): boolean {
+  return /^[a-z]+(?:_[a-z]+)+$/.test(value) && value.split('_').every(word => PROTOCOL_FIELD_WORDS.has(word) || PLACEHOLDER_VALUE_WORDS.has(word))
+}
+
 /** A masked or placeholder spelling: `***`, `xxx`, `<redacted>`, `[hidden]`, `your-password`. */
 const MASKED_VALUE = /^(?:\*+|x+|<[A-Za-z _-]+>|\[[A-Za-z _-]+\]|your[-_][A-Za-z_-]+)$/i
 
-/** A template placeholder, which may hold spaces: `<your secret>`, `{password}`, `${{ secrets.DB_PW }}`. */
-const TEMPLATE = '(?:<[A-Za-z][A-Za-z_ .-]*>|\\$?\\{\\{?[ \\t]*[A-Za-z][A-Za-z_ .-]*\\}\\}?)'
+/**
+ * A template placeholder, which may hold spaces: `<your secret>`, `{password}`,
+ * `${{ secrets.DB_PW }}`. A double-braced expression may hold digits
+ * (`${{ secrets.PW2 }}`); a digit in single braces makes a literal (`{hunter2}`).
+ */
+const TEMPLATE = '(?:<[A-Za-z][A-Za-z_ .-]*>|\\$?\\{[ \\t]*[A-Za-z][A-Za-z_ .-]*\\}|\\$?\\{\\{[ \\t]*[A-Za-z][\\w .-]*\\}\\})'
 const TEMPLATE_VALUE = new RegExp(`^${TEMPLATE}$`)
 const TEMPLATE_PREFIX = new RegExp(`^${TEMPLATE}(?![^\\s,.;:)\\]}&"'\`])`)
 
@@ -303,9 +330,7 @@ export function isCodeShape(raw: string, options: CodeShapeOptions = {}): boolea
   if (/^[A-Za-z]+$/.test(value) && (RESERVED_VALUE_WORDS.has(value.toLowerCase()) || PLACEHOLDER_VALUE_WORDS.has(value.toLowerCase()))) return true
   if (MASKED_VALUE.test(value)) return true
   if (TEMPLATE_VALUE.test(value)) return true
-  if (/^[a-z]+(?:_[a-z]+)+$/.test(value) && value.split('_').every(word => PROTOCOL_FIELD_WORDS.has(word) || PLACEHOLDER_VALUE_WORDS.has(word))) {
-    return true
-  }
+  if (options.quoted !== true && options.envLine !== true && PROTOCOL_FIELD_NAMES.has(value)) return true
   if (/^\$\{[^{}]*\}$/.test(value)) return true
   // A call with arguments can carry a literal secret, so only an empty argument list counts.
   if (/^[A-Za-z_$][\w$]*(?:\??\.[A-Za-z_$][\w$]*)*\(\s*\)$/.test(value)) return true
