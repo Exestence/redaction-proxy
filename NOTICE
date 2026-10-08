@@ -1,3 +1,6 @@
+redaction-proxy
+Copyright 2026 The redaction-proxy authors
+
 Portions of the masking rules and engine in src/core descend from
 LYiHub/pub-dsh-privacy-router (https://github.com/LYiHub/pub-dsh-privacy-router),
 via the dsh-privacy-router fork and dsh-addons.
