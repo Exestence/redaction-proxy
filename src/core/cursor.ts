@@ -17,7 +17,10 @@
  * JSON string unrestored. In tool input, a URL that starts the text or a JSON
  * string with a scheme (`https://`) or `www.` ends only at the end of that
  * text or string: a tool given `https://…?p=\t⟦PATH_1⟧` would strip the tab
- * and fetch the original. A leading `//` or `\\` does not (`// header`).
+ * and fetch the original. Leading whitespace is skipped and a tab or line
+ * break before the URL starts is ignored, as URL parsing strips them
+ * (` https://`, `h\tttps://`), so `Notes:\nhttps://…` starts its text too. A
+ * leading `//` or `\\` does not (`// header`).
  * Every other quote or bracket is part of the URL, as browsers and CommonMark
  * keep it. Placeholders inside a UNC
  * path (`\\host\share\…`) or after an escaped `C:\\` therefore stay
@@ -162,6 +165,9 @@ export class TextCursor {
   /** Read one character of string content. */
   private readChar(char: string): void {
     if (this.inKey && this.key.length < KEY_KEPT) this.key += char
+    // URL parsing strips leading whitespace and every tab or line break, so
+    // ` https:` and `h\tttps:` still start the text or string.
+    if (this.closer === FIELD_END && !this.url && (this.tokenLength === 0 ? /\s/ : /[\t\n\r]/).test(char)) return
     if (this.url ? char === this.closer || (this.closer === undefined && /\s/.test(char)) : URL_END.test(char)) {
       this.endToken(CLOSER[char])
       return
