@@ -507,6 +507,24 @@ function replaceUnscreenable(text: string): string {
     .replaceAll('⟧', '⟫')
 }
 
+/**
+ * Write the `\uXXXX` and `\/` escapes of a JSON text as the characters they
+ * stand for, as `JSON.stringify` writes them, so masking finds a value whose
+ * characters a client's encoder escaped (Go writes `&` as `\u0026`, PHP `/` as
+ * `\/`). A quote, backslash, control character, U+FFFD, or surrogate stays
+ * escaped. The text need not parse.
+ * @param text - JSON text, such as a resent tool call's `arguments`.
+ * @returns the text with those escapes decoded.
+ */
+function decodeJsonEscapes(text: string): string {
+  return text.replace(/\\(u[0-9a-fA-F]{4}|.)/gs, (escape, code: string) => {
+    if (code === '/') return '/'
+    if (code.length === 1) return escape
+    const char = String.fromCharCode(Number.parseInt(code.slice(1), 16))
+    return /[\u0000-\u001f"\\\u007f-\u009f\ud800-\udfff\ufffd]/.test(char) ? escape : char
+  })
+}
+
 /** What restoring one response needs. */
 interface Restoring {
   registry: RedactionRegistry
@@ -950,7 +968,8 @@ export function createProxyServer(
     const slots: Slot[] = []
     collectSlots(parsed, '', slots)
     const texts = slots.map(slot => {
-      const text = (slot.parent as Record<string | number, string>)[slot.key] as string
+      const written = (slot.parent as Record<string | number, string>)[slot.key] as string
+      const text = typeof slot.key === 'string' && JSON_TEXT.has(slot.key) ? decodeJsonEscapes(written) : written
       if (config.screen === 'replace') return replaceUnscreenable(text)
       const refusal = screenText(text) ?? (text.includes('⟦') || text.includes('⟧') ? { reason: 'placeholder delimiter' } : undefined)
       if (refusal !== undefined) throw new Refusal(422, `request text at ${slot.path} holds a ${refusal.reason} and cannot be masked (screen: "refuse")`)

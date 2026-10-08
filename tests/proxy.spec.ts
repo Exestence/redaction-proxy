@@ -580,6 +580,20 @@ describe('state kept per client credential', () => {
     expect(await ask(`my new password: ${two}`)).toBe(two)
     expect(await ask(`old password: ${one}\nnew password: ${two}`)).toBe(`${one} ${two}`)
   })
+
+  it('masks a value resent in tool arguments with \\uXXXX or \\/ escapes, and leaves an escaped backslash alone', async () => {
+    reply = () => ({ json: { choices: [] } })
+    const resend = async (args: string): Promise<string> => {
+      seen = []
+      const messages = [{ role: 'user', content: `password: ${PASS} file ${HOME}/notes.md` }, { role: 'assistant', tool_calls: [{ id: 'c', type: 'function', function: { name: 'bash', arguments: args } }] }, { role: 'tool', tool_call_id: 'c', content: 'ok' }]
+      expect((await post('/v1/chat/completions', { model: 'm', messages })).status).toBe(200)
+      return seen[0]!.body.messages[1].tool_calls[0].function.arguments
+    }
+    expect(await resend('{"cmd":"echo Tr0ub4dor\\u00263x"}')).toBe('{"cmd":"echo ⟦KEY_1⟧"}')
+    expect(await resend('{"path":"\\/Users\\/fictional-user\\/notes.md"}')).toBe('{"path":"⟦PATH_1⟧/notes.md"}')
+    expect(await resend('{"path":"\\u002fUsers\\u002Ffictional-user","q":"\\"\\u0022\\u0001\\ud83d\\ude00"}')).toBe('{"path":"⟦PATH_1⟧","q":"\\"\\u0022\\u0001\\ud83d\\ude00"}')
+    expect(await resend('{"cmd":"a\\\\u0026b \\\\/"}')).toBe('{"cmd":"a\\\\u0026b \\\\/"}')
+  })
 })
 
 describe('tool-call arguments', () => {
