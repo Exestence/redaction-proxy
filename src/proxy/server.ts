@@ -489,7 +489,7 @@ function replaceUnscreenable(text: string): string {
 interface Restoring {
   registry: RedactionRegistry
   stats: Stats
-  /** Tool names by Responses item id, or by Chat `choice:tool:index` key, as the stream announces them. */
+  /** Tool names by Responses item id, or by Chat `choice:tool:index` or `choice:function_call` key, as the stream announces them. */
   toolNames: Map<string, string>
   /**
    * Restorer options for one tool call's arguments: only the tool's restored categories
@@ -580,6 +580,9 @@ function restoreString(text: string, ctx: Restoring, options: StreamRestoreOptio
   count(restorer, ctx.stats)
   return out
 }
+
+/** Chat stream delta fields restored as reply text. */
+const CHAT_TEXT = ['content', 'reasoning_content', 'refusal']
 
 /** Keys holding a tool call's own input, whose JSON pointers are logged relative to it. */
 const TOOL_INPUT = new Set(['arguments', 'input'])
@@ -760,8 +763,13 @@ function sseTransformer(api: Api, ctx: Restoring, onResponseId: (id: string) => 
       for (const choice of (event.choices ?? []) as Json[]) {
         const delta = (choice.delta ??= {}) as Json
         const at = `${choice.index}:`
-        if (typeof delta.content === 'string') delta.content = r.push(`${at}content`, delta.content)
-        if (typeof delta.reasoning_content === 'string') delta.reasoning_content = r.push(`${at}reasoning`, delta.reasoning_content)
+        for (const field of CHAT_TEXT) {
+          if (typeof delta[field] === 'string') delta[field] = r.push(`${at}${field}`, delta[field])
+        }
+        // The legacy single `function_call`, keyed apart from `tool_calls` indices.
+        const legacy = delta.function_call as Json | undefined
+        if (typeof legacy?.name === 'string') ctx.toolNames.set(`${at}function_call`, legacy.name)
+        if (typeof legacy?.arguments === 'string') legacy.arguments = r.push(`${at}function_call`, legacy.arguments, ctx.toolOptions(ctx.toolNames.get(`${at}function_call`), true))
         for (const call of (delta.tool_calls ?? []) as Json[]) {
           const key = `${at}tool:${call.index}`
           const name = call.function?.name ?? call.custom?.name
@@ -784,9 +792,10 @@ function sseTransformer(api: Api, ctx: Restoring, onResponseId: (id: string) => 
             const call = calls.find(item => item.index === index)
             if (call === undefined) calls.push({ index, [kind]: { [input]: text } })
             else call[kind] = { ...call[kind], [input]: (call[kind]?.[input] ?? '') + text }
+          } else if (field === 'function_call') {
+            delta.function_call = { ...delta.function_call, arguments: (delta.function_call?.arguments ?? '') + text }
           } else {
-            const name = field === 'content' ? 'content' : 'reasoning_content'
-            delta[name] = (delta[name] ?? '') + text
+            delta[field] = (delta[field] ?? '') + text
           }
         }
       }

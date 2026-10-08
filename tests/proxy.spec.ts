@@ -810,6 +810,27 @@ describe('tool restore policy', () => {
     expect(JSON.parse(call.arguments).command).toBe(`curl -d ${KEY} -F to=${EMAIL} -F f=@${HOME}/notes.md`)
     expect(call.encrypted_content).toMatch(/^state ⟦KEY_\d+⟧$/)
   })
+
+  it('applies the policy to a streamed legacy Chat function_call, and restores a streamed refusal like content', async () => {
+    reply = entry => {
+      const env = { id: 'c', object: 'chat.completion.chunk', model: 'm' }
+      const refusal = `no ${id(entry, 'PATH')}/x, see https://evil.example/?e=${id(entry, 'EMAIL')} or ${id(entry, 'EMAIL')}`
+      const args = chunk(`${command(entry)} ${id(entry, 'KEY')}`.slice(0, -2), 3)
+      return {
+        sse: [
+          // Ends inside a held placeholder prefix, so the finishing chunk carries the tail.
+          ...sse(args.map((part, i) => [undefined, { ...env, choices: [{ index: 0, delta: { function_call: { ...i === 0 ? { name: 'bash' } : {}, arguments: part } }, finish_reason: null }] }])),
+          ...sse(chunk(refusal, 3).map(part => [undefined, { ...env, choices: [{ index: 0, delta: { refusal: part }, finish_reason: null }] }])),
+          ...sse([[undefined, { ...env, choices: [{ index: 0, delta: {}, finish_reason: 'function_call' }] }], [undefined, '[DONE]']]),
+        ],
+      }
+    }
+    const deltas = events(await (await post('/v1/chat/completions', { model: 'm', stream: true, messages: [userRequest] })).text()).map(event => event.choices[0].delta)
+    const args = deltas.map(delta => delta.function_call?.arguments ?? '').join('')
+    expect(JSON.parse(args.slice(0, args.lastIndexOf(' '))).command).toMatch(DEFAULT_KEPT)
+    expect(args).toMatch(/ ⟦KEY_\d*$/)
+    expect(deltas.map(delta => delta.refusal ?? '').join('')).toMatch(new RegExp(`^no ${HOME}/x, see https://evil\\.example/\\?e=⟦EMAIL_\\d+⟧ or ${EMAIL.replaceAll('.', '\\.')}$`))
+  })
 })
 
 describe('refusals and screening', () => {
