@@ -631,8 +631,8 @@ describe('tool-call arguments', () => {
 })
 
 describe('tool restore policy', () => {
-  // `git_commit` gets emails only; `trusted` gets every category; any other tool gets the default categories.
-  beforeAll(() => start({ toolRestore: { categories: DEFAULT_TOOL_RESTORE_CATEGORIES, tools: new Map<string, RestoredCategories>([['git_commit', ['EMAIL']], ['trusted', '*']]) } }))
+  // `git_commit` gets emails only; `trusted` gets every category; `code_interpreter_call` gets paths and keys; any other tool gets the default categories.
+  beforeAll(() => start({ toolRestore: { categories: DEFAULT_TOOL_RESTORE_CATEGORIES, tools: new Map<string, RestoredCategories>([['git_commit', ['EMAIL']], ['trusted', '*'], ['code_interpreter_call', ['PATH', 'KEY']]]) } }))
   afterAll(() => start())
 
   const id = (entry: Seen, category: string): string => placeholders(entry.raw).find(found => found.startsWith(`⟦${category}_`))!
@@ -781,6 +781,34 @@ describe('tool restore policy', () => {
     expect(deltas.every(delta => delta.type === 'input_json_delta')).toBe(true)
     const partial = deltas.map(delta => delta.partial_json).join('')
     expect(JSON.parse(partial.slice(0, partial.lastIndexOf(' '))).command).toMatch(DEFAULT_KEPT)
+  })
+
+  it('applies the policy to streamed MCP arguments and custom tool input, and names an unnamed item by its type', async () => {
+    reply = entry => {
+      const delta = (type: string, item_id: string, part: string): [string, unknown] => [type, { type, item_id, output_index: 0, delta: part }]
+      return {
+        sse: sse([
+          ['response.output_item.added', { type: 'response.output_item.added', output_index: 0, item: { type: 'mcp_call', id: 'mc', name: 'send', server_label: 's', arguments: '' } }],
+          ...chunk(command(entry), 4).map(part => delta('response.mcp_call_arguments.delta', 'mc', part)),
+          ['response.output_item.added', { type: 'response.output_item.added', output_index: 1, item: { type: 'custom_tool_call', id: 'ct', call_id: 'c', name: 'bash', input: '' } }],
+          ...chunk(line(entry), 4).map(part => delta('response.custom_tool_call_input.delta', 'ct', part)),
+          ['response.output_item.added', { type: 'response.output_item.added', output_index: 2, item: { type: 'code_interpreter_call', id: 'ci', code: '' } }],
+          ...chunk(line(entry), 4).map(part => delta('response.code_interpreter_call_code.delta', 'ci', part)),
+        ]),
+      }
+    }
+    const all = events(await (await post('/v1/responses', { model: 'm', stream: true, input: USER_TEXT })).text())
+    const joined = (type: string): string => all.filter(e => e.type === type).map(e => e.delta).join('')
+    expect(JSON.parse(joined('response.mcp_call_arguments.delta')).command).toMatch(DEFAULT_KEPT)
+    expect(joined('response.custom_tool_call_input.delta')).toMatch(DEFAULT_KEPT)
+    expect(joined('response.code_interpreter_call_code.delta')).toMatch(new RegExp(`^curl -d ${KEY} -F to=⟦EMAIL_\\d+⟧ -F f=@${HOME}/notes\\.md$`))
+  })
+
+  it('keeps signed or encrypted state of a tool call as the model sent it', async () => {
+    reply = entry => ({ json: { id: 'r-enc', output: [{ type: 'function_call', id: 'fc', call_id: 'c', name: 'trusted', arguments: command(entry), encrypted_content: `state ${id(entry, 'KEY')}` }] } })
+    const [call] = (await (await post('/v1/responses', { model: 'm', input: USER_TEXT })).json() as any).output
+    expect(JSON.parse(call.arguments).command).toBe(`curl -d ${KEY} -F to=${EMAIL} -F f=@${HOME}/notes.md`)
+    expect(call.encrypted_content).toMatch(/^state ⟦KEY_\d+⟧$/)
   })
 })
 
