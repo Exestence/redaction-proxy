@@ -608,6 +608,33 @@ describe('state kept per client credential', () => {
     }
   })
 
+  it('keeps a value from tool output that the user later writes through a flood of tool output, without extending its time to live', async () => {
+    vi.useFakeTimers({ toFake: ['Date'] })
+    try {
+      await start({ knownOriginalsTtlSeconds: 60 })
+      reply = () => ({ json: { choices: [] } })
+      const client = { authorization: 'Bearer client-tool-echo' }
+      const tool = (content: string) => [{ role: 'user', content: 'dump' }, { role: 'tool', tool_call_id: 't', content }]
+      const echo = async (): Promise<string> => {
+        seen = []
+        await post('/v1/chat/completions', { model: 'm', messages: [{ role: 'user', content: `again ${PASS}` }] }, client)
+        return seen[0]!.body.messages[0].content
+      }
+      await post('/v1/chat/completions', { model: 'm', messages: tool(`password: ${PASS}`) }, client)
+      vi.advanceTimersByTime(30_000)
+      expect(await echo()).toMatch(/^again ⟦KEY_\d+⟧$/)
+      await post('/v1/chat/completions', { model: 'm', messages: tool(Array.from({ length: 4096 }, (_, i) => `password: fl${String(i).padStart(5, '0')}Zq`).join('\n')) }, client)
+      vi.advanceTimersByTime(29_000)
+      expect(await echo()).toMatch(/^again ⟦KEY_\d+⟧$/)
+      vi.advanceTimersByTime(1_000)
+      expect(await echo()).toBe(`again ${PASS}`)
+    } finally {
+      vi.useRealTimers()
+      await start()
+    }
+  })
+
+
   it('keeps two credentials apart when one is the other\'s JSON-escaped spelling', async () => {
     const client = { authorization: 'Bearer client-backslash' }
     const one = 'ab\\cd12ef'
