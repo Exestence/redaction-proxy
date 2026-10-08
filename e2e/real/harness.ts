@@ -55,6 +55,8 @@ export async function runProvider(provider: Provider, env: NodeJS.ProcessEnv): P
   const proxy = createProxyServer(loadConfig(undefined, {
     REDACTION_PROXY_OPENAI_UPSTREAM: tee.url,
     REDACTION_PROXY_ANTHROPIC_UPSTREAM: tee.url,
+    // The forced tool call checks that every placeholder round-trips, so no category is held back.
+    REDACTION_PROXY_TOOL_RESTORE_CATEGORIES: '*',
   }), () => {})
   const rig: Rig = {
     provider,

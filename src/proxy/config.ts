@@ -7,13 +7,34 @@
  */
 
 import { readFileSync } from 'node:fs'
-import { RULE_NAMES, resolveRulesConfig } from '../core/index.ts'
+import { RULE_CATEGORIES, RULE_NAMES, resolveRulesConfig } from '../core/index.ts'
 import type { RulesRedactionConfig } from '../core/index.ts'
-import { resolveNameModelConfig } from '../core/model/config.ts'
+import { NAME_MODEL_CATEGORIES, resolveNameModelConfig } from '../core/model/config.ts'
 import type { ResolvedNameModelConfig } from '../core/model/config.ts'
 
 /** How a request string the rules cannot reason about is handled. */
 export type ScreenMode = 'replace' | 'refuse'
+
+/** Placeholder categories restored into one tool's call arguments; `'*'` restores every category. */
+export type RestoredCategories = readonly string[] | '*'
+
+/**
+ * Which placeholder categories are restored into tool-call arguments. A
+ * placeholder of any other category reaches the client as written, so a tool
+ * the model was steered into calling cannot carry its original off the machine.
+ */
+export interface ToolRestorePolicy {
+  /** Categories restored for a tool `tools` does not name; {@link DEFAULT_TOOL_RESTORE_CATEGORIES} by default. */
+  categories: RestoredCategories
+  /** Categories by exact tool name; each replaces `categories` for that tool. */
+  tools: ReadonlyMap<string, RestoredCategories>
+}
+
+/** Categories coding work needs back in tool calls: home paths and the literals the user listed, which name identifiers in code. */
+export const DEFAULT_TOOL_RESTORE_CATEGORIES: readonly string[] = ['PATH', 'TERM', 'PROJECT']
+
+/** Every category a placeholder can have. */
+const CATEGORIES: readonly string[] = [...RULE_CATEGORIES, ...NAME_MODEL_CATEGORIES]
 
 /** Validated proxy configuration. */
 export interface ProxyConfig {
@@ -54,6 +75,8 @@ export interface ProxyConfig {
   screen: ScreenMode
   /** Log each masked request body. Masked text only; off by default. */
   debugMasked: boolean
+  /** Which placeholder categories are restored into tool-call arguments. */
+  toolRestore: ToolRestorePolicy
 }
 
 /**
@@ -69,7 +92,7 @@ export const PROXY_DEFAULT_RULES = RULE_NAMES.filter(rule => rule !== 'card' && 
 
 const FILE_KEYS = new Set([
   'port', 'host', 'authToken', 'allowedOrigins', 'openaiUpstream', 'anthropicUpstream', 'allowInsecureUpstream',
-  'redaction', 'nameModel', 'screen', 'debugMasked',
+  'redaction', 'nameModel', 'screen', 'debugMasked', 'toolRestore',
 ])
 
 /** Shortest `authToken` accepted; `openssl rand -hex 32` gives 64 characters. */
@@ -116,6 +139,43 @@ function allowedOrigins(value: unknown): string[] {
     }
     return normal
   })
+}
+
+/**
+ * Read one restored-category setting: a list, `"*"`, or a comma-separated environment value.
+ * @param value - the file value or the environment string.
+ * @param label - setting name for the failure message.
+ * @returns the distinct categories, or `'*'`.
+ * @throws {Error} on a value that is not a list of known categories or `"*"`.
+ */
+function restoredCategories(value: unknown, label: string): RestoredCategories {
+  if (value === '*') return '*'
+  const list = typeof value === 'string' ? value.split(',').map(item => item.trim()).filter(item => item !== '') : value
+  if (!Array.isArray(list)) throw new Error(`${label} must be an array of categories or "*"`)
+  for (const category of list) {
+    if (!CATEGORIES.includes(category)) throw new Error(`${label}: unknown category ${JSON.stringify(category)}; valid: ${CATEGORIES.join(', ')}`)
+  }
+  return [...new Set(list as string[])]
+}
+
+/**
+ * Read the `toolRestore` block; `REDACTION_PROXY_TOOL_RESTORE_CATEGORIES` overrides its `categories`.
+ * @param value - the file's `toolRestore` value.
+ * @param envCategories - the environment's default categories.
+ * @returns the policy.
+ * @throws {Error} on an unknown key or category.
+ */
+function toolRestore(value: unknown, envCategories: string | undefined): ToolRestorePolicy {
+  const block = value ?? {}
+  if (block === null || typeof block !== 'object' || Array.isArray(block)) throw new Error('toolRestore must be an object')
+  const { categories, tools = {}, ...rest } = block as Record<string, unknown>
+  const [unknown] = Object.keys(rest)
+  if (unknown !== undefined) throw new Error(`toolRestore: unknown key "${unknown}"`)
+  if (tools === null || typeof tools !== 'object' || Array.isArray(tools)) throw new Error('toolRestore.tools must be an object of tool names')
+  return {
+    categories: restoredCategories(envCategories ?? categories ?? DEFAULT_TOOL_RESTORE_CATEGORIES, 'toolRestore.categories'),
+    tools: new Map(Object.entries(tools).map(([tool, list]) => [tool, restoredCategories(list, `toolRestore.tools.${tool}`)])),
+  }
 }
 
 /**
@@ -172,6 +232,7 @@ export function loadConfig(path: string | undefined, env: NodeJS.ProcessEnv): Pr
     redaction,
     screen,
     debugMasked: env.REDACTION_PROXY_DEBUG_MASKED === '1' || file.debugMasked === true,
+    toolRestore: toolRestore(file.toolRestore, env.REDACTION_PROXY_TOOL_RESTORE_CATEGORIES),
   }
   const model = nameModel(file.nameModel, env.REDACTION_PROXY_NAME_MODEL_DIR)
   if (model !== undefined) config.nameModel = model

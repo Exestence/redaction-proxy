@@ -7,7 +7,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { loadConfig } from '../src/proxy/config.ts'
-import type { ProxyConfig } from '../src/proxy/config.ts'
+import type { ProxyConfig, RestoredCategories } from '../src/proxy/config.ts'
 import { closeProxy, createProxyServer, listen } from '../src/proxy/server.ts'
 
 const TOKEN = 'fictional-token-0123456789abcdef'
@@ -80,6 +80,18 @@ describe('settings that fail loud', () => {
     expect(loadConfig(undefined, { REDACTION_PROXY_ALLOWED_ORIGINS: 'app://a, https://b.example:8443' }).allowedOrigins).toEqual(['app://a', 'https://b.example:8443'])
     expect(() => loadConfig(configFile({ allowedOrigins: ['null'] }), {})).toThrow('"null"')
     expect(() => loadConfig(configFile({ allowedOrigins: ['*'] }), {})).toThrow('"null"')
+  })
+
+  it('reads toolRestore and refuses an unknown category, naming the valid ones', () => {
+    expect(loadConfig(undefined, {}).toolRestore).toEqual({ categories: ['PATH', 'TERM', 'PROJECT'], tools: new Map() })
+    const file = configFile({ toolRestore: { categories: ['PATH'], tools: { git_commit: ['EMAIL', 'PATH'], trusted: '*' } } })
+    expect(loadConfig(file, {}).toolRestore).toEqual({ categories: ['PATH'], tools: new Map<string, RestoredCategories>([['git_commit', ['EMAIL', 'PATH']], ['trusted', '*']]) })
+    expect(loadConfig(file, { REDACTION_PROXY_TOOL_RESTORE_CATEGORIES: 'PATH, NAME' }).toolRestore.categories).toEqual(['PATH', 'NAME'])
+    expect(loadConfig(undefined, { REDACTION_PROXY_TOOL_RESTORE_CATEGORIES: '*' }).toolRestore.categories).toBe('*')
+    expect(() => loadConfig(configFile({ toolRestore: { tools: { bash: ['EMAIL', 'SECRET'] } } }), {})).toThrow(/toolRestore\.tools\.bash: unknown category "SECRET"; valid: EMAIL, PATH, KEY, .*NAME, ORG, LOC, ADDR$/)
+    expect(() => loadConfig(undefined, { REDACTION_PROXY_TOOL_RESTORE_CATEGORIES: 'path' })).toThrow('unknown category "path"')
+    expect(() => loadConfig(configFile({ toolRestore: { tools: { bash: 7 } } }), {})).toThrow('toolRestore.tools.bash must be an array of categories or "*"')
+    expect(() => loadConfig(configFile({ toolRestore: { allow: ['EMAIL'] } }), {})).toThrow('toolRestore: unknown key "allow"')
   })
 })
 

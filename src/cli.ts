@@ -44,4 +44,6 @@ for (const signal of ['SIGINT', 'SIGTERM'] as const) {
 }
 const modelNote = nameModel === undefined ? '' : ', name model on (experimental)'
 const tokenNote = config.authToken === undefined ? '' : ', x-redaction-proxy-token required'
-console.error(`redaction-proxy on http://${config.host.includes(':') ? `[${config.host}]` : config.host}:${port} -> openai ${config.openaiUpstream}, anthropic ${config.anthropicUpstream}${tokenNote}${modelNote}`)
+const { categories } = config.toolRestore
+const toolNote = `, tool arguments restore ${categories === '*' ? 'every category' : categories.join(', ') || 'no category'}${config.toolRestore.tools.size === 0 ? '' : ` (${config.toolRestore.tools.size} per-tool override(s))`}`
+console.error(`redaction-proxy on http://${config.host.includes(':') ? `[${config.host}]` : config.host}:${port} -> openai ${config.openaiUpstream}, anthropic ${config.anthropicUpstream}${tokenNote}${modelNote}${toolNote}`)
