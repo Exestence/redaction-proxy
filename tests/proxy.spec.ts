@@ -384,6 +384,58 @@ describe('state kept per client credential', () => {
     const owner = await post('/v1/responses', { model: 'm', previous_response_id: 'resp_client_a', input: 'what address?' }, { authorization: 'Bearer client-a' })
     expect((await owner.json() as any).output[0].content[0].text).toBe(`It was ${EMAIL}`)
   })
+
+  it('masks a remembered credential in any ASCII case', async () => {
+    const client = { authorization: 'Bearer client-case' }
+    await post('/v1/chat/completions', { model: 'm', messages: [{ role: 'user', content: `password: ${PASS}` }] }, client)
+    await post('/v1/chat/completions', { model: 'm', messages: [{ role: 'assistant', content: `use ${PASS.toLowerCase()} or ${PASS.toUpperCase()}` }, { role: 'user', content: 'ok' }] }, client)
+    expect(seen[1]!.raw.toLowerCase()).not.toContain(PASS.toLowerCase())
+    expect(seen[1]!.body.messages[0].content).toMatch(/^use ⟦KEY_\d+⟧ or ⟦KEY_\d+⟧$/)
+  })
+
+  it('remembers only values long enough to propagate on their own, while masking a short credential throughout its own request', async () => {
+    const client = { authorization: 'Bearer client-short' }
+    await post('/v1/chat/completions', { model: 'm', messages: [{ role: 'user', content: 'password: ab12x, again ab12x' }] }, client)
+    expect(seen[0]!.body.messages[0].content).toMatch(/^password: ⟦KEY_1⟧, again ⟦KEY_1⟧$/)
+    await post('/v1/chat/completions', { model: 'm', messages: [{ role: 'user', content: 'the label ab12x' }] }, client)
+    expect(seen[1]!.body.messages[0].content).toBe('the label ab12x')
+  })
+
+  it('names the category of a leaked value and whether an earlier request bound it, never the value', async () => {
+    const client = { authorization: 'Bearer client-leak' }
+    await post('/v1/chat/completions', { model: 'm', messages: [{ role: 'user', content: `password: ${PASS}` }] }, client)
+    const res = await post('/v1/chat/completions', { model: 'm', metadata: { note: PASS, owner: EMAIL }, messages: [{ role: 'user', content: `echo ${PASS} to ${EMAIL}` }] }, client)
+    expect(res.status).toBe(422)
+    const { message } = (await res.json() as any).error
+    expect(message).toBe('a detected value is still unmasked at /metadata/note (KEY, remembered from an earlier request), /metadata/owner (EMAIL); the request was not forwarded')
+    expect(seen).toHaveLength(1)
+  })
+
+  it('does not count a detected value written in a protocol enum field such as role', async () => {
+    await start({ redaction: { terms: ['assistant'] } })
+    try {
+      const res = await post('/v1/chat/completions', { model: 'm', messages: [{ role: 'user', content: 'what did the assistant say?' }, { role: 'assistant', content: 'nothing' }] })
+      expect(res.status).toBe(200)
+      expect(seen[0]!.body.messages[0].content).toMatch(/^what did the ⟦TERM_\d+⟧ say\?$/)
+    } finally {
+      await start()
+    }
+  })
+
+  it('keeps remembered credentials through a flood of another category, and forgets the oldest beyond 4096 of one category', async () => {
+    reply = () => ({ json: { choices: [] } })
+    const flood = (count: number, line: (i: number) => string): string => Array.from({ length: count }, (_, i) => line(i)).join('\n')
+    const echoed = async (client: Record<string, string>, tool: string): Promise<string> => {
+      seen = []
+      await post('/v1/chat/completions', { model: 'm', messages: [{ role: 'user', content: `password: ${PASS}` }] }, client)
+      await post('/v1/chat/completions', { model: 'm', messages: [{ role: 'user', content: 'dump' }, { role: 'tool', tool_call_id: 't', content: tool }] }, client)
+      await post('/v1/chat/completions', { model: 'm', messages: [{ role: 'assistant', content: `Noted ${PASS}.` }, { role: 'user', content: 'and?' }] }, client)
+      return seen[2]!.body.messages[0].content
+    }
+    expect(await echoed({ authorization: 'Bearer flood-mail' }, flood(4100, i => `user${i}@example.test`))).toMatch(/^Noted ⟦KEY_\d+⟧\.$/)
+    expect(await echoed({ authorization: 'Bearer flood-keys-4095' }, flood(4095, i => `password: fake${i}zzzz`))).toMatch(/^Noted ⟦KEY_\d+⟧\.$/)
+    expect(await echoed({ authorization: 'Bearer flood-keys-4096' }, flood(4096, i => `password: fake${i}zzzz`))).toBe(`Noted ${PASS}.`)
+  })
 })
 
 describe('tool-call arguments', () => {

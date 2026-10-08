@@ -9,8 +9,8 @@
  * append-only conversation keeps its identities across turns without any
  * server-side state. Two things are kept in memory per client credential:
  * the original input texts of each Responses response, for requests that
- * continue with `previous_response_id` and do not resend history, and every
- * original the client's requests bound, so a later request whose history no
+ * continue with `previous_response_id` and do not resend history, and the
+ * originals the client's requests bound, so a later request whose history no
  * longer holds the context that detected a value (`password: …`) still masks it.
  *
  * @module redaction-proxy/proxy/server
@@ -70,6 +70,13 @@ const USER_TEXT_PARTS = new Set(['text', 'input_text'])
  */
 const MESSAGE_TEXT_PATH = /^\/(messages|input)\/(\d+)\/content(?:\/(\d+)\/text)?$/
 
+/**
+ * Request keys whose string values the API accepts only from a fixed
+ * list, so they hold no private data; the leak scan skips them, or a value
+ * such as a term `assistant` would refuse every request with an assistant turn.
+ */
+const ENUM_FIELDS = new Set(['type', 'role', 'object', 'status', 'finish_reason', 'stop_reason', 'service_tier', 'reasoning_effort', 'tool_choice'])
+
 /** Categories the name model binds; the leak scan matches their values as whole words. */
 const MODEL_CATEGORIES: ReadonlySet<string> = new Set(NAME_MODEL_CATEGORIES)
 
@@ -82,7 +89,7 @@ const HOP = new Set([
 // ponytail: fixed-size FIFO of continuation texts; a restart forgets them (documented).
 const CONTINUATIONS_MAX = 256
 
-// ponytail: fixed-size FIFOs of known originals, by size only; add a time limit if a long-lived proxy must forget sooner.
+// ponytail: fixed-size FIFOs of known originals per category, by size only; add a time limit if a long-lived proxy must forget sooner.
 const KNOWN_ORIGINALS_MAX = 4096
 const KNOWN_CLIENTS_MAX = 64
 
@@ -181,20 +188,48 @@ function clientScope(headers: Readonly<Record<string, string>>): string {
 }
 
 /**
+ * Whether a later request may search for an original: as long as a value the
+ * rules propagate by length alone, six printable ASCII characters or two other
+ * code points. A shorter credential is masked throughout the request that
+ * detected it; remembering it would mask `ab1` inside every later `ab12`.
+ * @param original - a bound original.
+ * @returns whether it is remembered.
+ */
+function isRememberable(original: string): boolean {
+  // oxlint-disable-next-line typescript/no-misused-spread -- the floor counts code points, not graphemes.
+  return /^[\x20-\x7e]*$/.test(original) ? original.length >= 6 : [...original].length >= 2
+}
+
+/**
+ * Lower-case the ASCII letters of a text, keeping its length, so offsets into it hold for the text.
+ * @param text - any text.
+ * @returns the folded text.
+ */
+function foldAsciiCase(text: string): string {
+  return text.replace(/[A-Z]+/g, run => run.toLowerCase())
+}
+
+/**
  * Add the originals one client has bound before to a detector's propagation,
  * so each of their occurrences is masked as if this request had detected it.
+ * A remembered credential is also found in any ASCII case: `TR0UB4DOR&3X`
+ * repeats `Tr0ub4dor&3x`, and is masked under its own identity.
  * @param detector - the request's detector.
  * @param known - the client's known originals, mapped to their categories.
  * @returns the detector to mask with.
  */
 function withKnownOriginals(detector: RedactionDetector, known: ReadonlyMap<string, string> | undefined): RedactionDetector {
   if (known === undefined) return detector
+  const keys = new Map([...known].filter(([, category]) => category === 'KEY').map(([original]) => [foldAsciiCase(original), 'KEY']))
   return {
     policyDigest: detector.policyDigest,
     detectorVersion: detector.detectorVersion,
     categories: detector.categories,
     detect: text => detector.detect(text),
-    propagate: async (texts, values) => await detector.propagate?.(texts, new Map([...known, ...values])) ?? [],
+    propagate: async (texts, values) => [
+      ...await detector.propagate?.(texts, new Map([...known, ...values])) ?? [],
+      ...keys.size === 0 ? [] : await detector.propagate?.(texts.map(foldAsciiCase), keys) ?? [],
+    ],
     ...detector.identityKey === undefined ? {} : { identityKey: detector.identityKey.bind(detector) },
   }
 }
@@ -342,32 +377,45 @@ function containsAnyOf(patterns: readonly string[]): (text: string) => boolean {
  * it, as a whole word for spaced scripts (`Lee` inside `Leeds` is no leak),
  * and only from two code points. Every other value counts anywhere, at any
  * length and in any ASCII case, so a rules value glued to other characters
- * (`tel0912345678`) or upper-cased still fails closed. Keys are checked too.
+ * (`tel0912345678`) or upper-cased still fails closed. Keys are checked too;
+ * {@link ENUM_FIELDS} are not.
  * @param body - the masked request body.
  * @param registry - bindings of the mask call.
  * @param modelValues - the originals the name model bound.
- * @throws {Refusal} 422 naming the JSON pointers, never the value.
+ * @param known - the originals the client's earlier requests bound.
+ * @throws {Refusal} 422 naming the JSON pointers with the category of what each holds, never the value.
  */
-function refuseLeaks(body: Json, registry: RedactionRegistry, modelValues: ReadonlySet<string>): void {
+function refuseLeaks(body: Json, registry: RedactionRegistry, modelValues: ReadonlySet<string>, known: ReadonlyMap<string, string> | undefined): void {
   // A value inside a JSON-text string (`arguments`) is written JSON-escaped.
   const forms = (original: string): string[] => [original, JSON.stringify(original).slice(1, -1)]
   const words = [...modelValues].filter(isSearchedValue).flatMap(forms)
   const holdsSubstring = containsAnyOf(registry.originals().filter(original => !modelValues.has(original)).flatMap(forms))
   const leaks = (text: string): boolean => holdsSubstring(text) || words.some(form => containsStandingAlone(text, form))
-  const where: string[] = []
-  const walk = (value: unknown, path: string): void => {
-    if (typeof value === 'string' && leaks(value)) where.push(path)
+  const where: Array<[path: string, text: string]> = []
+  const walk = (value: unknown, path: string, key: string): void => {
+    if (typeof value === 'string' && !ENUM_FIELDS.has(key) && leaks(value)) where.push([path, value])
     else if (value !== null && typeof value === 'object') {
-      for (const [key, item] of Object.entries(value)) {
-        const leakyKey = leaks(key)
-        const at = `${path}/${leakyKey ? '<key>' : pointerSegment(Array.isArray(value) ? Number(key) : key)}`
-        if (leakyKey) where.push(at)
-        walk(item, at)
+      for (const [name, item] of Object.entries(value)) {
+        const leakyKey = leaks(name)
+        const at = `${path}/${leakyKey ? '<key>' : pointerSegment(Array.isArray(value) ? Number(name) : name)}`
+        if (leakyKey) where.push([at, name])
+        walk(item, at, name)
       }
     }
   }
-  walk(body, '')
-  if (where.length > 0) throw new Refusal(422, `a detected value is still unmasked at ${where.slice(0, 5).join(', ')}; the request was not forwarded`)
+  walk(body, '', '')
+  if (where.length === 0) return
+  // The refusal path alone looks up which value each text holds, the way `leaks` matches it.
+  const holds = (text: string, original: string): boolean => modelValues.has(original)
+    ? isSearchedValue(original) && forms(original).some(form => containsStandingAlone(text, form))
+    : forms(original).some(form => foldAsciiCase(text).includes(foldAsciiCase(form)))
+  const describe = ([path, text]: [string, string]): string => {
+    // oxlint-disable-next-line typescript/no-non-null-assertion -- `leaks` found some bound original in the text.
+    const id = registry.ids().find(candidate => holds(text, registry.original(candidate)!))!
+    // oxlint-disable-next-line typescript/no-non-null-assertion -- every listed identity is bound.
+    return `${path} (${categoryOf(id)}${known?.has(registry.original(id)!) === true ? ', remembered from an earlier request' : ''})`
+  }
+  throw new Refusal(422, `a detected value is still unmasked at ${where.slice(0, 5).map(describe).join(', ')}; the request was not forwarded`)
 }
 
 /**
@@ -760,21 +808,41 @@ export function createProxyServer(
     withModel?.forRequest(userTexts, () => { stats.nameModelFailed = true }) ?? rules
   /** Continuation texts by client scope and response id. */
   const continuations = new Map<string, RequestTexts>()
-  /** Originals each client scope bound, mapped to their categories, oldest first. */
-  const knownOriginals = new Map<string, Map<string, string>>()
+  /**
+   * Originals each client scope bound, by category, each mapped to its category, oldest first.
+   * One bucket per category, so a bulk tool result of emails cannot evict a remembered credential.
+   */
+  const knownOriginals = new Map<string, Map<string, Map<string, string>>>()
   const tokenDigest = config.authToken === undefined ? undefined : createHash('sha256').update(config.authToken).digest()
   const originAllowed = (origin: string): boolean => config.allowedOrigins.includes(origin.toLowerCase()) || isLoopbackOrigin(origin)
 
   /**
-   * Remember every original a request bound, for the client's later requests.
+   * Remember every {@link isRememberable} original a request bound, for the client's later requests.
    * @param client - the client scope.
    * @param registry - bindings of the request's mask call.
    */
   const rememberOriginals = (client: string, registry: RedactionRegistry): void => {
-    const known = knownOriginals.get(client) ?? new Map<string, string>()
-    // oxlint-disable-next-line typescript/no-non-null-assertion -- every listed identity is bound.
-    for (const id of registry.ids()) setNewest(known, registry.original(id)!, categoryOf(id), KNOWN_ORIGINALS_MAX)
+    const known = knownOriginals.get(client) ?? new Map<string, Map<string, string>>()
+    for (const id of registry.ids()) {
+      // oxlint-disable-next-line typescript/no-non-null-assertion -- every listed identity is bound.
+      const original = registry.original(id)!
+      if (!isRememberable(original)) continue
+      const category = categoryOf(id)
+      const bucket = known.get(category) ?? new Map<string, string>()
+      known.set(category, bucket)
+      setNewest(bucket, original, category, KNOWN_ORIGINALS_MAX)
+    }
     setNewest(knownOriginals, client, known, KNOWN_CLIENTS_MAX)
+  }
+
+  /**
+   * The originals one client's earlier requests bound.
+   * @param client - the client scope.
+   * @returns each original mapped to its category, or `undefined` for a client not seen.
+   */
+  const knownTo = (client: string): Map<string, string> | undefined => {
+    const known = knownOriginals.get(client)
+    return known === undefined ? undefined : new Map([...known.values()].flatMap(bucket => [...bucket]))
   }
 
   /**
@@ -809,9 +877,10 @@ export function createProxyServer(
     const priorTexts = prior?.texts ?? []
     const all = [...priorTexts, ...texts]
     const userTexts = new Set([...prior?.userTexts ?? [], ...texts.filter((_, i) => isUserText(parsed, (slots[i] as Slot).path))])
+    const known = knownTo(client)
     let result
     try {
-      result = await mask(withKnownOriginals(detectorFor(userTexts, stats), knownOriginals.get(client)), all.map((text, seq) => ({ seq, path: '', text })), emptyRedactionIndex())
+      result = await mask(withKnownOriginals(detectorFor(userTexts, stats), known), all.map((text, seq) => ({ seq, path: '', text })), emptyRedactionIndex())
     } catch (error) {
       // Screening above leaves only a conflict a continuation's stored texts can raise.
       if (error instanceof RedactionError) throw new Refusal(422, `request text cannot be masked: ${error.code}`)
@@ -829,7 +898,7 @@ export function createProxyServer(
       if (MODEL_CATEGORIES.has(category)) modelValues.add((all[span.seq] as string).slice(span.start, span.end))
       if (span.seq >= priorTexts.length) stats.masked[category] = (stats.masked[category] ?? 0) + 1
     }
-    refuseLeaks(parsed, result.registry, modelValues)
+    refuseLeaks(parsed, result.registry, modelValues, known)
     rememberOriginals(client, result.registry)
     return { outgoing: JSON.stringify(parsed), registry: result.registry, texts: all, userTexts }
   }
