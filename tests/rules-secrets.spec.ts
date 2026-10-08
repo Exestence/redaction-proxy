@@ -34,7 +34,7 @@ const mustMask = [
   // A snake_case passphrase is not a protocol field name.
   'password: blue_horse_battery',
   'password: tool_horse_battery',
-  // A passphrase built from chat-API words, and a field name that is quoted or on a `.env` line, is a value.
+  // A passphrase built from chat-API words is a value.
   ...[
     'data_store', 'web_server', 'file_server', 'user_name', 'read_file', 'use_cache', 'stream_data',
   ].flatMap(value => [
@@ -42,9 +42,6 @@ const mustMask = [
     `export DB_PASSWORD=${value}`, `Authorization: ${value}`, `密碼：${value}`,
   ]),
   'password: p_k', '{"password":"p_k"}', 'PASSWORD=p_k',
-  'DB_PASSWORD=cache_control',
-  '{"password":"max_tokens"}',
-  'PASSWORD=tool_calls',
   // A digit makes a braced value a literal, not a template.
   'password: {hunter2}',
   'API_KEY=MyToken123',
@@ -219,11 +216,16 @@ const mustKeep = [
   ].flatMap(value => [
     `password: ${value}`, `{"password":"${value}"}`, `PASSWORD=${value}`, `Authorization: ${value}`, `密碼：${value}`,
   ]),
-  // A chat-API field name written as a bare value.
+  // A chat-API field name, in any form and letter case.
   ...[
     'max_tokens', 'tool_calls', 'stop_sequences', 'content_block', 'input_text', 'tool_choice',
-    'response_format', 'finish_reason', 'cache_control',
-  ].flatMap(value => [`password: ${value}`, `Authorization: ${value}`, `密碼：${value}`]),
+    'response_format', 'finish_reason', 'cache_control', 'top_p', 'top_k', 'stream_options',
+    'presence_penalty', 'frequency_penalty', 'logit_bias', 'service_tier', 'safety_identifier',
+    'prompt_cache_key', 'temperature', 'metadata', 'logprobs', 'reasoning', 'truncation', 'instructions',
+  ].flatMap(value => [
+    `password: ${value}`, `{"password":"${value}"}`, `password = "${value}"`, `PASSWORD=${value}`,
+    `export DB_PASSWORD=${value.toUpperCase()}`, `Authorization: ${value}`, `密碼：${value}`,
+  ]),
   'password: ${{ secrets.PW2 }}\njobs:\n  build:\n    env:\n      TOKEN: ${{ secrets.T }}\n      A: ${{ matrix.a }}',
 ]
 
