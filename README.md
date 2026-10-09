@@ -138,6 +138,42 @@ Environment variables and every option: [technical details §12](docs/DETAILS.md
 
 The same value gets the same placeholder throughout a request. If a value detected in a request is still in it after masking, the proxy refuses to send it (422) rather than leak it. Values a client's requests have detected, if at least 6 ASCII characters or 2 other characters long, are also remembered in memory per client credential for 24 hours after their last detection (`knownOriginalsTtlSeconds`) and masked where they stand alone in its later requests (a credential in any ASCII case), even once the context that detected them (`password: …`) is gone from the history. This memory is best-effort extra masking and never refuses a request: a remembered value glued to other characters (`xTr0ub4dor&3xy`), in a new spelling, or in a field the proxy does not rewrite is sent as is. Values found in your own messages or system prompt are kept apart from those found in tool output, so a large tool result cannot push out a password written there. The memory is bounded, so a local process that can reach the proxy can push values out by sending many requests; the proxy listens only on loopback by default and requires the auth token elsewhere. A snake_case value built only from API field words (`web_server`, `data_store`) is masked only in the request that bound it, so later requests can still name that field. Full-width digits, `＠`, and zero-width characters (U+200B–U+200D, U+2060, U+FEFF, soft hyphen) are folded first; other invisible characters (bidi marks, variation selectors) inside a value are not. Every rule: [technical details §3](docs/DETAILS.md#3-偵測規則).
 
+## How it works
+
+Every request goes through the same steps. The proxy keeps no conversation state: it numbers placeholders again from the full history on each request, so the masked prefix stays the same from turn to turn and the provider's prompt cache keeps working.
+
+```mermaid
+flowchart TD
+  A["Your tool sends a request with its own API key"] --> B{"Allowed? loopback origin and host, auth token if set, at most 64 MiB, a known route"}
+  B -- "no" --> B2["403 / 401 / 413 / 404, not forwarded"]
+  B -- "GET" --> U
+  B -- "POST to a masked route" --> C["Collect every text field; skip ids, names, enum values, metadata, files, signed or encrypted state"]
+  C --> D["Detect: rules, your terms and projectNames, optional name model, values remembered for this client"]
+  D --> E["Mask: each distinct value becomes ⟦CATEGORY_n⟧, numbered in text order"]
+  E --> F{"Leak scan: is a value detected in this request still in it?"}
+  F -- "yes" --> F2["422 naming the fields, never the value; not forwarded"]
+  F -- "no" --> U["Cloud LLM, OpenAI or Anthropic compatible"]
+  U --> R["Reply: whole JSON, or SSE field by field as it streams"]
+  R --> G{"Where is the placeholder?"}
+  G -- "reply text" --> G1["restored"]
+  G -- "inside a URL" --> G2["kept as the placeholder"]
+  G -- "tool-call arguments" --> G3["restored only for allowed categories, default PATH, TERM, PROJECT"]
+  G1 --> Z["Your tool receives the reply"]
+  G2 --> Z
+  G3 --> Z
+```
+
+| Step | What it decides | If it goes wrong |
+| --- | --- | --- |
+| Gate | Only programs on your machine (or holders of `authToken`) may use the proxy; web pages and other host names are refused. | 403 or 401; nothing is forwarded. |
+| Detection | Format rules (emails, keys, IDs, phones, cards, IPs, hosts, home paths, long random strings), keyword context (`password: …`), the words you list, and the optional name model. | A value the detector misses is sent as is. |
+| Masking | The same value gets the same placeholder throughout the request. | — |
+| Leak scan | A value detected in this request that is still anywhere in it after masking blocks the request. | 422; the request is not sent. |
+| Memory | Values detected in earlier requests of the same client are masked for 24 hours where they stand alone. Best effort: never refuses a request. | A remembered value glued to other text is sent as is. |
+| Restore | Placeholders in reply text are restored; inside a URL they stay; in tool-call arguments only the categories `toolRestore` allows are restored. A placeholder the model made up stays as written. | The tool may receive a placeholder instead of a value it needs; allow that category for that tool. |
+
+The proxy forwards your API key unchanged and never stores it. Each step in detail: [technical details §1](docs/DETAILS.md#1-架構), [§6 refusals](docs/DETAILS.md#6-拒絕與錯誤狀態碼), [§7 streaming restore](docs/DETAILS.md#7-串流還原), [§8 memory](docs/DETAILS.md#已知原始值).
+
 ## Optional name model (experimental)
 
 Off by default. Rules alone do not find names. Turn on a small local model ([`Wismut/nym-pii-multilingual-small`](https://huggingface.co/Wismut/nym-pii-multilingual-small), MIT, 108 MB) and it also masks person names, companies, places, and addresses in what **you** write (`⟦NAME_1⟧`, `⟦ORG_1⟧`, `⟦LOC_1⟧`, `⟦ADDR_1⟧`).
