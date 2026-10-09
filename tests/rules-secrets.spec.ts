@@ -28,6 +28,22 @@ const mustMask = [
   'api_key=KEY_1234567890AB',
   'DB_PASSWORD=$DB_PASSWORD_PROD',
   'password: my&pass',
+  // A quote followed by a letter or digit belongs to the value.
+  'password: ab"cd12ef',
+  "password: ab'cd12ef",
+  // A snake_case passphrase is not a protocol field name.
+  'password: blue_horse_battery',
+  'password: tool_horse_battery',
+  // A passphrase built from chat-API words is a value.
+  ...[
+    'data_store', 'web_server', 'file_server', 'user_name', 'read_file', 'use_cache', 'stream_data',
+  ].flatMap(value => [
+    `password: ${value}`, `{"password":"${value}"}`, `password = "${value}"`, `PASSWORD=${value}`,
+    `export DB_PASSWORD=${value}`, `Authorization: ${value}`, `密碼：${value}`,
+  ]),
+  'password: p_k', '{"password":"p_k"}', 'PASSWORD=p_k',
+  // A digit makes a braced value a literal, not a template.
+  'password: {hunter2}',
   'API_KEY=MyToken123',
   'password=Summer2026!',
   'apikey: "Zm9vYmFyMTIzNA"',
@@ -105,6 +121,13 @@ const mustMask = [
   '密碼：hunter2',
   'ssh://alice:s3cr3t@buildbox/repo',
   'hooks.slack.com/services/T0123456789/B0123456789/abcdefghij',
+  // Weak passwords are still passwords.
+  'password: admin',
+  'password: changeme',
+  'DB_PASSWORD=changeme',
+  'password: 123456',
+  'password: Tr0ub4dor&3',
+  '{"password":"xxx123"}',
 ]
 
 // Source and prose a credential rule must leave alone.
@@ -183,6 +206,27 @@ const mustKeep = [
   'password=a.b(x)[',
   'password=a.b(x)<',
   'password=a.b(x){',
+  // Schema words, protocol roles and content types, type names, and masked spellings.
+  ...[
+    'required', 'Optional', 'example', 'placeholder', 'none', 'None', 'text', 'index', 'system', 'user',
+    'assistant', 'tool', 'image', 'messages', 'content', 'str', 'int', 'float', '***', '********', 'xxx', 'XXXXXXXX', '<redacted>',
+    '[REDACTED]', 'your-password', 'your_password', '...',
+    // Template placeholders.
+    '<your secret>', '{password}', '{{ secrets.DB_PW }}', '${{ secrets.PW2 }}', '{{ var1 }}',
+  ].flatMap(value => [
+    `password: ${value}`, `{"password":"${value}"}`, `PASSWORD=${value}`, `Authorization: ${value}`, `密碼：${value}`,
+  ]),
+  // A chat-API field name, in any form and letter case.
+  ...[
+    'max_tokens', 'tool_calls', 'stop_sequences', 'content_block', 'input_text', 'tool_choice',
+    'response_format', 'finish_reason', 'cache_control', 'top_p', 'top_k', 'stream_options',
+    'presence_penalty', 'frequency_penalty', 'logit_bias', 'service_tier', 'safety_identifier',
+    'prompt_cache_key', 'temperature', 'metadata', 'logprobs', 'reasoning', 'truncation', 'instructions',
+  ].flatMap(value => [
+    `password: ${value}`, `{"password":"${value}"}`, `password = "${value}"`, `PASSWORD=${value}`,
+    `export DB_PASSWORD=${value.toUpperCase()}`, `Authorization: ${value}`, `密碼：${value}`,
+  ]),
+  'password: ${{ secrets.PW2 }}\njobs:\n  build:\n    env:\n      TOKEN: ${{ secrets.T }}\n      A: ${{ matrix.a }}',
 ]
 
 describe('credential rule', () => {
@@ -203,6 +247,14 @@ describe('credential rule', () => {
     ['password=hunter2}', 'password=⟦KEY_1⟧}'],
     // Under a general key word the value ends at a query-string separator.
     ['token=abc123&x=1', 'token=⟦KEY_1⟧&x=1'],
+    // A quote followed by a letter, digit, or non-ASCII symbol is part of the value; any other closes the enclosing string.
+    ['password: ab"cd12ef', 'password: ⟦KEY_1⟧'],
+    ['password: p@ss"🔑x12', 'password: ⟦KEY_1⟧'],
+    ['password: p@ss"密碼x12', 'password: ⟦KEY_1⟧'],
+    ['"password: hunter2x"，然後', '"password: ⟦KEY_1⟧"，然後'],
+    ['"password: hunter2x"+x', '"password: ⟦KEY_1⟧"+x'],
+    ['"password=hunter2"', '"password=⟦KEY_1⟧"'],
+    ['{"cmd":"login --password hunter2"}', '{"cmd":"login --password ⟦KEY_1⟧"}'],
     ['url?token=abcd1234&next=/home', 'url?token=⟦KEY_1⟧&next=/home'],
     // The webhook URL is the credential; the scheme is not part of it.
     [

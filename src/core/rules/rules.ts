@@ -7,8 +7,9 @@
  * @module redaction-proxy/core/rules/rules
  */
 
-import { afterHighEscape, endsHighEscape, isAlnum, isAsciiPrintable, projectNfkc, shannon, unicodeEscapeForms } from './normalize.ts'
+import { ZERO_WIDTH, afterHighEscape, endsHighEscape, isAlnum, isAsciiPrintable, projectNfkc, shannon, unicodeEscapeForms } from './normalize.ts'
 import type { PushCandidate } from './candidate.ts'
+import { isTaiwanBusinessNumber, isTaiwanNationalId, luhn } from './checksum.ts'
 import { PRIORITY_ENTROPY, PRIORITY_PII, PRIORITY_SECRET, PRIORITY_TERM } from './candidate.ts'
 
 /**
@@ -74,13 +75,27 @@ const PHONE_MOBILE = new RegExp(
 const PHONE_MOBILE_SPLIT = /(?<![A-Za-z0-9-])09([- \u3000])(\d{4})\1\d{4}(?![A-Za-z0-9]|\1\d|-[A-Za-z0-9])/g
 /** A middle group that reads as a year, which makes `09-2026-1005` a date. */
 const PHONE_YEAR = /^(?:19|20)\d\d$/
+/** Characters between a keyword and its value: a colon, a space, a short word such as `is`. */
+export const KEYWORD_GAP = '[^\\n]{0,8}?'
 const PHONE_KEYWORD = new RegExp(
   '(?:電話|电话|手機|手机|傳真|传真|聯絡|联络|phone|tel|fax|mobile)'
-  + '[^\\n]{0,8}?(\\(?(?<!\\d)0\\d{1,2}\\)?[-\\s]{0,2}\\d{3,4}[-\\s]?\\d{3,4}(?!\\d))',
+  + `${KEYWORD_GAP}(\\(?(?<!\\d)0\\d{1,2}\\)?[-\\s]{0,2}\\d{3,4}[-\\s]?\\d{3,4}(?!\\d))`,
   'gi',
 )
-const TAX_ID = /(?:統一編號|統編|營利事業|tax[ _-]?id|taxid|vat)[^\n]{0,8}?((?<!\d)(?:\d{8}(?!\d)|\d{1,7}[- \u3000]\d{1,7}(?!\d|[- \u3000]\d)))/gi
+const TAX_ID = new RegExp(
+  `(?:統一編號|統編|營利事業|tax[ _-]?id|taxid|vat)${KEYWORD_GAP}`
+  + '((?<!\\d)(?:\\d{8}(?!\\d)|\\d{1,7}[- \\u3000]\\d{1,7}(?!\\d|[- \\u3000]\\d)))',
+  'gi',
+)
 const CARD_RUN = /(?<!\d)\d{4,}(?:[ -]\d{3,})*/g
+/**
+ * Digit groups of any length joined by a space, a `-` or `.` with at most one
+ * space on each side, or a line break with its indentation: a card number as
+ * a person regroups, dots, mixes, or wraps it.
+ */
+const CARD_SPELLED_RUN = /(?<!\d)\d+(?:(?: ?[-.] ?| |[ \t]*\r?\n[ \t]*)\d+)+/g
+/** Most digit groups a regrouped card is read from; `hexdump` rows and IPv4 pairs have eight. */
+const CARD_SPELLED_GROUPS_MAX = 6
 const PRIVATE_IP = new RegExp(
   '(?<![\\d.])(?:10\\.\\d{1,3}\\.\\d{1,3}\\.\\d{1,3}'
   + '|192\\.168\\.\\d{1,3}\\.\\d{1,3}'
@@ -97,15 +112,38 @@ const PRIVATE_IP = new RegExp(
 const PHONE_MOBILE_AFTER_ESCAPE = afterHighEscape(PHONE_MOBILE, '(?<![0-9A-Za-z])')
 const TAX_ID_AFTER_ESCAPE = afterHighEscape(TAX_ID, '(?<!\\d)')
 const CARD_RUN_AFTER_ESCAPE = afterHighEscape(CARD_RUN, '(?<!\\d)')
+const CARD_SPELLED_RUN_AFTER_ESCAPE = afterHighEscape(CARD_SPELLED_RUN, '(?<!\\d)')
 const PHONE_MOBILE_SPLIT_AFTER_ESCAPE = afterHighEscape(PHONE_MOBILE_SPLIT, '(?<![A-Za-z0-9-])')
 const PHONE_KEYWORD_AFTER_ESCAPE = afterHighEscape(PHONE_KEYWORD, '(?<!\\d)')
 const PRIVATE_IP_AFTER_ESCAPE = afterHighEscape(PRIVATE_IP, '(?<![\\d.])')
+/**
+ * Group lengths of a printed card number, joined by commas: fours with an
+ * optional short last group, or the 4-6-5 and 4-6-4 groupings of American
+ * Express and Diners Club.
+ */
+const CARD_GROUPING = /^4(?:,4){2,3}(?:,[34])?$|^4,6,[45]$/
+/** A character that glues a digit run to a longer token: a letter or `_`. */
+const TOKEN_CHAR = /[A-Za-z_]/
+/** The two characters before a digit run that opens a revision range (`a1b2..`) or is the fraction of a decimal number. */
+const RANGE_OR_DECIMAL_POINT = /^[.\d]\.$/
 const HOST_SUFFIX = /\.(?:local|lan|internal)(?![a-z0-9-])/gi
 const HOST_CHAR = /[A-Za-z0-9.-]/
 const HOST_FIRST_WORD = /^[A-Za-z0-9_$]+/
 const HEX_RUN = /\b[0-9a-fA-F]{32,}\b/g
 const BASE64_RUN = /[A-Za-z0-9+/]{32,}={0,2}/g
 const SUBRESOURCE_PREFIX = /sha\d{3}-$/
+/** Hexadecimal lengths of SHA-1 and SHA-256 digests, which git object ids and content hashes have. */
+const DIGEST_HEX_LENGTHS = [40, 64]
+/** Hexadecimal length of a SHA-1 commit id, which pins a dependency after `@` (`actions/checkout@<sha>`). */
+const GIT_COMMIT_HEX_LENGTH = 40
+/**
+ * Line text before a value keyed by a file name, as translation catalogs
+ * record source hashes: `README.md: `, `  docs/x.zh.md: "`, and the same
+ * line behind a diff's `+` or `-` marker.
+ */
+const FILE_NAME_KEY = /(?:^[+-]?|\s)[\w./-]*\.[A-Za-z0-9]{1,8}["']?\s*:\s*["']?$/
+/** How far back on the line the file-name key is looked for. */
+const FILE_NAME_KEY_MAX = 128
 
 const SHA_CONTEXT = /commit|sha|hash|rev|digest|checksum|blob|tree|oid|integrity|etag/i
 const SECRET_CONTEXT = /secret|token|password|api[_-]?key|authorization|credential/i
@@ -113,57 +151,18 @@ const SECRET_CONTEXT = /secret|token|password|api[_-]?key|authorization|credenti
 /** Identifiers whose member access reads as code rather than a host name. */
 const HOST_CODE_ROOTS = new Set(['this', 'ctx', 'self', 'globalThis', 'window', 'req', 'res', 'opts', 'config'])
 
-/** Weights of the Taiwan business-number checksum. */
-const TAX_ID_WEIGHTS = [1, 2, 1, 2, 1, 2, 4, 1]
 /** Separators a configured term's parts may be joined or split by. */
 const TERM_SEPARATOR = '[\\s\\-_‧・·]'
 const TERM_SEPARATORS = /[\s\-_‧・·]+/g
 /** One CJK character, which is a part of its own: CJK text has no word spaces. */
 const TERM_CJK = /[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}\p{Script=Hangul}]/u
 
-/** Letter values of the Taiwan identification-number checksum. */
-const TW_LETTER_VALUES = 'ABCDEFGHJKLMNPQRSTUVXYWZIO'
-
 /** One configured literal term and the category it is masked under. */
 export interface ConfiguredTerm {
   /** The literal text, matched case-insensitively on the NFKC projection. */
   value: string
-  /** Placeholder category, `TERM` or `PROJECT`. */
+  /** Placeholder category, such as `TERM` or `PROJECT`. */
   category: string
-}
-
-/**
- * Whether a ten-character candidate passes the Taiwan identification-number
- * checksum. National numbers carry `1` or `2`; resident certificate numbers
- * issued since 2021 carry `8` or `9`.
- * @param candidate - one upper-case letter, `1`, `2`, `8`, or `9`, and eight digits.
- * @returns whether the weighted checksum is divisible by ten.
- */
-export function isTaiwanNationalId(candidate: string): boolean {
-  if (!/^[A-Z][1289]\d{8}$/.test(candidate)) return false
-  const code = TW_LETTER_VALUES.indexOf(candidate.charAt(0)) + 10
-  const digits = `${Math.floor(code / 10)}${code % 10}${candidate.slice(1)}`
-  const weights = [1, 9, 8, 7, 6, 5, 4, 3, 2, 1, 1]
-  let sum = 0
-  for (const [i, weight] of weights.entries()) sum += (digits.charCodeAt(i) - 48) * weight
-  return sum % 10 === 0
-}
-
-/**
- * Whether eight digits pass the Taiwan business-number (統一編號) checksum:
- * the digit sums of the weighted products total a multiple of 5, or one less
- * than a multiple of 5 when the seventh digit is 7.
- * @param digits - eight decimal digits.
- * @returns whether the checksum holds.
- */
-export function isTaiwanBusinessNumber(digits: string): boolean {
-  if (!/^\d{8}$/.test(digits)) return false
-  let sum = 0
-  for (const [i, weight] of TAX_ID_WEIGHTS.entries()) {
-    const product = (digits.charCodeAt(i) - 48) * weight
-    sum += Math.floor(product / 10) + (product % 10)
-  }
-  return sum % 5 === 0 || (digits.charAt(6) === '7' && (sum + 1) % 5 === 0)
 }
 
 /**
@@ -195,7 +194,8 @@ function termParts(needle: string): string[] {
 
 /**
  * The pattern one configured term matches on a lower-cased projection: its
- * parts in order, with at most one separator between two parts.
+ * parts in order, with any run of separators, line breaks and indentation
+ * included, or none between two parts.
  * @param value - the configured term.
  * @returns a global pattern, or `undefined` for a term of one part.
  */
@@ -203,39 +203,7 @@ function termPattern(value: string): RegExp | undefined {
   const parts = termParts(projectNfkc(value).lower)
   if (parts.length < 2) return undefined
   const escape = (part: string): string => part.replaceAll(/[.*+?^${}()|[\]\\/]/g, '\\$&')
-  return new RegExp(parts.map(escape).join(`${TERM_SEPARATOR}?`), 'gu')
-}
-
-/**
- * Identity key of a configured term's spelling: its projection, lower-cased,
- * with every separator removed, so `星河計畫`, `星河 計畫`, and `星河-計畫`
- * share one placeholder.
- * @param value - one spelling.
- * @param category - `TERM` or `PROJECT`.
- * @returns the key, prefixed so it never equals another category's raw value.
- */
-export function termIdentityKey(value: string, category: string): string {
-  return `\u0000${category}\u0000${projectNfkc(value).lower.replaceAll(TERM_SEPARATORS, '')}`
-}
-
-/**
- * Whether a digit run passes the Luhn checksum.
- * @param digits - decimal digits only.
- * @returns whether the checksum is divisible by ten.
- */
-function luhn(digits: string): boolean {
-  let sum = 0
-  let double = false
-  for (let i = digits.length - 1; i >= 0; i -= 1) {
-    let n = digits.charCodeAt(i) - 48
-    if (double) {
-      n *= 2
-      if (n > 9) n -= 9
-    }
-    sum += n
-    double = !double
-  }
-  return sum % 10 === 0
+  return new RegExp(parts.map(escape).join(`${TERM_SEPARATOR}*`), 'gu')
 }
 
 /**
@@ -255,7 +223,7 @@ function validCardPrefix(digits: string): boolean {
  * @param text - text to scan.
  * @param handler - called once per match in source order.
  */
-function runAll(pattern: RegExp, text: string, handler: (match: RegExpExecArray) => void): void {
+export function runAll(pattern: RegExp, text: string, handler: (match: RegExpExecArray) => void): void {
   pattern.lastIndex = 0
   for (let match = pattern.exec(text); match !== null; match = pattern.exec(text)) handler(match)
 }
@@ -435,6 +403,82 @@ export function collectCardCandidates(text: string, push: PushCandidate, afterEs
 }
 
 /**
+ * Collect payment card numbers only in the forms cards are printed in, for the
+ * opt-in `card-strict` rule: one whole digit group of 13 to 19 digits (after a
+ * single leading `0` when the run is one group), or whole groups in a card
+ * grouping joined by one separator that no further group with that separator
+ * extends. A mask therefore never ends inside a digit group, and
+ * `8000 5259-6589 0921-9030` or a numeric UUID is not cut into a card. A run
+ * glued to a letter or `_`, opened by a `..` revision range, or the fraction of
+ * a decimal number (`1432.4982166290283`) is not read. A whole run of two or
+ * more groups of at least two digits in any other grouping, joined by spaces,
+ * `-`, or one line break, or by `.` alone in three to six groups, is read as one
+ * number: `41 1111 111 1111 111`, `4111.1111.1111.1111`, `4111 1111-1111 111`,
+ * and a card wrapped after its second group. A run of more than six groups, or
+ * one mixing `.` with another separator, is not read.
+ * @param text - text to scan.
+ * @param push - candidate sink.
+ * @param afterEscape - whether `text` holds a high escape, which then also counts as a left boundary.
+ */
+export function collectStrictCardCandidates(text: string, push: PushCandidate, afterEscape = false): void {
+  const pushCard = (digits: string, start: number, end: number): void => {
+    if (digits.length < 13 || digits.length > 19 || !validCardPrefix(digits) || !luhn(digits)) return
+    push(start, end, 'CARD', PRIORITY_PII)
+  }
+  for (const pattern of afterEscape ? [CARD_RUN, CARD_RUN_AFTER_ESCAPE] : [CARD_RUN]) {
+    runAll(pattern, text, (match) => {
+      const end = match.index + match[0].length
+      if (TOKEN_CHAR.test(text.charAt(match.index - 1)) && !endsHighEscape(text, match.index)) return
+      if (TOKEN_CHAR.test(text.charAt(end)) || RANGE_OR_DECIMAL_POINT.test(text.slice(match.index - 2, match.index))) return
+      // Each group with its offset in `text` and the separator before it (`''` for the first).
+      const groups = [...match[0].matchAll(/\d+/g)].map(group => ({
+        digits: group[0],
+        start: match.index + group.index,
+        separator: match[0].charAt(group.index - 1),
+      }))
+      for (const group of groups) pushCard(group.digits, group.start, group.start + group.digits.length)
+      if (groups.length === 1 && match[0].startsWith('0')) pushCard(match[0].slice(1), match.index + 1, end)
+      // Each maximal chain of groups joined by one separator is one printed number or none;
+      // neighbouring chains share the group between them.
+      let chain: typeof groups = []
+      let separator = ''
+      const pushChain = (): void => {
+        const [head] = chain
+        const tail = chain.at(-1)
+        if (chain.length < 2 || head === undefined || tail === undefined) return
+        if (!CARD_GROUPING.test(chain.map(group => group.digits.length).join(','))) return
+        pushCard(chain.map(group => group.digits).join(''), head.start, tail.start + tail.digits.length)
+      }
+      for (const group of groups) {
+        if (chain.length > 1 && group.separator !== separator) {
+          pushChain()
+          chain = chain.slice(-1)
+        }
+        if (chain.length === 1) separator = group.separator
+        chain.push(group)
+      }
+      pushChain()
+    })
+  }
+  // A whole run in any other grouping is one card or none, so no mask ends inside it.
+  for (const pattern of afterEscape ? [CARD_SPELLED_RUN, CARD_SPELLED_RUN_AFTER_ESCAPE] : [CARD_SPELLED_RUN]) {
+    runAll(pattern, text, (match) => {
+      const end = match.index + match[0].length
+      if (TOKEN_CHAR.test(text.charAt(match.index - 1)) && !endsHighEscape(text, match.index)) return
+      if (TOKEN_CHAR.test(text.charAt(end)) || RANGE_OR_DECIMAL_POINT.test(text.slice(match.index - 2, match.index))) return
+      const groups = match[0].match(/\d+/g) ?? []
+      const separators = match[0].split(/\d+/).join('')
+      // A one-digit group is a list item or a version part; two dotted groups are a decimal number.
+      if (groups.some(group => group.length < 2) || separators.split('\n').length > 2) return
+      // Dots mixed with other separators are coordinates, IPs, money, or dates; more than six groups are a byte dump.
+      if (separators.includes('.') && (groups.length < 3 || /[^.]/.test(separators))) return
+      if (groups.length > CARD_SPELLED_GROUPS_MAX) return
+      pushCard(groups.join(''), match.index, end)
+    })
+  }
+}
+
+/**
  * Collect private addresses, and internal host names anchored on their suffix.
  * @param text - text to scan.
  * @param rules - which of `ip` and `host` are enabled.
@@ -458,9 +502,25 @@ export function collectNetworkCandidates(
       })
     }
   }
-  if (!rules.has('host')) return
+  if (rules.has('host')) collectHostCandidates(text, HOST_SUFFIX, push, originalAt)
+}
+
+/**
+ * Collect host names anchored on a private suffix: the name is walked back
+ * from the suffix match and ends where the match ends.
+ * @param text - text to scan.
+ * @param suffix - global pattern matching a suffix from its leading `.`, plus any labels after it that belong to the name.
+ * @param push - candidate sink.
+ * @param originalAt - the submitted character an offset of `text` came from; `(` right after the name marks a call.
+ */
+export function collectHostCandidates(
+  text: string,
+  suffix: RegExp,
+  push: PushCandidate,
+  originalAt: (offset: number) => string = offset => text.charAt(offset),
+): void {
   // Anchor on the suffix and walk back, so a long dotted run stays linear.
-  runAll(HOST_SUFFIX, text, (match) => {
+  runAll(suffix, text, (match) => {
     const floor = Math.max(0, match.index - HOST_NAME_MAX)
     let start = match.index
     while (start > floor && HOST_CHAR.test(text.charAt(start - 1))) start -= 1
@@ -475,12 +535,27 @@ export function collectNetworkCandidates(
 }
 
 /**
+ * Whether the value at an offset is keyed by a file name on its line.
+ * @param text - text holding the value.
+ * @param at - the value's start offset.
+ * @returns whether the line text before the value ends in a file-name key.
+ */
+function isFileNameKeyed(text: string, at: number): boolean {
+  const lineStart = Math.max(text.lastIndexOf('\n', at - 1) + 1, at - FILE_NAME_KEY_MAX)
+  return FILE_NAME_KEY.test(text.slice(lineStart, at))
+}
+
+/**
  * Collect high-entropy runs. A run beside credential words is a credential; a
  * 32, 40, or 64 digit hexadecimal run beside revision words is a digest.
  * @param text - text to scan.
  * @param push - candidate sink.
+ * @param fileDigests - whether a 40 or 64 digit hexadecimal run keyed by a file
+ *   name (`README.md: <sha>`, as translation catalogs record source hashes),
+ *   and a 40 digit run right after `@` (`actions/checkout@<sha>`), is a digest
+ *   too; the opt-in `entropy-strict` rule sets it.
  */
-export function collectEntropyCandidates(text: string, push: PushCandidate): void {
+export function collectEntropyCandidates(text: string, push: PushCandidate, fileDigests = false): void {
   const contextAround = (start: number, end: number): string =>
     text.slice(Math.max(0, start - 32), start) + text.slice(end, Math.min(text.length, end + 32))
 
@@ -493,6 +568,8 @@ export function collectEntropyCandidates(text: string, push: PushCandidate): voi
       return
     }
     if ([32, 40, 64].includes(match[0].length) && SHA_CONTEXT.test(context)) return
+    if (fileDigests && DIGEST_HEX_LENGTHS.includes(match[0].length) && isFileNameKeyed(text, match.index)) return
+    if (fileDigests && match[0].length === GIT_COMMIT_HEX_LENGTH && text.charAt(match.index - 1) === '@') return
     push(match.index, end, 'ENTROPY', PRIORITY_ENTROPY)
   })
 
@@ -517,7 +594,12 @@ export function collectEntropyCandidates(text: string, push: PushCandidate): voi
 /**
  * Collect configured literal terms. Terms match on the NFKC projection so a
  * full-width or zero-width spelling still matches, and a non-ASCII term also
- * matches its `\uXXXX` escape spelling.
+ * matches its `\uXXXX` escape spelling. A term edge that is an ASCII letter or
+ * digit matches only where the projection's neighbouring character is not one
+ * (see {@link hasFreeEdges}), or where the text itself shows a whole word (see
+ * {@link standsAlone}), so `Lin` skips `online` and `Linux` but matches in
+ * `Lin™` and `Lin\u200Bux`, whose projections read `lintm` and `linux`; a CJK
+ * edge matches inside text. The escape spelling matches without this check.
  * @param text - text to scan.
  * @param terms - configured terms with their categories.
  * @param push - candidate sink.
@@ -533,12 +615,19 @@ export function collectTermCandidates(text: string, terms: readonly ConfiguredTe
       const needle = projectNfkc(term.value).lower
       for (let at = projection.lower.indexOf(needle); at >= 0; at = projection.lower.indexOf(needle, at + 1)) {
         // oxlint-disable-next-line typescript/no-non-null-assertion -- both offsets are inside the projection.
-        push(projection.startMap[at]!, projection.endMap[at + needle.length - 1]!, term.category, PRIORITY_TERM)
+        const rawStart = projection.startMap[at]!, rawEnd = projection.endMap[at + needle.length - 1]!
+        if (hasFreeEdges(projection.lower, at, at + needle.length, needle) || standsAlone(text, rawStart, rawEnd)) {
+          push(rawStart, rawEnd, term.category, PRIORITY_TERM)
+        }
       }
     } else {
       for (let match = pattern.exec(projection.lower); match !== null; match = pattern.exec(projection.lower)) {
+        const end = match.index + match[0].length
         // oxlint-disable-next-line typescript/no-non-null-assertion -- both offsets are inside the projection.
-        push(projection.startMap[match.index]!, projection.endMap[match.index + match[0].length - 1]!, term.category, PRIORITY_TERM)
+        const rawStart = projection.startMap[match.index]!, rawEnd = projection.endMap[end - 1]!
+        if (hasFreeEdges(projection.lower, match.index, end, match[0]) || standsAlone(text, rawStart, rawEnd)) {
+          push(rawStart, rawEnd, term.category, PRIORITY_TERM)
+        }
         // Overlapping occurrences are found too, as the single-part search finds
         // them. A `u` pattern backs a lastIndex inside a surrogate pair up to the
         // pair's start, so the step is one whole code point.
@@ -571,4 +660,52 @@ export function hasFreeEdges(text: string, start: number, end: number, value: st
   if (isAlnum(value.charAt(0)) && isAlnum(text.charAt(start - 1)) && !endsHighEscape(text, start)) return false
   if (isAlnum(value.charAt(value.length - 1)) && isAlnum(text.charAt(end))) return false
   return true
+}
+
+/** A letter or digit of a script that separates words with spaces. CJK scripts do not. */
+const SPACED_WORD_CHAR = /^(?![\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}\p{Script=Hangul}])[\p{L}\p{N}\p{M}]$/u
+
+/**
+ * Whether an occurrence is a whole word at both ends. An end is cut only when
+ * the occurrence's character there and its neighbour outside are both letters,
+ * digits, or marks of a spaced script, so `Lee` stands alone in `Lee's` but
+ * not in `Leeds` or `Lee𝐝s`, and `鴻遠科技` stands alone anywhere. A combining
+ * mark after zero-width characters is the neighbour after the occurrence, as
+ * the NFKC projection joins it to the occurrence's last letter
+ * (`Orion\u200B\u0301` reads `Orioń`).
+ * @param text - the text holding the occurrence.
+ * @param start - inclusive UTF-16 start.
+ * @param end - exclusive UTF-16 end.
+ * @returns whether neither end cuts a word.
+ */
+export function standsAlone(text: string, start: number, end: number): boolean {
+  const cuts = (inside: string, outside: string): boolean => SPACED_WORD_CHAR.test(inside) && SPACED_WORD_CHAR.test(outside)
+  let after = end
+  while (after < text.length && ZERO_WIDTH.has(text.charCodeAt(after))) after += 1
+  if (after === end || !COMBINING_MARK.test(pointAt(text, after))) after = end
+  return !cuts(pointAt(text, start), pointBefore(text, start)) && !cuts(pointBefore(text, end), pointAt(text, after))
+}
+
+const COMBINING_MARK = /^\p{M}$/u
+
+/**
+ * @param text - any text.
+ * @param at - a UTF-16 offset.
+ * @returns the code point starting at `at`, or `''` at the end.
+ */
+function pointAt(text: string, at: number): string {
+  const code = text.codePointAt(at)
+  return code === undefined ? '' : String.fromCodePoint(code)
+}
+
+/**
+ * @param text - any text.
+ * @param at - a UTF-16 offset.
+ * @returns the code point ending at `at`, or `''` at the start.
+ */
+function pointBefore(text: string, at: number): string {
+  if (at === 0) return ''
+  const low = text.charCodeAt(at - 1)
+  const pair = at >= 2 && low >= 0xdc00 && low <= 0xdfff && text.charCodeAt(at - 2) >= 0xd800 && text.charCodeAt(at - 2) <= 0xdbff
+  return text.slice(pair ? at - 2 : at - 1, at)
 }

@@ -1,0 +1,70 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>redaction-proxy before and after</title>
+<style>
+  :root { --bg: #ffffff; --fg: #1f2328; --muted: #59636e; --line: #d1d9e0; --card: #f6f8fa;
+          --value-bg: #ffebe9; --value-fg: #82071e; --ph-bg: #dafbe1; --ph-fg: #116329; }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--fg);
+         font: 16px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans", Helvetica, Arial, sans-serif; }
+  main { width: 1200px; padding: 32px 36px 28px; }
+  h1 { font-size: 24px; margin: 0 0 4px; }
+  .sub { color: var(--muted); margin: 0 0 24px; }
+  .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 18px 22px; }
+  .card { border: 1px solid var(--line); border-radius: 12px; overflow: hidden; }
+  .card h2 { margin: 0; padding: 10px 16px; font-size: 15px; background: var(--card); border-bottom: 1px solid var(--line); }
+  .card h2 span { color: var(--muted); font-weight: 400; }
+  pre { margin: 0; padding: 14px 16px; font: 15px/1.65 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+        white-space: pre-wrap; overflow-wrap: anywhere; min-height: 140px; }
+  .v { background: var(--value-bg); color: var(--value-fg); border-radius: 4px; padding: 1px 2px; }
+  .p { background: var(--ph-bg); color: var(--ph-fg); border-radius: 4px; padding: 1px 2px; font-weight: 600; }
+  .log { margin-top: 18px; color: var(--muted); font: 14px ui-monospace, SFMono-Regular, Menlo, monospace; }
+  .log b { color: var(--fg); font-weight: 600; }
+</style>
+</head>
+<body>
+<main>
+  <h1>What the cloud sees</h1>
+  <p class="sub">A real streamed request through redaction-proxy to a local fake upstream. All values are fictional.</p>
+  <div class="grid">
+    <div class="card"><h2>1. Your tool sends <span>(request body, as written)</span></h2><pre id="sent"></pre></div>
+    <div class="card"><h2>2. The cloud LLM receives <span>(after the proxy)</span></h2><pre id="upstream"></pre></div>
+    <div class="card"><h2>4. Your tool gets back <span>(restored, streamed)</span></h2><pre id="reply"></pre></div>
+    <div class="card"><h2>3. The cloud LLM replies <span>(with placeholders)</span></h2><pre id="upstreamReply"></pre></div>
+  </div>
+  <p class="log"><b>proxy log</b> &nbsp;<span id="log"></span></p>
+</main>
+<script>
+  // window.CAPTURED is injected by render.mjs from captured.json.
+  const { example } = window.CAPTURED
+  const PH = /⟦[A-Z0-9_]+⟧/g
+  const esc = s => s.replace(/[&<>]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' })[c])
+
+  // Map each placeholder to its original by aligning the masked text with the original.
+  const values = new Map()
+  const literals = example.upstream.split(PH)
+  const ids = example.upstream.match(PH) ?? []
+  let at = literals[0].length
+  ids.forEach((id, i) => {
+    const next = literals[i + 1]
+    const end = i === ids.length - 1 ? example.sent.length - next.length : example.sent.indexOf(next, at)
+    values.set(id, example.sent.slice(at, end))
+    at = end + next.length
+  })
+
+  const markPlaceholders = text => esc(text).replace(PH, m => `<span class="p">${m}</span>`)
+  const markValues = text => {
+    const originals = [...new Set(values.values())].sort((a, b) => b.length - a.length)
+    const parts = text.split(new RegExp(`(${originals.map(v => v.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('|')})`))
+    return parts.map((part, i) => i % 2 ? `<span class="v">${esc(part)}</span>` : esc(part)).join('')
+  }
+  document.getElementById('sent').innerHTML = markValues(example.sent)
+  document.getElementById('upstream').innerHTML = markPlaceholders(example.upstream)
+  document.getElementById('upstreamReply').innerHTML = markPlaceholders(example.upstreamReply)
+  document.getElementById('reply').innerHTML = markValues(example.reply)
+  document.getElementById('log').textContent = example.log
+</script>
+</body>
+</html>

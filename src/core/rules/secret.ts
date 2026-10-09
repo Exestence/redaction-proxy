@@ -33,11 +33,12 @@ const PREFIX_TOKENS_AFTER_ESCAPE = PREFIX_TOKENS.map(pattern => afterHighEscape(
 // A Slack incoming-webhook URL is itself the credential.
 const SLACK_WEBHOOK = /hooks\.slack\.com\/services\/[A-Za-z0-9][A-Za-z0-9/_-]{9,120}/g
 const BEARER = /(?<![a-z0-9])bearer[ \t]+([a-z0-9._~+/=-]{8,256})/gi
-const AUTHORIZATION = /(?<![a-z0-9])authorization[ \t]*[:=][ \t]*([^\r\n]{4,256})/gi
+const AUTHORIZATION = /(?<![a-z0-9])authorization[ \t]*[:=][ \t]*([^\s][^\r\n]{3,255})/gi
 const COOKIE = /^[ \t]*(?:set-)?cookie[ \t]*:[ \t]*([^\r\n]{1,256})/gim
 const COOKIE_PAIR = /^[^=\s;]+=[^;]+/
-/** Credential words that do not survive the Latin identifier scan. */
-const CJK_SECRET = /(?:密碼|密码|口令|金鑰|金钥|密鑰|密钥|憑證|凭证|權杖|权杖|令牌)[ \t]*[:=][ \t]*/g
+/** Credential words that do not survive the Latin identifier scan, as pattern alternatives. */
+export const CJK_SECRET_WORDS = '密碼|密码|口令|金鑰|金钥|密鑰|密钥|憑證|凭证|權杖|权杖|令牌'
+const CJK_SECRET = new RegExp(`(?:${CJK_SECRET_WORDS})[ \\t]*[:=][ \\t]*`, 'g')
 // Anchored on `://`: a greedy scheme run followed by a required `:` rescans
 // every start position of a text that has no colon at all.
 const URL_AUTHORITY = /:\/\//g
@@ -51,7 +52,25 @@ const SECRET_KEYWORD = new RegExp([
 
 const IDENTIFIER_CHAR = /[A-Za-z0-9_.-]/
 const UPPER_SNAKE = /^[A-Z][A-Z0-9_]*$/
-const ENV_LINE_PREFIX = /^[ \t]*(?:export[ \t]+)?$/
+
+/**
+ * Whether only blanks and an optional `export ` stand between the start of
+ * the line and `at`, as in an env file. It reads back over that run only, not
+ * to the previous newline, so a long line of keys stays linear.
+ * @param text - the whole text.
+ * @param at - start of the key.
+ * @returns whether the key opens an env line.
+ */
+function startsEnvLine(text: string, at: number): boolean {
+  const blank = (i: number): boolean => text[i] === ' ' || text[i] === '\t'
+  let i = at
+  while (i > 0 && blank(i - 1)) i -= 1
+  if (i < at && i >= 6 && text.startsWith('export', i - 6)) {
+    i -= 6
+    while (i > 0 && blank(i - 1)) i -= 1
+  }
+  return i === 0 || text[i - 1] === '\n'
+}
 
 const STRONG_KEYS = new Set([
   'apikey', 'clientsecret', 'refreshtoken', 'accesstoken', 'authtoken', 'privatekey',
@@ -77,7 +96,7 @@ const UPPER_NAME_WORDS = new Set(['key', 'token', 'secret'])
 const TYPE_WORDS = new Set([
   'string', 'number', 'boolean', 'any', 'unknown', 'never', 'void', 'null', 'undefined',
   'object', 'symbol', 'bigint', 'true', 'false', 'Buffer', 'Date', 'RegExp', 'Promise',
-  'Error', 'Array', 'Map', 'Set', 'WeakMap', 'WeakSet',
+  'Error', 'Array', 'Map', 'Set', 'WeakMap', 'WeakSet', 'str', 'int', 'float', 'bool', 'bytes',
 ])
 
 const CODE_ROOTS = new Set([
@@ -107,6 +126,84 @@ const RESERVED_VALUE_WORDS = new Set([
   'buffer', 'stream', 'handler', 'callback', 'next', 'done', 'name', 'url', 'path',
   'file', 'entry', 'entries', 'item', 'items', 'record', 'schema', 'state',
 ])
+
+/**
+ * Words a credential field holds in a schema, a form, or an example rather
+ * than a credential: schema words, chat-protocol field names, roles and
+ * content types, and masked spellings. A protocol word bound as a credential
+ * would also match the field names, `role`, and `type` of every later
+ * request. Weak real passwords such as `admin` and `changeme` are not here.
+ */
+const PLACEHOLDER_VALUE_WORDS = new Set([
+  'required', 'optional', 'example', 'placeholder', 'redacted', 'masked', 'hidden', 'none', 'nil',
+  'text', 'index', 'system', 'user', 'assistant', 'developer', 'tool', 'tools', 'image', 'messages',
+  'content', 'role', 'model',
+])
+
+/**
+ * Words chat-API field names are built from: `max_tokens`, `tool_calls`,
+ * `stop_sequences`, `content_block`, `finish_reason`. They are also the words
+ * of real passwords such as `data_store` and `web_server`, so they decide only
+ * what {@link isProtocolFieldName} reports, not what is masked.
+ */
+const PROTOCOL_FIELD_WORDS = new Set([
+  'max', 'min', 'tokens', 'token', 'calls', 'call', 'choice', 'choices', 'stop', 'sequence', 'sequences',
+  'block', 'blocks', 'delta', 'input', 'output', 'response', 'request', 'format', 'finish', 'reason',
+  'completion', 'completions', 'prompt', 'top', 'p', 'k', 'logprobs', 'parallel', 'frequency', 'presence',
+  'penalty', 'seed', 'stream', 'options', 'usage', 'cache', 'control', 'creation', 'read', 'id', 'type',
+  'url', 'function', 'arguments', 'name', 'message', 'json', 'schema', 'object', 'thinking', 'budget',
+  'reasoning', 'effort', 'encrypted', 'signature', 'metadata', 'previous', 'media', 'mime', 'source',
+  'data', 'file', 'audio', 'refusal', 'result', 'use', 'server', 'search', 'web', 'temperature',
+  'document', 'citations', 'annotations', 'item', 'items', 'store', 'instructions', 'detail',
+])
+
+/**
+ * Request and response field names of the OpenAI Chat Completions and
+ * Responses APIs and the Anthropic Messages API, such as `password: top_p`.
+ * Bound as a credential, one would also flag the request's own JSON key of that
+ * name and refuse the request, so such a value is never masked, quoted, on a
+ * `.env` line, or bare, in any letter case.
+ */
+const PROTOCOL_FIELD_NAMES = new Set([
+  // Request fields.
+  'audio', 'background', 'container', 'context_management', 'conversation', 'frequency_penalty',
+  'function_call', 'functions', 'include', 'input', 'instructions', 'logit_bias', 'logprobs',
+  'max_completion_tokens', 'max_output_tokens', 'max_tokens', 'max_tool_calls', 'mcp_servers', 'messages',
+  'metadata', 'modalities', 'model', 'n', 'parallel_tool_calls', 'prediction', 'presence_penalty',
+  'previous_response_id', 'prompt', 'prompt_cache_key', 'prompt_cache_retention', 'reasoning',
+  'reasoning_effort', 'response_format', 'safety_identifier', 'seed', 'service_tier', 'stop',
+  'stop_sequences', 'store', 'stream', 'stream_options', 'system', 'temperature', 'text', 'thinking',
+  'tool_choice', 'tools', 'top_k', 'top_logprobs', 'top_p', 'truncation', 'user', 'verbosity',
+  'web_search_options',
+  // Fields nested in requests and responses.
+  'budget_tokens', 'cache_control', 'content_block', 'disable_parallel_tool_use', 'finish_reason',
+  'include_usage', 'input_schema', 'input_text', 'is_error', 'json_schema', 'output_text', 'stop_reason',
+  'stop_sequence', 'tool_call_id', 'tool_calls', 'tool_use_id', 'user_id',
+])
+
+/**
+ * Whether a value is a snake_case name built only from chat-API field and
+ * placeholder words, such as `max_tokens` or `data_store`. Such a value is
+ * masked where it is bound but must not be searched for in later requests,
+ * whose JSON keys and enum values spell the same names.
+ * @param value - a bound original.
+ * @returns whether the value reads as a protocol field name.
+ */
+export function isProtocolFieldName(value: string): boolean {
+  return /^[a-z]+(?:_[a-z]+)+$/.test(value) && value.split('_').every(word => PROTOCOL_FIELD_WORDS.has(word) || PLACEHOLDER_VALUE_WORDS.has(word))
+}
+
+/** A masked or placeholder spelling: `***`, `xxx`, `<redacted>`, `[hidden]`, `your-password`. */
+const MASKED_VALUE = /^(?:\*+|x+|<[A-Za-z _-]+>|\[[A-Za-z _-]+\]|your[-_][A-Za-z_-]+)$/i
+
+/**
+ * A template placeholder, which may hold spaces: `<your secret>`, `{password}`,
+ * `${{ secrets.DB_PW }}`. A double-braced expression may hold digits
+ * (`${{ secrets.PW2 }}`); a digit in single braces makes a literal (`{hunter2}`).
+ */
+const TEMPLATE = '(?:<[A-Za-z][A-Za-z_ .-]*>|\\$?\\{[ \\t]*[A-Za-z][A-Za-z_ .-]*\\}|\\$?\\{\\{[ \\t]*[A-Za-z][\\w .-]*\\}\\})'
+const TEMPLATE_VALUE = new RegExp(`^${TEMPLATE}$`)
+const TEMPLATE_PREFIX = new RegExp(`^${TEMPLATE}(?![^\\s,.;:)\\]}&"'\`])`)
 
 /**
  * Words that describe an attribute of a credential rather than the credential:
@@ -243,7 +340,10 @@ export function isCodeShape(raw: string, options: CodeShapeOptions = {}): boolea
   const value = raw.slice(0, trimValueEnd(raw))
   if (value.length === 0) return true
   if (TYPE_WORDS.has(value)) return true
-  if (RESERVED_VALUE_WORDS.has(value.toLowerCase()) && /^[A-Za-z]+$/.test(value)) return true
+  if (/^[A-Za-z]+$/.test(value) && (RESERVED_VALUE_WORDS.has(value.toLowerCase()) || PLACEHOLDER_VALUE_WORDS.has(value.toLowerCase()))) return true
+  if (MASKED_VALUE.test(value)) return true
+  if (TEMPLATE_VALUE.test(value)) return true
+  if (PROTOCOL_FIELD_NAMES.has(value.toLowerCase())) return true
   if (/^\$\{[^{}]*\}$/.test(value)) return true
   // A call with arguments can carry a literal secret, so only an empty argument list counts.
   if (/^[A-Za-z_$][\w$]*(?:\??\.[A-Za-z_$][\w$]*)*\(\s*\)$/.test(value)) return true
@@ -284,8 +384,12 @@ interface ValueRead {
   quoted: boolean
 }
 
+/** A character that keeps an unquoted value going after a quote: an ASCII letter or digit, or a non-ASCII letter, digit, or symbol. */
+const VALUE_AFTER_QUOTE = /^(?:[A-Za-z0-9]|(?![\0-\x7f])[\p{L}\p{N}\p{S}])/u
+
 /**
  * Read the value an assignment gives, starting after the assignment operator.
+ * A template placeholder is read whole, spaces included.
  * @param text - text being scanned.
  * @param from - offset just past the operator.
  * @param weak - whether `&` ends the value, as it does in a query string under a general key.
@@ -308,11 +412,17 @@ function readAssignmentValue(text: string, from: number, weak: boolean): ValueRe
     if (close >= text.length || text.charAt(close) !== quote) return undefined
     return { start: i + 1, end: close, quoted: true }
   }
+  const template = TEMPLATE_PREFIX.exec(text.slice(i, i + VALUE_MAX))
+  if (template !== null) return { start: i, end: i + template[0].length, quoted: false }
   const start = i
   while (i < text.length && i - start < VALUE_MAX) {
     const char = text.charAt(i)
     if (char === ' ' || char === '\t' || char === '\n' || char === '\r') break
-    if (char === '"' || char === "'" || char === '`' || char === ';') break
+    // A quote followed by a letter, digit, or non-ASCII symbol is part of the
+    // value (`ab"cd12ef`, `p@ss"🔑x12`); any other quote closes the string the
+    // assignment sits in.
+    if ((char === '"' || char === "'" || char === '`') && !VALUE_AFTER_QUOTE.test(text.slice(i + 1, i + 3))) break
+    if (char === ';') break
     if (weak && char === '&') break
     i += 1
   }
@@ -431,6 +541,22 @@ export function isKeywordValue(value: string): boolean {
 }
 
 /**
+ * Collect the value a CJK credential word assigns, unless it is shorter than
+ * three characters or reads as code.
+ * @param text - text being scanned.
+ * @param from - offset just past the assignment operator.
+ * @param push - candidate sink.
+ */
+export function collectCjkSecretValue(text: string, from: number, push: PushCandidate): void {
+  const read = readAssignmentValue(text, from, false)
+  if (read === undefined) return
+  const end = read.start + trimValueEnd(text.slice(read.start, read.end))
+  if (end - read.start < 3) return
+  if (isCodeShape(text.slice(read.start, read.end))) return
+  push(read.start, end, 'KEY', PRIORITY_SECRET)
+}
+
+/**
  * Collect every credential candidate of one text.
  * @param text - text to scan.
  * @param push - sink for candidates.
@@ -502,12 +628,7 @@ export function collectSecretCandidates(text: string, push: PushCandidate, after
   })
 
   runAll(CJK_SECRET, (match) => {
-    const read = readAssignmentValue(text, match.index + match[0].length, false)
-    if (read === undefined) return
-    const end = read.start + trimValueEnd(text.slice(read.start, read.end))
-    if (end - read.start < 3) return
-    if (isCodeShape(text.slice(read.start, read.end))) return
-    secret(read.start, end)
+    collectCjkSecretValue(text, match.index + match[0].length, push)
   })
 
   runAll(SECRET_KEYWORD, (match) => {
@@ -560,10 +681,7 @@ export function collectSecretCandidates(text: string, push: PushCandidate, after
     const raw = text.slice(read.start, read.end)
     const end = read.start + trimValueEnd(raw)
     if (end - read.start < 3) return
-    const lineStart = text.lastIndexOf('\n', keyStart) + 1
-    const envLine = assign === '=' &&
-      UPPER_SNAKE.test(keyName) &&
-      ENV_LINE_PREFIX.test(text.slice(lineStart, keyStart))
+    const envLine = assign === '=' && UPPER_SNAKE.test(keyName) && startsEnvLine(text, keyStart)
     if (isCodeShape(raw, { envLine, loose: !strong, quoted: read.quoted })) return
     if (!strong && upper && shannon(text.slice(read.start, end)) < 2.5) return
     secret(read.start, end)
@@ -573,11 +691,15 @@ export function collectSecretCandidates(text: string, push: PushCandidate, after
 /**
  * Whether a detected original is long and distinctive enough to propagate.
  * Without this guard `王` masks inside `國王` and `12345678` inside `123456789`.
+ * A credential propagates at any length: its restored echo in a later request
+ * must be masked again, or the proxy's leak scan refuses every later request.
  * @param value - a detected original.
+ * @param category - the category it is masked under.
  * @returns whether the value may be searched for elsewhere.
  */
-export function isPropagatableValue(value: string): boolean {
+export function isPropagatableValue(value: string, category: string): boolean {
   if (isKeywordValue(value)) return false
+  if (category === 'KEY') return true
   if (isAsciiPrintable(value)) return value.length >= 6
   // oxlint-disable-next-line typescript/no-misused-spread -- the guard counts code points, not graphemes.
   return [...value].length >= 2

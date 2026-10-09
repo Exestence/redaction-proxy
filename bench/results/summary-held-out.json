@@ -1,0 +1,1008 @@
+{
+  "set": "held-out",
+  "source": "Frozen file `heldout-v1.jsonl`, SHA-256 `be2ebb9531001f5e1b06dd3353dd6a9e445ef8b1131424da642de38b4fc3e553`",
+  "english": [
+    {
+      "name": "rules, core default",
+      "byCategory": {
+        "PERSON": {
+          "fullyMasked": 0,
+          "partlyMasked": 0,
+          "untouched": 1
+        },
+        "EMAIL": {
+          "fullyMasked": 1,
+          "partlyMasked": 0,
+          "untouched": 0
+        },
+        "PHONE": {
+          "fullyMasked": 0.02666666666666667,
+          "partlyMasked": 0,
+          "untouched": 0.9733333333333334
+        },
+        "NATIONAL_ID": {
+          "fullyMasked": 0,
+          "partlyMasked": 0,
+          "untouched": 1
+        },
+        "CARD": {
+          "fullyMasked": 1,
+          "partlyMasked": 0,
+          "untouched": 0
+        },
+        "IBAN": {
+          "fullyMasked": 0,
+          "partlyMasked": 0.24242424242424243,
+          "untouched": 0.7575757575757576
+        },
+        "SECRET": {
+          "fullyMasked": 0.704225352112676,
+          "partlyMasked": 0.014084507042253521,
+          "untouched": 0.28169014084507044
+        },
+        "PATH": {
+          "fullyMasked": 0.036036036036036036,
+          "partlyMasked": 0.8738738738738738,
+          "untouched": 0.09009009009009009
+        },
+        "HOST": {
+          "fullyMasked": 0.6950354609929078,
+          "partlyMasked": 0,
+          "untouched": 0.3049645390070922
+        },
+        "ADDRESS": {
+          "fullyMasked": 0,
+          "partlyMasked": 0,
+          "untouched": 1
+        }
+      },
+      "macroAverage": {
+        "fullyMasked": 0.3461963515808286,
+        "partlyMasked": 0.11303826233403698,
+        "untouched": 0.5407653860851344
+      },
+      "regionPrecision": 0.9524456521739131,
+      "hardNegativesMasked": {
+        "user_agent": 0,
+        "version": 0,
+        "request_id": 0.1111111111111111,
+        "public_certificate": 1,
+        "uuid": 0.07692307692307693,
+        "placeholder": 0.19230769230769232,
+        "memory_address": 0,
+        "epoch_timestamp": 0,
+        "phone_shaped_number": 0,
+        "order_number": 0,
+        "tracking_number": 0.05,
+        "etag": 0,
+        "phone_shaped_arithmetic": 0,
+        "isbn": 0,
+        "commit_hash": 0.0945945945945946,
+        "resource_id": 0,
+        "publishable_key": 0,
+        "code_identifier": 0,
+        "cloud_account_id": 0,
+        "masked_value": 0,
+        "key_fingerprint": 0,
+        "public_host": 0.15384615384615385,
+        "integrity_hash": 0,
+        "image_digest": 0,
+        "checksum": 0,
+        "key_id": 0.5,
+        "service_account": 1,
+        "numeric_id": 0,
+        "ipv4_doc": 0,
+        "ipv6_doc": 0,
+        "common_word": 0,
+        "queue_id": 0,
+        "bot_email": 0
+      },
+      "latencyMs": {
+        "p50": 0.05987499999901047,
+        "p95": 0.12774999999965075
+      }
+    },
+    {
+      "name": "rules, proxy default",
+      "byCategory": {
+        "PERSON": {
+          "fullyMasked": 0,
+          "partlyMasked": 0,
+          "untouched": 1
+        },
+        "EMAIL": {
+          "fullyMasked": 1,
+          "partlyMasked": 0,
+          "untouched": 0
+        },
+        "PHONE": {
+          "fullyMasked": 0.04666666666666667,
+          "partlyMasked": 0,
+          "untouched": 0.9533333333333334
+        },
+        "NATIONAL_ID": {
+          "fullyMasked": 0.9259259259259259,
+          "partlyMasked": 0,
+          "untouched": 0.07407407407407407
+        },
+        "CARD": {
+          "fullyMasked": 1,
+          "partlyMasked": 0,
+          "untouched": 0
+        },
+        "IBAN": {
+          "fullyMasked": 1,
+          "partlyMasked": 0,
+          "untouched": 0
+        },
+        "SECRET": {
+          "fullyMasked": 0.704225352112676,
+          "partlyMasked": 0.014084507042253521,
+          "untouched": 0.28169014084507044
+        },
+        "PATH": {
+          "fullyMasked": 0.036036036036036036,
+          "partlyMasked": 0.8738738738738738,
+          "untouched": 0.09009009009009009
+        },
+        "HOST": {
+          "fullyMasked": 0.6950354609929078,
+          "partlyMasked": 0,
+          "untouched": 0.3049645390070922
+        },
+        "ADDRESS": {
+          "fullyMasked": 0,
+          "partlyMasked": 0,
+          "untouched": 1
+        }
+      },
+      "macroAverage": {
+        "fullyMasked": 0.5407889441734212,
+        "partlyMasked": 0.08879583809161273,
+        "untouched": 0.37041521773496605
+      },
+      "regionPrecision": 0.957002457002457,
+      "hardNegativesMasked": {
+        "user_agent": 0,
+        "version": 0,
+        "request_id": 0.1111111111111111,
+        "public_certificate": 1,
+        "uuid": 0.07692307692307693,
+        "placeholder": 0.19230769230769232,
+        "memory_address": 0,
+        "epoch_timestamp": 0,
+        "phone_shaped_number": 0,
+        "order_number": 0,
+        "tracking_number": 0.05,
+        "etag": 0,
+        "phone_shaped_arithmetic": 0,
+        "isbn": 0,
+        "commit_hash": 0.0945945945945946,
+        "resource_id": 0,
+        "publishable_key": 0,
+        "code_identifier": 0,
+        "cloud_account_id": 0,
+        "masked_value": 0,
+        "key_fingerprint": 0,
+        "public_host": 0.15384615384615385,
+        "integrity_hash": 0,
+        "image_digest": 0,
+        "checksum": 0,
+        "key_id": 0.5,
+        "service_account": 1,
+        "numeric_id": 0,
+        "ipv4_doc": 0,
+        "ipv6_doc": 0,
+        "common_word": 0,
+        "queue_id": 0,
+        "bot_email": 0
+      },
+      "latencyMs": {
+        "p50": 0.06704200000240235,
+        "p95": 0.12629199999719276
+      }
+    },
+    {
+      "name": "rules + name model (experimental)",
+      "byCategory": {
+        "PERSON": {
+          "fullyMasked": 0.704225352112676,
+          "partlyMasked": 0.02464788732394366,
+          "untouched": 0.2711267605633803
+        },
+        "EMAIL": {
+          "fullyMasked": 1,
+          "partlyMasked": 0,
+          "untouched": 0
+        },
+        "PHONE": {
+          "fullyMasked": 0.04666666666666667,
+          "partlyMasked": 0,
+          "untouched": 0.9533333333333334
+        },
+        "NATIONAL_ID": {
+          "fullyMasked": 0.9259259259259259,
+          "partlyMasked": 0,
+          "untouched": 0.07407407407407407
+        },
+        "CARD": {
+          "fullyMasked": 1,
+          "partlyMasked": 0,
+          "untouched": 0
+        },
+        "IBAN": {
+          "fullyMasked": 1,
+          "partlyMasked": 0,
+          "untouched": 0
+        },
+        "SECRET": {
+          "fullyMasked": 0.704225352112676,
+          "partlyMasked": 0.023474178403755867,
+          "untouched": 0.27230046948356806
+        },
+        "PATH": {
+          "fullyMasked": 0.036036036036036036,
+          "partlyMasked": 0.8738738738738738,
+          "untouched": 0.09009009009009009
+        },
+        "HOST": {
+          "fullyMasked": 0.6950354609929078,
+          "partlyMasked": 0,
+          "untouched": 0.3049645390070922
+        },
+        "ADDRESS": {
+          "fullyMasked": 0,
+          "partlyMasked": 0.5945945945945946,
+          "untouched": 0.40540540540540543
+        }
+      },
+      "macroAverage": {
+        "fullyMasked": 0.6112114793846888,
+        "partlyMasked": 0.1516590534196168,
+        "untouched": 0.23712946719569433
+      },
+      "regionPrecision": 0.92542101042502,
+      "hardNegativesMasked": {
+        "user_agent": 1,
+        "version": 0.025974025974025976,
+        "request_id": 0.1111111111111111,
+        "public_certificate": 1,
+        "uuid": 0.07692307692307693,
+        "placeholder": 0.19230769230769232,
+        "memory_address": 0,
+        "epoch_timestamp": 0,
+        "phone_shaped_number": 0,
+        "order_number": 0,
+        "tracking_number": 0.05,
+        "etag": 0,
+        "phone_shaped_arithmetic": 0,
+        "isbn": 0,
+        "commit_hash": 0.0945945945945946,
+        "resource_id": 0,
+        "publishable_key": 0,
+        "code_identifier": 0,
+        "cloud_account_id": 0,
+        "masked_value": 0.14285714285714285,
+        "key_fingerprint": 0,
+        "public_host": 0.15384615384615385,
+        "integrity_hash": 0,
+        "image_digest": 0,
+        "checksum": 0,
+        "key_id": 0.5,
+        "service_account": 1,
+        "numeric_id": 0,
+        "ipv4_doc": 0,
+        "ipv6_doc": 0,
+        "common_word": 0,
+        "queue_id": 0,
+        "bot_email": 0
+      },
+      "latencyMs": {
+        "p50": 7.44487499999741,
+        "p95": 21.987499999999272
+      }
+    },
+    {
+      "name": "Presidio 2.2.364 (en_core_web_lg, cutoff 0)",
+      "byCategory": {
+        "PERSON": {
+          "fullyMasked": 0.6302816901408451,
+          "partlyMasked": 0.03873239436619718,
+          "untouched": 0.33098591549295775
+        },
+        "EMAIL": {
+          "fullyMasked": 0.5584415584415584,
+          "partlyMasked": 0.09956709956709957,
+          "untouched": 0.341991341991342
+        },
+        "PHONE": {
+          "fullyMasked": 0.8533333333333334,
+          "partlyMasked": 0.12,
+          "untouched": 0.02666666666666667
+        },
+        "NATIONAL_ID": {
+          "fullyMasked": 0.8518518518518519,
+          "partlyMasked": 0.018518518518518517,
+          "untouched": 0.12962962962962962
+        },
+        "CARD": {
+          "fullyMasked": 0.8571428571428571,
+          "partlyMasked": 0.047619047619047616,
+          "untouched": 0.09523809523809523
+        },
+        "IBAN": {
+          "fullyMasked": 0.9696969696969697,
+          "partlyMasked": 0.030303030303030304,
+          "untouched": 0
+        },
+        "SECRET": {
+          "fullyMasked": 0.09859154929577464,
+          "partlyMasked": 0.0892018779342723,
+          "untouched": 0.812206572769953
+        },
+        "PATH": {
+          "fullyMasked": 0,
+          "partlyMasked": 0.45045045045045046,
+          "untouched": 0.5495495495495496
+        },
+        "HOST": {
+          "fullyMasked": 0.40070921985815605,
+          "partlyMasked": 0.4645390070921986,
+          "untouched": 0.1347517730496454
+        },
+        "ADDRESS": {
+          "fullyMasked": 0,
+          "partlyMasked": 1,
+          "untouched": 0
+        }
+      },
+      "macroAverage": {
+        "fullyMasked": 0.5220049029761346,
+        "partlyMasked": 0.23589314258508143,
+        "untouched": 0.2421019544387839
+      },
+      "regionPrecision": 0.6473053892215569,
+      "hardNegativesMasked": {
+        "user_agent": 1,
+        "version": 0.37662337662337664,
+        "request_id": 0.08333333333333333,
+        "public_certificate": 0.5,
+        "uuid": 0.3269230769230769,
+        "placeholder": 0.2692307692307692,
+        "memory_address": 0.2,
+        "epoch_timestamp": 1,
+        "phone_shaped_number": 1,
+        "order_number": 0.4883720930232558,
+        "tracking_number": 0.3,
+        "etag": 0,
+        "phone_shaped_arithmetic": 0.5,
+        "isbn": 0.6111111111111112,
+        "commit_hash": 0.06756756756756757,
+        "resource_id": 0,
+        "publishable_key": 0,
+        "code_identifier": 0.23076923076923078,
+        "cloud_account_id": 1,
+        "masked_value": 0,
+        "key_fingerprint": 0,
+        "public_host": 1,
+        "integrity_hash": 0,
+        "image_digest": 0,
+        "checksum": 0,
+        "key_id": 0,
+        "service_account": 1,
+        "numeric_id": 0,
+        "ipv4_doc": 1,
+        "ipv6_doc": 1,
+        "common_word": 0,
+        "queue_id": 0.1111111111111111,
+        "bot_email": 1
+      },
+      "latencyMs": {
+        "p50": 8.590166980866343,
+        "p95": 14.044333016499877
+      }
+    },
+    {
+      "name": "Presidio 2.2.364 (en_core_web_lg, cutoff 0.4)",
+      "byCategory": {
+        "PERSON": {
+          "fullyMasked": 0.6302816901408451,
+          "partlyMasked": 0.03873239436619718,
+          "untouched": 0.33098591549295775
+        },
+        "EMAIL": {
+          "fullyMasked": 0.5584415584415584,
+          "partlyMasked": 0.09956709956709957,
+          "untouched": 0.341991341991342
+        },
+        "PHONE": {
+          "fullyMasked": 0.82,
+          "partlyMasked": 0.06,
+          "untouched": 0.12
+        },
+        "NATIONAL_ID": {
+          "fullyMasked": 0.7777777777777778,
+          "partlyMasked": 0,
+          "untouched": 0.2222222222222222
+        },
+        "CARD": {
+          "fullyMasked": 0.8095238095238095,
+          "partlyMasked": 0.047619047619047616,
+          "untouched": 0.14285714285714285
+        },
+        "IBAN": {
+          "fullyMasked": 0.9696969696969697,
+          "partlyMasked": 0.030303030303030304,
+          "untouched": 0
+        },
+        "SECRET": {
+          "fullyMasked": 0.09859154929577464,
+          "partlyMasked": 0.07042253521126761,
+          "untouched": 0.8309859154929577
+        },
+        "PATH": {
+          "fullyMasked": 0,
+          "partlyMasked": 0.45045045045045046,
+          "untouched": 0.5495495495495496
+        },
+        "HOST": {
+          "fullyMasked": 0.40070921985815605,
+          "partlyMasked": 0.46099290780141844,
+          "untouched": 0.13829787234042554
+        },
+        "ADDRESS": {
+          "fullyMasked": 0,
+          "partlyMasked": 1,
+          "untouched": 0
+        }
+      },
+      "macroAverage": {
+        "fullyMasked": 0.5065022574734891,
+        "partlyMasked": 0.2258087465318511,
+        "untouched": 0.26768899599465973
+      },
+      "regionPrecision": 0.6895640686922061,
+      "hardNegativesMasked": {
+        "user_agent": 0.75,
+        "version": 0.2077922077922078,
+        "request_id": 0,
+        "public_certificate": 0.5,
+        "uuid": 0.038461538461538464,
+        "placeholder": 0.2692307692307692,
+        "memory_address": 0.1,
+        "epoch_timestamp": 0.6976744186046512,
+        "phone_shaped_number": 0.6666666666666666,
+        "order_number": 0.20930232558139536,
+        "tracking_number": 0.15,
+        "etag": 0,
+        "phone_shaped_arithmetic": 0.5,
+        "isbn": 0.16666666666666666,
+        "commit_hash": 0.02702702702702703,
+        "resource_id": 0,
+        "publishable_key": 0,
+        "code_identifier": 0.23076923076923078,
+        "cloud_account_id": 1,
+        "masked_value": 0,
+        "key_fingerprint": 0,
+        "public_host": 1,
+        "integrity_hash": 0,
+        "image_digest": 0,
+        "checksum": 0,
+        "key_id": 0,
+        "service_account": 1,
+        "numeric_id": 0,
+        "ipv4_doc": 1,
+        "ipv6_doc": 1,
+        "common_word": 0,
+        "queue_id": 0.1111111111111111,
+        "bot_email": 1
+      },
+      "latencyMs": {
+        "p50": 8.571250014938414,
+        "p95": 13.513082987628877
+      }
+    }
+  ],
+  "allLanguages": [
+    {
+      "name": "rules, core default",
+      "byCategory": {
+        "PERSON": {
+          "fullyMasked": 0,
+          "partlyMasked": 0,
+          "untouched": 1
+        },
+        "EMAIL": {
+          "fullyMasked": 1,
+          "partlyMasked": 0,
+          "untouched": 0
+        },
+        "PHONE": {
+          "fullyMasked": 0.24861111111111112,
+          "partlyMasked": 0,
+          "untouched": 0.7513888888888889
+        },
+        "NATIONAL_ID": {
+          "fullyMasked": 0.1608695652173913,
+          "partlyMasked": 0.004347826086956522,
+          "untouched": 0.8347826086956521
+        },
+        "CARD": {
+          "fullyMasked": 1,
+          "partlyMasked": 0,
+          "untouched": 0
+        },
+        "IBAN": {
+          "fullyMasked": 0,
+          "partlyMasked": 0.14173228346456693,
+          "untouched": 0.8582677165354331
+        },
+        "SECRET": {
+          "fullyMasked": 0.7306163021868787,
+          "partlyMasked": 0.006958250497017893,
+          "untouched": 0.2624254473161034
+        },
+        "PATH": {
+          "fullyMasked": 0.04093567251461988,
+          "partlyMasked": 0.8908382066276803,
+          "untouched": 0.0682261208576998
+        },
+        "HOST": {
+          "fullyMasked": 0.7008613938919342,
+          "partlyMasked": 0,
+          "untouched": 0.29913860610806575
+        },
+        "ADDRESS": {
+          "fullyMasked": 0,
+          "partlyMasked": 0,
+          "untouched": 1
+        }
+      },
+      "macroAverage": {
+        "fullyMasked": 0.3881894044921935,
+        "partlyMasked": 0.10438765666762218,
+        "untouched": 0.5074229388401844
+      },
+      "regionPrecision": 0.9522584333905089,
+      "hardNegativesMasked": {
+        "public_host": 0.11650485436893204,
+        "publishable_key": 0,
+        "uuid": 0.07575757575757576,
+        "commit_hash": 0.12063492063492064,
+        "version": 0,
+        "request_id": 0.13333333333333333,
+        "image_digest": 0,
+        "etag": 0,
+        "epoch_timestamp": 0,
+        "phone_shaped_number": 0,
+        "user_agent": 0,
+        "integrity_hash": 0,
+        "order_number": 0.017045454545454544,
+        "key_id": 0.4444444444444444,
+        "resource_id": 0,
+        "cloud_account_id": 0,
+        "memory_address": 0,
+        "code_identifier": 0,
+        "public_certificate": 1,
+        "masked_value": 0,
+        "key_fingerprint": 0,
+        "phone_shaped_arithmetic": 0,
+        "service_account": 1,
+        "numeric_id": 0,
+        "placeholder": 0.20512820512820512,
+        "tracking_number": 0.023529411764705882,
+        "isbn": 0,
+        "common_word": 0,
+        "ipv4_doc": 0,
+        "ipv6_doc": 0,
+        "checksum": 0,
+        "bot_email": 0,
+        "queue_id": 0
+      },
+      "latencyMs": {
+        "p50": 0.05720799999835435,
+        "p95": 0.1277090000003227
+      }
+    },
+    {
+      "name": "rules, proxy default",
+      "byCategory": {
+        "PERSON": {
+          "fullyMasked": 0,
+          "partlyMasked": 0,
+          "untouched": 1
+        },
+        "EMAIL": {
+          "fullyMasked": 1,
+          "partlyMasked": 0,
+          "untouched": 0
+        },
+        "PHONE": {
+          "fullyMasked": 0.40555555555555556,
+          "partlyMasked": 0,
+          "untouched": 0.5944444444444444
+        },
+        "NATIONAL_ID": {
+          "fullyMasked": 0.7217391304347827,
+          "partlyMasked": 0,
+          "untouched": 0.2782608695652174
+        },
+        "CARD": {
+          "fullyMasked": 1,
+          "partlyMasked": 0,
+          "untouched": 0
+        },
+        "IBAN": {
+          "fullyMasked": 1,
+          "partlyMasked": 0,
+          "untouched": 0
+        },
+        "SECRET": {
+          "fullyMasked": 0.7306163021868787,
+          "partlyMasked": 0.006958250497017893,
+          "untouched": 0.2624254473161034
+        },
+        "PATH": {
+          "fullyMasked": 0.04093567251461988,
+          "partlyMasked": 0.8908382066276803,
+          "untouched": 0.0682261208576998
+        },
+        "HOST": {
+          "fullyMasked": 0.7008613938919342,
+          "partlyMasked": 0,
+          "untouched": 0.29913860610806575
+        },
+        "ADDRESS": {
+          "fullyMasked": 0,
+          "partlyMasked": 0,
+          "untouched": 1
+        }
+      },
+      "macroAverage": {
+        "fullyMasked": 0.5599708054583771,
+        "partlyMasked": 0.08977964571246982,
+        "untouched": 0.3502495488291531
+      },
+      "regionPrecision": 0.9566008316008316,
+      "hardNegativesMasked": {
+        "public_host": 0.11650485436893204,
+        "publishable_key": 0,
+        "uuid": 0.07575757575757576,
+        "commit_hash": 0.12063492063492064,
+        "version": 0,
+        "request_id": 0.13333333333333333,
+        "image_digest": 0,
+        "etag": 0,
+        "epoch_timestamp": 0,
+        "phone_shaped_number": 0,
+        "user_agent": 0,
+        "integrity_hash": 0,
+        "order_number": 0.017045454545454544,
+        "key_id": 0.4444444444444444,
+        "resource_id": 0,
+        "cloud_account_id": 0,
+        "memory_address": 0,
+        "code_identifier": 0,
+        "public_certificate": 1,
+        "masked_value": 0,
+        "key_fingerprint": 0,
+        "phone_shaped_arithmetic": 0,
+        "service_account": 1,
+        "numeric_id": 0,
+        "placeholder": 0.20512820512820512,
+        "tracking_number": 0.023529411764705882,
+        "isbn": 0,
+        "common_word": 0,
+        "ipv4_doc": 0,
+        "ipv6_doc": 0,
+        "checksum": 0,
+        "bot_email": 0,
+        "queue_id": 0
+      },
+      "latencyMs": {
+        "p50": 0.06183299999975134,
+        "p95": 0.12341699999888078
+      }
+    },
+    {
+      "name": "rules + name model (experimental)",
+      "byCategory": {
+        "PERSON": {
+          "fullyMasked": 0.6499189627228525,
+          "partlyMasked": 0.03889789303079417,
+          "untouched": 0.31118314424635335
+        },
+        "EMAIL": {
+          "fullyMasked": 1,
+          "partlyMasked": 0,
+          "untouched": 0
+        },
+        "PHONE": {
+          "fullyMasked": 0.40555555555555556,
+          "partlyMasked": 0,
+          "untouched": 0.5944444444444444
+        },
+        "NATIONAL_ID": {
+          "fullyMasked": 0.7217391304347827,
+          "partlyMasked": 0,
+          "untouched": 0.2782608695652174
+        },
+        "CARD": {
+          "fullyMasked": 1,
+          "partlyMasked": 0,
+          "untouched": 0
+        },
+        "IBAN": {
+          "fullyMasked": 1,
+          "partlyMasked": 0,
+          "untouched": 0
+        },
+        "SECRET": {
+          "fullyMasked": 0.7306163021868787,
+          "partlyMasked": 0.010934393638170975,
+          "untouched": 0.2584493041749503
+        },
+        "PATH": {
+          "fullyMasked": 0.04093567251461988,
+          "partlyMasked": 0.8908382066276803,
+          "untouched": 0.0682261208576998
+        },
+        "HOST": {
+          "fullyMasked": 0.7008613938919342,
+          "partlyMasked": 0,
+          "untouched": 0.29913860610806575
+        },
+        "ADDRESS": {
+          "fullyMasked": 0.17704918032786884,
+          "partlyMasked": 0.3836065573770492,
+          "untouched": 0.43934426229508194
+        }
+      },
+      "macroAverage": {
+        "fullyMasked": 0.6426676197634491,
+        "partlyMasked": 0.13242770506736945,
+        "untouched": 0.22490467516918128
+      },
+      "regionPrecision": 0.9225339366515837,
+      "hardNegativesMasked": {
+        "public_host": 0.11650485436893204,
+        "publishable_key": 0,
+        "uuid": 0.07575757575757576,
+        "commit_hash": 0.12380952380952381,
+        "version": 0.009966777408637873,
+        "request_id": 0.13333333333333333,
+        "image_digest": 0,
+        "etag": 0,
+        "epoch_timestamp": 0,
+        "phone_shaped_number": 0,
+        "user_agent": 0.9090909090909091,
+        "integrity_hash": 0,
+        "order_number": 0.017045454545454544,
+        "key_id": 0.4444444444444444,
+        "resource_id": 0,
+        "cloud_account_id": 0,
+        "memory_address": 0,
+        "code_identifier": 0,
+        "public_certificate": 1,
+        "masked_value": 0.12195121951219512,
+        "key_fingerprint": 0,
+        "phone_shaped_arithmetic": 0,
+        "service_account": 1,
+        "numeric_id": 0,
+        "placeholder": 0.20512820512820512,
+        "tracking_number": 0.023529411764705882,
+        "isbn": 0.013333333333333334,
+        "common_word": 0.13043478260869565,
+        "ipv4_doc": 0,
+        "ipv6_doc": 0,
+        "checksum": 0,
+        "bot_email": 0,
+        "queue_id": 0
+      },
+      "latencyMs": {
+        "p50": 6.992582999999286,
+        "p95": 21.76408299999821
+      }
+    },
+    {
+      "name": "Presidio 2.2.364 (en_core_web_lg, cutoff 0)",
+      "byCategory": {
+        "PERSON": {
+          "fullyMasked": 0.2252836304700162,
+          "partlyMasked": 0.01539708265802269,
+          "untouched": 0.7593192868719612
+        },
+        "EMAIL": {
+          "fullyMasked": 0.5353319057815846,
+          "partlyMasked": 0.11991434689507495,
+          "untouched": 0.34475374732334046
+        },
+        "PHONE": {
+          "fullyMasked": 0.8972222222222223,
+          "partlyMasked": 0.05138888888888889,
+          "untouched": 0.05138888888888889
+        },
+        "NATIONAL_ID": {
+          "fullyMasked": 0.6,
+          "partlyMasked": 0.05652173913043478,
+          "untouched": 0.34347826086956523
+        },
+        "CARD": {
+          "fullyMasked": 0.8691588785046729,
+          "partlyMasked": 0.028037383177570093,
+          "untouched": 0.102803738317757
+        },
+        "IBAN": {
+          "fullyMasked": 0.9921259842519685,
+          "partlyMasked": 0.007874015748031496,
+          "untouched": 0
+        },
+        "SECRET": {
+          "fullyMasked": 0.09741550695825049,
+          "partlyMasked": 0.10039761431411531,
+          "untouched": 0.8021868787276342
+        },
+        "PATH": {
+          "fullyMasked": 0.001949317738791423,
+          "partlyMasked": 0.42105263157894735,
+          "untouched": 0.5769980506822612
+        },
+        "HOST": {
+          "fullyMasked": 0.41268598277212215,
+          "partlyMasked": 0.44400939702427566,
+          "untouched": 0.14330462020360218
+        },
+        "ADDRESS": {
+          "fullyMasked": 0.03278688524590164,
+          "partlyMasked": 0.3901639344262295,
+          "untouched": 0.5770491803278689
+        }
+      },
+      "macroAverage": {
+        "fullyMasked": 0.46639603139455293,
+        "partlyMasked": 0.1634757033841591,
+        "untouched": 0.37012826522128794
+      },
+      "regionPrecision": 0.5871880464155143,
+      "hardNegativesMasked": {
+        "public_host": 1,
+        "publishable_key": 0,
+        "uuid": 0.3409090909090909,
+        "commit_hash": 0.0761904761904762,
+        "version": 0.33222591362126247,
+        "request_id": 0.1,
+        "image_digest": 0.13636363636363635,
+        "etag": 0,
+        "epoch_timestamp": 1,
+        "phone_shaped_number": 1,
+        "user_agent": 1,
+        "integrity_hash": 0,
+        "order_number": 0.5340909090909091,
+        "key_id": 0.05555555555555555,
+        "resource_id": 0,
+        "cloud_account_id": 1,
+        "memory_address": 0.08620689655172414,
+        "code_identifier": 0.27450980392156865,
+        "public_certificate": 0.36363636363636365,
+        "masked_value": 0,
+        "key_fingerprint": 0.10526315789473684,
+        "phone_shaped_arithmetic": 0.55,
+        "service_account": 1,
+        "numeric_id": 0.5,
+        "placeholder": 0.2692307692307692,
+        "tracking_number": 0.3058823529411765,
+        "isbn": 0.7333333333333333,
+        "common_word": 0.043478260869565216,
+        "ipv4_doc": 1,
+        "ipv6_doc": 1,
+        "checksum": 0,
+        "bot_email": 1,
+        "queue_id": 0.07142857142857142
+      },
+      "latencyMs": {
+        "p50": 7.453750004060566,
+        "p95": 13.767166004981846
+      }
+    },
+    {
+      "name": "Presidio 2.2.364 (en_core_web_lg, cutoff 0.4)",
+      "byCategory": {
+        "PERSON": {
+          "fullyMasked": 0.2252836304700162,
+          "partlyMasked": 0.01539708265802269,
+          "untouched": 0.7593192868719612
+        },
+        "EMAIL": {
+          "fullyMasked": 0.5353319057815846,
+          "partlyMasked": 0.11991434689507495,
+          "untouched": 0.34475374732334046
+        },
+        "PHONE": {
+          "fullyMasked": 0.8625,
+          "partlyMasked": 0.03333333333333333,
+          "untouched": 0.10416666666666667
+        },
+        "NATIONAL_ID": {
+          "fullyMasked": 0.28695652173913044,
+          "partlyMasked": 0.0391304347826087,
+          "untouched": 0.6739130434782609
+        },
+        "CARD": {
+          "fullyMasked": 0.8504672897196262,
+          "partlyMasked": 0.028037383177570093,
+          "untouched": 0.12149532710280374
+        },
+        "IBAN": {
+          "fullyMasked": 0.9921259842519685,
+          "partlyMasked": 0.007874015748031496,
+          "untouched": 0
+        },
+        "SECRET": {
+          "fullyMasked": 0.09741550695825049,
+          "partlyMasked": 0.06063618290258449,
+          "untouched": 0.841948310139165
+        },
+        "PATH": {
+          "fullyMasked": 0.001949317738791423,
+          "partlyMasked": 0.42105263157894735,
+          "untouched": 0.5769980506822612
+        },
+        "HOST": {
+          "fullyMasked": 0.41268598277212215,
+          "partlyMasked": 0.44166014095536416,
+          "untouched": 0.1456538762725137
+        },
+        "ADDRESS": {
+          "fullyMasked": 0.03278688524590164,
+          "partlyMasked": 0.3901639344262295,
+          "untouched": 0.5770491803278689
+        }
+      },
+      "macroAverage": {
+        "fullyMasked": 0.42975030246773915,
+        "partlyMasked": 0.15571994864577668,
+        "untouched": 0.41452974888648414
+      },
+      "regionPrecision": 0.6220837043633125,
+      "hardNegativesMasked": {
+        "public_host": 1,
+        "publishable_key": 0,
+        "uuid": 0.07575757575757576,
+        "commit_hash": 0.047619047619047616,
+        "version": 0.19269102990033224,
+        "request_id": 0.06,
+        "image_digest": 0.13636363636363635,
+        "etag": 0,
+        "epoch_timestamp": 0.7,
+        "phone_shaped_number": 0.6086956521739131,
+        "user_agent": 0.7727272727272727,
+        "integrity_hash": 0,
+        "order_number": 0.32954545454545453,
+        "key_id": 0.05555555555555555,
+        "resource_id": 0,
+        "cloud_account_id": 1,
+        "memory_address": 0.05172413793103448,
+        "code_identifier": 0.27450980392156865,
+        "public_certificate": 0.36363636363636365,
+        "masked_value": 0,
+        "key_fingerprint": 0.10526315789473684,
+        "phone_shaped_arithmetic": 0.55,
+        "service_account": 1,
+        "numeric_id": 0.5,
+        "placeholder": 0.2692307692307692,
+        "tracking_number": 0.15294117647058825,
+        "isbn": 0.4,
+        "common_word": 0.043478260869565216,
+        "ipv4_doc": 1,
+        "ipv6_doc": 1,
+        "checksum": 0,
+        "bot_email": 1,
+        "queue_id": 0.03571428571428571
+      },
+      "latencyMs": {
+        "p50": 7.410082966089249,
+        "p95": 13.581582985352725
+      }
+    }
+  ]
+}

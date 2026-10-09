@@ -1,0 +1,147 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>redaction-proxy intro</title>
+<style>
+  * { box-sizing: border-box; }
+  html, body { margin: 0; width: 1280px; height: 720px; overflow: hidden; background: #0d1117; color: #e6edf3;
+               font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans", Helvetica, Arial, sans-serif; }
+  .scene { position: absolute; inset: 0; padding: 56px 64px; opacity: 0; transition: opacity .5s; }
+  .scene.on { opacity: 1; }
+  .title { display: flex; flex-direction: column; justify-content: center; }
+  .title h1 { font-size: 64px; margin: 0 0 18px; letter-spacing: -1px; }
+  .title p { font-size: 30px; color: #9198a1; margin: 0; max-width: 1000px; line-height: 1.4; }
+  .title p b { color: #e6edf3; font-weight: 600; }
+  .term { background: #010409; border: 1px solid #3d444d; border-radius: 12px; height: 430px; overflow: hidden; }
+  .term .bar { height: 34px; border-bottom: 1px solid #3d444d; display: flex; align-items: center; gap: 8px; padding: 0 14px; }
+  .term .bar i { width: 12px; height: 12px; border-radius: 50%; background: #3d444d; display: block; }
+  .term .bar span { margin-left: 10px; color: #9198a1; font-size: 15px; }
+  .term pre { margin: 0; padding: 18px 22px; font: 21px/1.6 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+              white-space: pre-wrap; overflow-wrap: anywhere; }
+  .line { opacity: 0; transition: opacity .35s; display: block; margin-bottom: 10px; }
+  .line.on { opacity: 1; }
+  .dim { opacity: .35 !important; }
+  .label { color: #9198a1; }
+  .prompt { color: #3fb950; }
+  .v { color: #ffa198; background: rgba(248,81,73,.15); border-radius: 4px; }
+  .p { color: #56d364; background: rgba(46,160,67,.18); border-radius: 4px; font-weight: 600; }
+  .log { color: #9198a1; font-size: 16px; }
+  .caption { position: absolute; left: 64px; right: 64px; bottom: 56px; font-size: 32px; line-height: 1.35; min-height: 90px; }
+  .caption .step { color: #58a6ff; font-weight: 700; margin-right: 10px; }
+  .caption .small { display: block; color: #9198a1; font-size: 22px; margin-top: 6px; }
+  .end h1 { font-size: 52px; }
+  .end ul { font-size: 30px; color: #9198a1; line-height: 1.8; padding-left: 28px; margin: 12px 0 0; }
+  .end ul b { color: #e6edf3; }
+  .cursor { display: inline-block; width: 11px; height: 24px; background: #e6edf3; vertical-align: -4px; }
+</style>
+</head>
+<body>
+<section class="scene title" id="s-title">
+  <h1>redaction-proxy</h1>
+  <p>A local proxy that <b>masks personal data and secrets</b> before your prompt reaches a cloud LLM, and <b>puts them back</b> in the reply.</p>
+</section>
+
+<section class="scene" id="s-demo">
+  <div class="term"><div class="bar"><i></i><i></i><i></i><span>terminal: real output of pnpm demo</span></div><pre id="demo"></pre></div>
+  <div class="caption" id="caption"></div>
+</section>
+
+<section class="scene" id="s-example">
+  <div class="term"><div class="bar"><i></i><i></i><i></i><span>a second real request: a deploy log with a key in it</span></div><pre id="example"></pre></div>
+  <div class="caption" id="caption2"></div>
+</section>
+
+<section class="scene title end" id="s-end">
+  <h1>redaction-proxy</h1>
+  <ul>
+    <li><b>Runs on 127.0.0.1</b>, no local model needed</li>
+    <li><b>OpenAI- and Anthropic-compatible</b> clients, streaming included</li>
+    <li><b>Reduces</b> leaks; does not make a chat private</li>
+  </ul>
+</section>
+
+<script>
+  // window.CAPTURED is injected by render.mjs from captured.json.
+  const { demo, example } = window.CAPTURED
+  const PH = /⟦[A-Z0-9_]+⟧/g
+  const esc = s => s.replace(/[&<>]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' })[c])
+  const sleep = ms => new Promise(r => setTimeout(r, ms))
+  const show = id => { document.querySelectorAll('.scene').forEach(s => s.classList.toggle('on', s.id === id)) }
+
+  // Originals are the text in the unmasked line where the masked line has a placeholder.
+  function originals(sent, masked) {
+    const found = []
+    const literals = masked.split(PH)
+    let at = literals[0].length
+    for (let i = 1; i < literals.length; i++) {
+      const end = i === literals.length - 1 ? sent.length - literals[i].length : sent.indexOf(literals[i], at)
+      found.push(sent.slice(at, end))
+      at = end + literals[i].length
+    }
+    return found
+  }
+  const markValues = (text, values) => {
+    if (!values.length) return esc(text)
+    const re = new RegExp(`(${values.map(v => v.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('|')})`)
+    return text.split(re).map((part, i) => i % 2 ? `<span class="v">${esc(part)}</span>` : esc(part)).join('')
+  }
+  const markPlaceholders = text => esc(text).replace(PH, m => `<span class="p">${m}</span>`)
+
+  function line(pre, html, cls = '') {
+    const el = document.createElement('span')
+    el.className = `line ${cls}`
+    el.innerHTML = html
+    pre.appendChild(el)
+    requestAnimationFrame(() => requestAnimationFrame(() => el.classList.add('on')))
+    return el
+  }
+  async function type(pre, text) {
+    const el = line(pre, '<span class="prompt">$</span> <span class="t"></span><span class="cursor"></span>')
+    const t = el.querySelector('.t')
+    for (const ch of text) { t.textContent += ch; await sleep(70) }
+    await sleep(350)
+    el.querySelector('.cursor').remove()
+  }
+  function caption(el, step, text, small) {
+    el.innerHTML = `<span class="step">${step}</span>${text}${small ? `<span class="small">${small}</span>` : ''}`
+  }
+
+  async function run() {
+    show('s-title'); await sleep(3200)
+
+    // Scene 2: pnpm demo, line by line.
+    const [sentLine, logLine, upLine, replyLine] = demo
+    const strip = (l, prefix) => l.slice(prefix.length).trimStart()
+    const sent = strip(sentLine, 'client sends:')
+    const up = strip(upLine, 'upstream received:')
+    const back = strip(replyLine, 'client receives:')
+    const vals = originals(sent, up)
+    const pre = document.getElementById('demo'); const cap = document.getElementById('caption')
+    show('s-demo'); await sleep(600)
+    await type(pre, 'pnpm demo')
+    caption(cap, '1', 'You send a prompt with an email, a national ID and a home path.', 'No API key needed: the demo uses a local fake upstream.')
+    line(pre, `<span class="label">client sends:      </span>${markValues(sent, vals)}`); await sleep(3600)
+    caption(cap, '2', 'The proxy masks them on your machine.', 'The log shows counts only, never the values.')
+    line(pre, esc(logLine), 'log'); await sleep(3000)
+    caption(cap, '3', 'The cloud LLM only sees placeholders.')
+    line(pre, `<span class="label">upstream received: </span>${markPlaceholders(up)}`); await sleep(3600)
+    caption(cap, '4', 'The reply streams back with the real values restored.')
+    line(pre, `<span class="label">client receives:   </span>${markValues(back, vals)}`); await sleep(4200)
+
+    // Scene 3: the deploy-log example.
+    const pre2 = document.getElementById('example'); const cap2 = document.getElementById('caption2')
+    const vals2 = originals(example.sent, example.upstream)
+    show('s-example'); await sleep(600)
+    caption(cap2, '', 'Hosts, private IPs, paths, API keys, emails …')
+    line(pre2, `<span class="label"># you send</span>\n${markValues(example.sent, vals2)}`); await sleep(3200)
+    caption(cap2, '', '… are replaced before the request leaves your machine.')
+    line(pre2, `<span class="label"># the cloud sees</span>\n${markPlaceholders(example.upstream)}`); await sleep(4400)
+
+    show('s-end'); await sleep(4000)
+    window.done = true
+  }
+  run()
+</script>
+</body>
+</html>

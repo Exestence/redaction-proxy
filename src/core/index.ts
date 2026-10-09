@@ -24,16 +24,27 @@ export {
 } from './engine.ts'
 export type { RedactionErrorCode } from './engine.ts'
 export { createStreamRestorer, restoreLenient } from './restore.ts'
-export type { StreamRestoreOptions, StreamRestorer } from './restore.ts'
+export type { PlaceholderEvent, PlaceholderOutcome, StreamRestoreOptions, StreamRestorer } from './restore.ts'
 export {
   DEFAULT_ALLOWLIST,
+  DEFAULT_RULE_NAMES,
   DETECTOR_VERSION,
+  RULE_CATEGORIES,
   RULE_NAMES,
   RulesDetector,
   isTaiwanBusinessNumber,
   isTaiwanNationalId,
   resolveRulesConfig,
 } from './rules/index.ts'
-export type { RedactionRuleName, ResolvedRulesConfig, RulesRedactionConfig } from './rules/index.ts'
+export type {
+  DefaultRuleName,
+  ExtendedRuleName,
+  InternationalRuleName,
+  RedactionRuleName,
+  ResolvedRulesConfig,
+  RulesRedactionConfig,
+} from './rules/index.ts'
+export { INTERNATIONAL_RULE_NAMES, INTERNATIONAL_RULES_VERSION } from './rules/international.ts'
+export { EXTENDED_RULE_NAMES, EXTENDED_RULES_VERSION } from './rules/extended.ts'
 export { screenText } from './rules/screen.ts'
 export type { ScreenFailure } from './rules/screen.ts'

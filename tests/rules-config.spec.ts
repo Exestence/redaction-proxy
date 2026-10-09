@@ -34,7 +34,7 @@ describe('RulesRedactionService', () => {
       expect(masked).not.toContain(value)
     }
     expect(masked).not.toContain('fictional-user')
-    expect(service.detectorVersion).toBe('rules-6')
+    expect(service.detectorVersion).toBe('rules-12')
     expect(service.policyDigest).toMatch(/^sha256:[0-9a-f]{64}$/)
   })
 
@@ -55,9 +55,9 @@ describe('RulesRedactionService', () => {
     expect(isTaiwanNationalId('a123456789')).toBe(false)
   })
 
-  it('matches every case of a term under one identity and exposes the fixed category set', async () => {
+  it('matches every case of a term, one identity per spelling, and exposes the fixed category set', async () => {
     const service = new RulesRedactionService(new Context(), { rules: ['email', 'tw-national-id'], terms: ['fictional-user'] })
-    expect(await maskOne(service, 'FICTIONAL-USER and Fictional-User.')).toBe('⟦TERM_1⟧ and ⟦TERM_1⟧.')
+    expect(await maskOne(service, 'FICTIONAL-USER and Fictional-User.')).toBe('⟦TERM_1⟧ and ⟦TERM_2⟧.')
     expect(service.categories).toEqual(['EMAIL', 'TWID', 'TERM'])
     expect(new RulesRedactionService(new Context()).categories)
       .toEqual(['EMAIL', 'PATH', 'KEY', 'TWID', 'PHONE', 'TAXID', 'CARD', 'IP', 'HOST', 'ENTROPY'])

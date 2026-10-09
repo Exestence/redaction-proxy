@@ -1,10 +1,11 @@
 import { describe, expect, it } from 'vitest'
 import { Context } from './shim.ts'
-import { RedactionError, emptyRedactionIndex } from '../src/core/index.ts'
+import { INTERNATIONAL_RULE_NAMES, RedactionError, emptyRedactionIndex } from '../src/core/index.ts'
 import RulesRedactionService from './shim.ts'
 import { SessionSeq } from './shim.ts'
 
 const service = new RulesRedactionService(new Context(), { projectNames: ['nimbus'], terms: ['機密'] })
+const internationalOnly = new RulesRedactionService(new Context(), { rules: [...INTERNATIONAL_RULE_NAMES] })
 
 interface MaskOutcome {
   masked: string
@@ -12,9 +13,9 @@ interface MaskOutcome {
   refused?: string
 }
 
-async function mask(text: string): Promise<MaskOutcome> {
+async function mask(text: string, maskingService: RulesRedactionService = service): Promise<MaskOutcome> {
   try {
-    const result = await service.mask([{ seq: SessionSeq(1), path: '/content/0/text', text }], emptyRedactionIndex())
+    const result = await maskingService.mask([{ seq: SessionSeq(1), path: '/content/0/text', text }], emptyRedactionIndex())
     return {
       masked: result.masked[0] ?? '',
       categories: result.applied.map(span => span.id.slice(0, span.id.lastIndexOf('_'))),
@@ -58,6 +59,38 @@ describe('log shapes', () => {
     for (let i = 0; i < rounds; i += 1) {
       const { categories } = await mask(generate())
       if (categories.includes('CARD')) hits += 1
+    }
+    expect(hits / rounds).toBeLessThan(ceiling)
+  })
+})
+
+// Identifier-shaped log values: the international rules check digits or ask
+// for a keyword, so a random identifier of the same length is not one.
+describe('international rules on log shapes', () => {
+  const random = rng(20261005)
+  const digits = (n: number): string => Array.from({ length: n }, () => Math.floor(random() * 10)).join('')
+  const shapes: [string, () => string, number][] = [
+    ['nanosecond timestamp', () => `2026-09-16T10:00:00Z ts=17${digits(17)} level=info`, 0.002],
+    ['snowflake id', () => `tweet id=1${digits(18)} author=bob`, 0.002],
+    ['json log line', () => `{"ts":17${digits(17)},"id":${digits(18)},"span":${digits(16)}}`, 0.002],
+    ['9-digit id', () => `id ${digits(9)} ok`, 0.002],
+    ['11-digit id starting with 1', () => `id 1${digits(10)} ok`, 0.002],
+    ['12-digit order number', () => `order ${digits(12)} shipped`, 0.002],
+    ['15-digit id', () => `id ${digits(15)} ok`, 0.002],
+    ['18-digit id', () => `id ${digits(18)} ok`, 0.002],
+    ['dated build serial', () => `build ${digits(6)}-${digits(7)}`, 0.01],
+    ['timestamp and duration', () => `took ${digits(3)} ms at 2026-10-07 ${digits(2)}:${digits(2)}:${digits(2)}`, 0.002],
+    ['row of digit pairs', () => `${digits(2)} ${digits(2)} ${digits(2)} ${digits(2)} ${digits(2)} ${digits(2)}`, 0.002],
+    ['row of grouped digits', () => `${digits(3)} ${digits(3)} ${digits(4)} ${digits(2)}`, 0.002],
+    ['count after a telephone word', () => `phone retries ${digits(1)} after ${digits(4)} ms`, 0.002],
+  ]
+
+  it.each(shapes)('keeps international false positives on a %s under its ceiling', async (_name, generate, ceiling) => {
+    const rounds = 2_000
+    let hits = 0
+    for (let i = 0; i < rounds; i += 1) {
+      const { categories } = await mask(generate(), internationalOnly)
+      if (categories.length > 0) hits += 1
     }
     expect(hits / rounds).toBeLessThan(ceiling)
   })

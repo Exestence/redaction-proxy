@@ -1,0 +1,5 @@
+be2ebb9531001f5e1b06dd3353dd6a9e445ef8b1131424da642de38b4fc3e553  heldout-v1.jsonl
+e3d45536c00e47bca808419f12dcf280ba43046eea7ca288826c0c6479c0bb04  heldout-v2.jsonl
+# Both sets are synthetic. Every credential-shaped token in them (ghp_, AKIA,
+# npm_, PEM blocks) is fake and non-functional, so secret scanners' hits on
+# these files are expected.

@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { Context } from './shim.ts'
 import { RedactionError, emptyRedactionIndex } from '../src/core/index.ts'
+import { containsStandingAlone } from '../src/core/model/detector.ts'
 import RulesRedactionService from './shim.ts'
 import { SessionSeq } from './shim.ts'
 
@@ -118,9 +119,117 @@ describe('high-entropy runs', () => {
 describe('overlap resolution', () => {
   it('covers the union of overlapping ranges instead of the first by start order', async () => {
     // The literal starts before the credential value and ends inside it; resolving
-    // by start order alone would mask only the literal and send `2xyz` verbatim.
+    // by start order alone would mask only the literal and send `-2xyz` verbatim.
     const overlapping = new RulesRedactionService(new Context(), { terms: ['secret=hunter'] })
-    expect(await mask('my-secret=hunter2xyz', overlapping)).toBe('my-⟦TERM_1⟧')
+    expect(await mask('my-secret=hunter-2xyz', overlapping)).toBe('my-⟦TERM_1⟧')
+  })
+})
+
+describe('configured term boundaries', () => {
+  const named = new RulesRedactionService(new Context(), {
+    terms: ['Lin', 'Hsin', 'Kai', 'Whitlock', '林小姐'],
+    projectNames: ['Orion', 'NIMBUS-7'],
+  })
+
+  it.each([
+    'the server is online',
+    'install Linux',
+    'I live in Hsinchu',
+    'the Orionids meteor shower',
+    'Kaiser',
+    'nimbus70 and xnimbus-7',
+    'Lin9 and LinＡ',
+    'the Whitlocks arrived',
+    '%4Cinux',
+  ])('leaves a Latin term inside a longer word: %s', async (text) => {
+    expect(await mask(text, named)).toBe(text)
+  })
+
+  it.each([
+    ['Lin went home', '⟦TERM_1⟧ went home'],
+    ["Lin's", "⟦TERM_1⟧'s"],
+    ['(Lin)', '(⟦TERM_1⟧)'],
+    ['Lin, again', '⟦TERM_1⟧, again'],
+    ['Lin林', '⟦TERM_1⟧林'],
+    ['run nimbus-7-cli', 'run ⟦PROJECT_1⟧-cli'],
+    ['nimbus7.', '⟦PROJECT_1⟧.'],
+    ['a%20Lin', 'a%20⟦TERM_1⟧'],
+    ['林小姐姐', '⟦TERM_1⟧姐'],
+    ['王林小姐好', '王⟦TERM_1⟧好'],
+  ])('masks a term whose Latin edges stand free, and a CJK term inside text: %s', async (text, expected) => {
+    expect(await mask(text, named)).toBe(expected)
+  })
+
+  // A compatibility symbol that folds to letters (`™` → `tm`) or a zero-width
+  // character the projection drops leaves the term a whole word in the text,
+  // which is what the proxy's leak scan reads.
+  const symbols = new RulesRedactionService(new Context(), { terms: ['Lin'], projectNames: ['Orion', 'Nimbus'] })
+
+  it.each([
+    ['Orion™ ships in Q3', '⟦PROJECT_1⟧™ ships in Q3'],
+    ['Nimbus™ ships in Q3', '⟦PROJECT_1⟧™ ships in Q3'],
+    ['Orion ships Orion™', '⟦PROJECT_1⟧ ships ⟦PROJECT_1⟧™'],
+    ['Lin™', '⟦TERM_1⟧™'],
+    ['Lin№5', '⟦TERM_1⟧№5'],
+    ['Lin™x', '⟦TERM_1⟧™x'],
+    ['5㎏Lin', '5㎏⟦TERM_1⟧'],
+    ['Orion​cloud', '⟦PROJECT_1⟧cloud'],
+    ['Lin­ux', '⟦TERM_1⟧ux'],
+    ['x​Lin', 'x​⟦TERM_1⟧'],
+    ['Lin😀x', '⟦TERM_1⟧😀x'],
+    ['Lin\u2060\u0335', '⟦TERM_1⟧'],
+  ])('masks a term the text shows as a whole word although its projection does not: %j', async (text, expected) => {
+    expect(await mask(text, symbols)).toBe(expected)
+  })
+
+  it('masks a multi-part term the text shows as a whole word although its projection does not', async () => {
+    const parts = new RulesRedactionService(new Context(), { terms: ['Margaret Holloway'], projectNames: ['Nimbus-7'] })
+    expect(await mask('Nimbus-7™ and Margaret Holloway™', parts)).toBe('⟦PROJECT_1⟧™ and ⟦TERM_1⟧™')
+  })
+
+  it.each(['ＡLin', 'Lin１', 'Linux', 'Liń', 'Lin𝐀bc', '𝐀𝐁Lin', 'Lin𝟙2', 'Orion\u200B\u0301', 'Orion\u00AD\u0301'])('leaves a term glued to a letter, digit, or mark in the text: %j', async (text) => {
+    expect(await mask(text, symbols)).toBe(text)
+  })
+
+  it.each(['Orion™ ships', 'Orion ships Orion™', 'Lin№5', 'Lin™x', 'a%20Lin', 'Orion​cloud', 'Lin﻿', 'ＡLin', 'Linux', 'Lin𝐀bc', 'Orion ships Orion\u200B\u0301', 'Lin and Lin\uFEFF\u0301', 'Lin and Lin\u180E\u0301'])(
+    'leaves no occurrence the leak scan would flag: %j',
+    async (text) => {
+      const masked = await mask(text, symbols)
+      for (const term of ['Lin', 'Orion', 'Nimbus']) expect(containsStandingAlone(masked, term)).toBe(false)
+    },
+  )
+
+  it('leaves no occurrence the leak scan would flag around randomly glued terms', async () => {
+    const terms = ['Lin', 'Orion', 'Nimbus-7', 'Margaret Holloway', 'Élodie', '林小姐', 'K9']
+    const glue = ['', ' ', 'x', '1', '-', "'", '™', '№', 'Ａ', '１', '林', '𝐀', '𝟙', '🔑', '%41', '%20', '\u00AD', '\u200B', '\u200C', '\u200D', '\u2060', '\uFEFF', '\u180E', '\u0301', '\u0308', '\u0335']
+    const fuzzed = new RulesRedactionService(new Context(), { terms })
+    // mulberry32: a fixed seed keeps every run on the same samples.
+    let seed = 0x5eed
+    const random = (n: number): number => {
+      seed = (seed + 0x6d2b79f5) | 0
+      let t = Math.imul(seed ^ (seed >>> 15), seed | 1)
+      t ^= t + Math.imul(t ^ (t >>> 7), t | 61)
+      return Math.floor((((t ^ (t >>> 14)) >>> 0) / 2 ** 32) * n)
+    }
+    const around = (): string => Array.from({ length: random(4) }, () => glue[random(glue.length)]).join('')
+    const fold = (text: string): string => text.replace(/[A-Z]+/g, run => run.toLowerCase())
+    for (let sample = 0; sample < 4000; sample += 1) {
+      const term = terms[random(terms.length)]!
+      const spelled = random(2) === 0 ? term : term.toUpperCase()
+      const text = `${around()}${spelled}${around()} and ${around()}${spelled}${around()}`
+      const result = await fuzzed.mask([{ seq: SessionSeq(1), path: '/content/0/text', text }], emptyRedactionIndex())
+      for (const id of result.registry.ids()) {
+        expect(containsStandingAlone(fold(result.masked[0]!), fold(result.registry.original(id)!)), text).toBe(false)
+      }
+    }
+  })
+
+  it('propagates a bound term only where its edges stand free', async () => {
+    const result = await named.mask([
+      { seq: SessionSeq(1), path: '/content/0/text', text: 'Whitlock' },
+      { seq: SessionSeq(2), path: '/content/0/text', text: 'Whitlock and the Whitlocks' },
+    ], emptyRedactionIndex())
+    expect(result.masked).toEqual(['⟦TERM_1⟧', '⟦TERM_1⟧ and the Whitlocks'])
   })
 })
 

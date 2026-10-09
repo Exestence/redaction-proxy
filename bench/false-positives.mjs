@@ -1,20 +1,30 @@
 // Measure what the default rules mask in a public source corpus that holds no
 // working credential. Run `pnpm bench` (it builds first). The corpus is the
 // DeepSeek Harness repository at a pinned commit, exported read-only with
-// `git archive`; override with CORPUS_REPO and CORPUS_REF.
+// `git archive`: CORPUS_REPO names a local checkout (required), CORPUS_REF the
+// commit (default master).
 //
 // Headline metric, unchanged from the dsh-addons gate: KEY (credential) spans
 // per 1,000 lines of code files (.ts .json .sh .py). Every such span is a false
 // positive because source files carry no working credential. Other categories
 // are reported per 1,000 lines of all files; they are an upper bound on false
 // positives, since documentation does contain example paths and addresses.
+//
+// BENCH_RULES=all measures every built-in rule, the international and
+// extended ones included; BENCH_RULES=proxy measures the proxy's default rule
+// set; by default the bench measures the core default rule set.
 
 import { spawnSync } from 'node:child_process'
 import { mkdirSync, readFileSync, readdirSync, rmSync, statSync } from 'node:fs'
 import { join, relative } from 'node:path'
-import { RedactionError, RulesDetector, emptyRedactionIndex, mask, restore } from '../lib/core/index.js'
+import { RULE_NAMES, RedactionError, RulesDetector, emptyRedactionIndex, mask, restore } from '../lib/core/index.js'
+import { PROXY_DEFAULT_RULES } from '../lib/proxy/config.js'
 
-const REPO = process.env.CORPUS_REPO ?? '/path/to/deepseek-harness'
+const REPO = process.env.CORPUS_REPO
+if (REPO === undefined || REPO === '') {
+  console.log('set CORPUS_REPO to a local checkout of DeepSeek Harness (the published numbers use commit 6d3b7608bf)')
+  process.exit(1)
+}
 const REF = process.env.CORPUS_REF ?? 'master'
 const SKIP = /(?:^|\/)(?:snapshots?|sessions?|fixtures?|__fixtures__|node_modules|lib|dist|coverage)(?:\/|$)/
 const TEXT = /\.(?:ts|md|ya?ml|json|sh|py)$/
@@ -43,7 +53,8 @@ const walk = directory => {
 }
 for (const root of ['packages', 'docs', 'scripts']) walk(join(work, root))
 
-const detector = new RulesDetector()
+const RULE_SETS = { all: { rules: [...RULE_NAMES] }, proxy: { rules: [...PROXY_DEFAULT_RULES] } }
+const detector = new RulesDetector(RULE_SETS[process.env.BENCH_RULES] ?? {})
 const byCategory = new Map()
 const codeByCategory = new Map()
 const refused = new Map()
@@ -80,6 +91,7 @@ rmSync(work, { recursive: true, force: true })
 
 const per1k = (count, over) => ((count / over) * 1000).toFixed(2)
 console.log(`corpus: ${REPO} @ ${sha} (packages, docs, scripts; ${TEXT.source})`)
+console.log(`detector ${detector.detectorVersion}, rules ${process.env.BENCH_RULES in RULE_SETS ? process.env.BENCH_RULES : 'default'}`)
 console.log(`files ${files.length}, lines ${lines}, code lines ${codeLines}, ${ms.toFixed(0)} ms`)
 console.log(`KEY spans in code files: ${codeKeys} = ${per1k(codeKeys, codeLines)} per 1k code lines (all false positives)`)
 for (const [category, count] of [...byCategory].sort((a, b) => b[1] - a[1])) {

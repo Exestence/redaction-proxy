@@ -1,3 +1,6 @@
+redaction-proxy
+Copyright 2026 The redaction-proxy authors
+
 Portions of the masking rules and engine in src/core descend from
 LYiHub/pub-dsh-privacy-router (https://github.com/LYiHub/pub-dsh-privacy-router),
 via the dsh-privacy-router fork and dsh-addons.
@@ -25,3 +28,13 @@ AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
 LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
+
+---
+
+The optional name model is not distributed with this repository.
+scripts/fetch-name-model.mjs downloads Wismut/nym-pii-multilingual-small
+(https://huggingface.co/Wismut/nym-pii-multilingual-small, revision
+4348999cd3c2e20c49615e9af7c6bbb45b64cd85), derived from jhu-clsp/mmBERT-small,
+and writes tokenizer files derived from its tokenizer.json. Its model card
+declares the MIT License, whose text is reproduced above, and names no
+copyright holder. The model card is downloaded beside the model as README.md.

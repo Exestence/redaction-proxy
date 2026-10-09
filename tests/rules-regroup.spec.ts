@@ -25,6 +25,8 @@ describe('configured terms split by a separator', () => {
     ['資料 NIMBUS 7 已上線', '資料 ⟦PROJECT_1⟧ 已上線'],
     ['資料 NIMBUS_7 已上線', '資料 ⟦PROJECT_1⟧ 已上線'],
     ['資料 nimbus7 已上線', '資料 ⟦PROJECT_1⟧ 已上線'],
+    ['備註：星河  計畫 隔了兩個空格', '備註：⟦TERM_1⟧ 隔了兩個空格'],
+    ['NIMBUS - 7 has two separators', '⟦PROJECT_1⟧ has two separators'],
   ])('masks %j', async (text, expected) => {
     expect(await mask(text)).toBe(expected)
   })
@@ -33,28 +35,38 @@ describe('configured terms split by a separator', () => {
     '只寫了星河兩個字',
     '這個計畫延後',
     '星河計 是另一個詞',
-    '星河  計畫 隔了兩個空格',
-    'NIMBUS - 7 has two separators',
   ])('keeps %j', async (text) => {
     expect(await mask(text)).toBe(text)
+  })
+
+  it.each([
+    'Margaret  Holloway',
+    'cc: Margaret\n    Holloway',
+    'cc: margaret\r\n\tHOLLOWAY',
+  ])('masks a name with a run of separators in %j, and a term configured with one', async (text) => {
+    for (const term of ['Margaret Holloway', 'Margaret  Holloway']) {
+      const named = new RulesRedactionService(new Context(), { terms: [term] })
+      const result = await named.mask([{ seq: SessionSeq(1), path: '/a', text }], emptyRedactionIndex())
+      expect(result.masked[0]).toBe(text.replace(/margaret[\s\S]*holloway/i, '⟦TERM_1⟧'))
+    }
   })
 
   it('steps over an astral character between overlapping occurrences', async () => {
     const astral = new RulesRedactionService(new Context(), { terms: ['𠮷野家'] })
     const result = await astral.mask([{ seq: SessionSeq(1), path: '/a', text: '去𠮷 野家 𠮷野家𠮷野家' }], emptyRedactionIndex())
-    expect(result.masked[0]).toBe('去⟦TERM_1⟧ ⟦TERM_1⟧⟦TERM_1⟧')
+    expect(result.masked[0]).toBe('去⟦TERM_1⟧ ⟦TERM_2⟧⟦TERM_2⟧')
   })
 
-  it('binds every spelling to one identity and restores the first spelling', async () => {
+  it('binds each spelling to its own identity and restores every spelling exactly', async () => {
     const text = '星河計畫、星河 計畫、星河-計畫'
     const result = await service.mask([{ seq: SessionSeq(1), path: '/content/0/text', text }], emptyRedactionIndex())
-    expect(result.masked[0]).toBe('⟦TERM_1⟧、⟦TERM_1⟧、⟦TERM_1⟧')
+    expect(result.masked[0]).toBe('⟦TERM_1⟧、⟦TERM_2⟧、⟦TERM_3⟧')
     expect(result.registry.originals()).toEqual(['星河計畫', '星河 計畫', '星河-計畫'])
-    const back = service.restore('⟦TERM_1⟧ / ⟦TERM_1⟧', result.registry)
-    expect(back.ok && back.text).toBe('星河計畫 / 星河計畫')
+    const back = service.restore('⟦TERM_1⟧ / ⟦TERM_3⟧', result.registry)
+    expect(back.ok && back.text).toBe('星河計畫 / 星河-計畫')
   })
 
-  it('reuses the identity of a recorded spelling for a new spelling in a later call', async () => {
+  it('keeps a recorded spelling\'s identity and gives a new spelling in a later call its own', async () => {
     const first = await service.mask([{ seq: SessionSeq(1), path: '/a', text: '星河 計畫' }], emptyRedactionIndex())
     const index = {
       entries: [{ seq: SessionSeq(1), path: '/a', detectorVersion: service.detectorVersion, spans: first.spans.map(({ start, end, id }) => ({ start, end, id })) }],
@@ -66,7 +78,7 @@ describe('configured terms split by a separator', () => {
       { seq: SessionSeq(1), path: '/a', text: '星河 計畫' },
       { seq: SessionSeq(2), path: '/b', text: '星河-計畫' },
     ], index)
-    expect(second.masked).toEqual(['⟦TERM_1⟧', '⟦TERM_1⟧'])
+    expect(second.masked).toEqual(['⟦TERM_1⟧', '⟦TERM_2⟧'])
   })
 })
 

@@ -2,3 +2,5 @@ node_modules
 lib/
 .corpus-work/
 *.log
+bench/presidio/.venv/
+__pycache__/

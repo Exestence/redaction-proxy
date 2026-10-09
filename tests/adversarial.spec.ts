@@ -5,6 +5,7 @@ import { readFileSync, readdirSync } from 'node:fs'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import {
+  INTERNATIONAL_RULE_NAMES,
   RedactionError,
   RulesDetector,
   createStreamRestorer,
@@ -17,8 +18,10 @@ import type { RedactionRegistry } from '../src/core/index.ts'
 
 const detector = new RulesDetector({ projectNames: ['Nimbus'], terms: ['機密專案'] })
 
-async function maskAll(texts: string[]) {
-  return mask(detector, texts.map((text, seq) => ({ seq, path: '', text })), emptyRedactionIndex())
+const internationalOnly = new RulesDetector({ rules: [...INTERNATIONAL_RULE_NAMES] })
+
+async function maskAll(texts: string[], using = detector) {
+  return mask(using, texts.map((text, seq) => ({ seq, path: '', text })), emptyRedactionIndex())
 }
 
 describe('leaks', () => {
@@ -45,12 +48,12 @@ describe('leaks', () => {
     expect(back.ok && back.text).toBe(text)
   })
 
-  it('masks every spelling of a configured term under one identity and restores the first spelling', async () => {
+  it('masks each spelling of a configured term under its own identity and restores every spelling exactly', async () => {
     const result = await maskAll(['Nimbus, nimbus and NIMBUS'])
-    expect(result.masked[0]).toBe('⟦PROJECT_1⟧, ⟦PROJECT_1⟧ and ⟦PROJECT_1⟧')
+    expect(result.masked[0]).toBe('⟦PROJECT_1⟧, ⟦PROJECT_2⟧ and ⟦PROJECT_3⟧')
     expect(result.registry.originals()).toEqual(['Nimbus', 'nimbus', 'NIMBUS'])
     const back = restore(result.masked[0] ?? '', result.registry)
-    expect(back.ok && back.text).toBe('Nimbus, Nimbus and Nimbus')
+    expect(back.ok && back.text).toBe('Nimbus, nimbus and NIMBUS')
   })
 })
 
@@ -87,6 +90,42 @@ describe('pathological inputs', () => {
     // test files running in parallel do not count against the budget.
     const started = process.cpuUsage()
     await maskAll([text])
+    const used = process.cpuUsage(started)
+    expect((used.user + used.system) / 1_000).toBeLessThan(2_000)
+  })
+})
+
+describe('pathological inputs at 1 MB', () => {
+  // The env-line check once read back to the previous newline from every key,
+  // so one 1.28 MB line of `password=` took 21 s.
+  it.each(['password=', 'PASSWORD=', ' PASSWORD='])('masks 1 MB of %j within 2s of CPU time', async unit => {
+    const text = unit.repeat(Math.ceil(1024 * 1024 / unit.length))
+    const started = process.cpuUsage()
+    await maskAll([text])
+    const used = process.cpuUsage(started)
+    expect((used.user + used.system) / 1_000).toBeLessThan(2_000)
+  })
+
+  it.each([' ', '\t', ' '.repeat(200), `export${' '.repeat(200)}`])('reads an env line after any indent: %j', async indent => {
+    const result = await maskAll([`x\n${indent}DB_PASSWORD=ZQ7WRT_PLM3_XKV9\n`])
+    expect(result.masked[0]).not.toContain('ZQ7WRT_PLM3_XKV9')
+  })
+})
+
+describe('pathological inputs to the international rules', () => {
+  const SIZE = 200 * 1024
+  it.each([
+    '+', '+44 ', '+1 (415) ', '+8613812345678', 'DE89 ', 'DE89 3704 ', 'GB82WEST', 'DE12345678', '123-45-',
+    '123 45 ', 'ssn ', 'ssn 1', 'AB 12 34 ', 'AB123456', 'Steuer-ID ', 'tin 1', '1 85 05 ', 'sécurité sociale 1',
+    '12345678', 'X1234567', 'RSSMRA', '11010519491231002', '138-1234-', '手机 138', 'A123456(', 'HKID A',
+    'マイナンバー 1234 ', '090-1234-', '900101-', '1 ',
+    '(415) ', '415-555-', '415.555.', '1-', '0', '020 7946 ', '07700 ', '01 23 ', '01.', '03-1234-', '0120-',
+    '010-1234-', '(11) 9', 'phone ', 'tel 1', 'phone +1 ', 'phone (0', 'phone 1 2 3 ', 'phone 1-', 'phone 2026-10-',
+    '電話 0', 'call me at ',
+  ])('masks 200KB of %j within 2s of CPU time', async unit => {
+    const text = unit.repeat(Math.ceil(SIZE / unit.length)).slice(0, SIZE)
+    const started = process.cpuUsage()
+    await maskAll([text], internationalOnly)
     const used = process.cpuUsage(started)
     expect((used.user + used.system) / 1_000).toBeLessThan(2_000)
   })
