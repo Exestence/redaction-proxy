@@ -13,13 +13,13 @@
     "openai",
     "anthropic"
   ],
-  "homepage": "https://github.com/PersonalAssistanceHsin/redaction-proxy#readme",
+  "homepage": "https://github.com/Exestence/redaction-proxy#readme",
   "bugs": {
-    "url": "https://github.com/PersonalAssistanceHsin/redaction-proxy/issues"
+    "url": "https://github.com/Exestence/redaction-proxy/issues"
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/PersonalAssistanceHsin/redaction-proxy.git"
+    "url": "git+https://github.com/Exestence/redaction-proxy.git"
   },
   "type": "module",
   "main": "lib/core/index.js",
