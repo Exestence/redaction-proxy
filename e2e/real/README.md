@@ -8,6 +8,8 @@ OPENAI_API_KEY=... ANTHROPIC_API_KEY=... DEEPSEEK_API_KEY=... pnpm run e2e:real
 
 A provider whose key is not set is skipped. Keys are read from the environment only and are never printed; an upstream error that quotes the key is shown with the key replaced.
 
+Last real run: on 2026-10-08, with only `DEEPSEEK_API_KEY` set, DeepSeek Chat Completions passed 4 of 4 scenarios; OpenAI and Anthropic were skipped (no keys).
+
 ## What it checks
 
 Each request goes client → proxy → tee → service. The tee is a local pass-through that records the exact request body the service received and the exact response it sent back.

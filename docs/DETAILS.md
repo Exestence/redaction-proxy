@@ -18,29 +18,31 @@
 12. [完整設定](#12-完整設定)
 13. [測試](#13-測試)
 14. [誤遮率量測方法](#14-誤遮率量測方法)
-15. [公開前尚待完成](#15-公開前尚待完成)
+15. [尚待完成](#15-尚待完成)
 16. [人名模型（實驗性）](#16-人名模型實驗性)
 17. [完整限制清單](#17-完整限制清單)
 18. [實測數字](#18-實測數字)
 19. [常見問題](#19-常見問題)
 20. [README 圖片與影片](#20-readme-圖片與影片)
+- [來源聲明](#來源聲明)
 
 ## 1. 架構
 
 | 目錄 | 內容 |
 | --- | --- |
-| `src/core/` | 遮罩核心：規則、佔位符引擎、嚴格與串流還原。只依賴 Node 標準函式庫，沒有宿主型別。 |
+| `src/core/` | 遮罩核心：規則、佔位符引擎、嚴格與串流還原。匯出的核心（`lib/core/index.js`，不含 `model/`）只依賴 Node 標準函式庫，沒有宿主型別。 |
 | `src/core/rules/` | 規則偵測器 `RulesDetector`：各規則、需自行啟用的國際規則（`international.ts`）與延伸規則（`extended.ts`）、檢查碼演算法（`checksum.ts`）、NFKC 投影、百分比解碼投影、同值擴散、輸入篩檢。 |
+| `src/core/model/` | 實驗性人名模型；動態載入選用的 onnxruntime-node 與 tokenizers。 |
 | `src/proxy/config.ts` | 設定檔載入與驗證。 |
 | `src/proxy/server.ts` | HTTP 代理：收集可遮字串、遮罩、外洩檢查、轉送、JSON 與 SSE 還原。 |
 | `src/cli.ts` | 命令列 `redaction-proxy [--config path]`；`--demo` 跑免金鑰示範（`src/demo.ts`，即 `pnpm demo`）。 |
 | `bench/` | 誤遮率量測（`pnpm bench`）。 |
 
-DeepSeek Harness 透過 dsh-addons 的 redaction 套件以 git submodule（`dsh-addons/vendor/redaction-proxy`）使用這份核心；核心只在這個倉庫修改。[dsh-privacy-router](https://github.com/PersonalAssistanceHsin/dsh-privacy-router) 目前還有自己的串流還原器，未來預計統一到這裡的 `createStreamRestorer`。
+DeepSeek Harness 透過 dsh-addons 的 redaction 套件以 git submodule（`dsh-addons/vendor/redaction-proxy`）使用這份核心；核心只在這個儲存庫修改。[dsh-privacy-router](https://github.com/PersonalAssistanceHsin/dsh-privacy-router) 目前還有自己的串流還原器，未來預計統一到這裡的 `createStreamRestorer`。
 
 和 dsh-privacy-router 的差別：
 
-| | redaction-proxy（本倉庫） | [dsh-privacy-router](https://github.com/PersonalAssistanceHsin/dsh-privacy-router) |
+| | redaction-proxy（本儲存庫） | [dsh-privacy-router](https://github.com/PersonalAssistanceHsin/dsh-privacy-router) |
 | --- | --- | --- |
 | 形式 | 獨立的 HTTP 代理 | dsh 的外掛 |
 | 用戶端 | 任何 OpenAI 或 Anthropic 相容用戶端 | 只限 dsh |
@@ -52,7 +54,7 @@ DeepSeek Harness 透過 dsh-addons 的 redaction 套件以 git submodule（`dsh-
 每個請求的基本行為：
 
 - 同一個值在同一個請求中一律用同一個佔位符。
-- 代理不存對話狀態。每次請求都從完整歷史重新編號，所以同一段對話每一輪的編號一致，上游的提示快取照常生效。
+- 代理不保存佔位符對照表。每次請求都從完整歷史重新編號，所以同一段對話每一輪的編號一致，上游的提示快取照常生效。記憶體中只有兩樣狀態，都依用戶端憑證分開、重啟即消失：Responses API 接續用的先前輸入（[第 8 節](#8-對話內編號與-previous_response_id)，最多 256 份），以及偵測到的原始值（[已知原始值](#已知原始值)，預設從最後一次偵測起保留 24 小時）。
 - 遮罩後若在請求中仍找得到偵測到的值，代理會拒絕送出（422），而不是冒險外洩。規則偵測到的值在任何位置都算，連黏在較長字串裡也算（`tel0912345678`）。[人名模型](#16-人名模型實驗性)找到的值若是以空格分詞的文字，只算完整單字，所以 `Leeds` 裡的 `Lee` 不算外洩；中文、日文、韓文的值在任何位置都算。
 - 金鑰照常由用戶端送出，代理原樣轉送，從不儲存。
 
@@ -68,7 +70,7 @@ flowchart TD
   F -- "是" --> F2["回 422"]
   F -- "否" --> G
   E --> G["加上 previous_response_id 對應的先前輸入"]
-  G --> H["mask：偵測、編號、擴散"]
+  G --> H["mask：偵測（含此憑證記住的值）、編號、擴散"]
   H --> I["序列化後搜尋每個原始值"]
   I -- "仍找得到" --> J["回 422，指出欄位路徑"]
   I -- "乾淨" --> K["轉送上游，帶用戶端自己的標頭"]
@@ -76,6 +78,8 @@ flowchart TD
   L -- "JSON" --> M["restoreDeep 整份還原"]
   L -- "SSE" --> N["逐事件、逐欄位串流還原"]
 ```
+
+圖中省略了路由比對之前的入口檢查（來源、`Host`、權杖、方法、大小），見[第 6 節](#6-拒絕與錯誤狀態碼)；還原的規則見[第 7 節](#7-串流還原)。
 
 ## 2. 核心 API
 
@@ -89,6 +93,7 @@ flowchart TD
 | `restoreLenient` | 一次性的寬鬆還原。 |
 | `RulesDetector`、`resolveRulesConfig`、`RULE_NAMES`、`DEFAULT_RULE_NAMES`、`INTERNATIONAL_RULE_NAMES`、`EXTENDED_RULE_NAMES`、`DEFAULT_ALLOWLIST`、`DETECTOR_VERSION`、`INTERNATIONAL_RULES_VERSION`、`EXTENDED_RULES_VERSION` | 規則偵測器與其設定。`DETECTOR_VERSION` 目前是 `rules-12`；啟用任一國際規則時加上 `+intl-2`，啟用任一延伸規則時加上 `+ext-1`（兩者都啟用時是 `rules-12+intl-2+ext-1`）。 |
 | `isTaiwanNationalId` | 身分證與居留證檢查碼驗證。 |
+| `isTaiwanBusinessNumber` | 統一編號（8 碼）檢查碼驗證。 |
 | `screenText` | 輸入篩檢，詳見第 9 節。 |
 | `emptyRedactionIndex`、`foldRedactionScan` | 給需要持久化掃描結果的宿主使用的 span 索引。 |
 | `placeholder`、`applySpans`、`PLACEHOLDER_OPEN`、`PLACEHOLDER_CLOSE`、`REDACTION_ID_PATTERN` | 佔位符格式工具。id 格式為 `^[A-Z][A-Z0-9]*_[1-9]\d*$`。 |
@@ -108,7 +113,7 @@ flowchart TD
 
 | 規則 | 類別 | 細節 |
 | --- | --- | --- |
-| `email` | `EMAIL` | 以 `@` 為錨點、有上限地向兩側展開。也接受防爬寫法：`＠`、`(at)`、`[at]`，以及網域中的 `[dot]`、`(dot)`；這些寫法要求頂級網域是兩字母國碼或常見 gTLD（`com`、`org`、`dev`、`test` 等）。`@`、`＠` 必須緊貼前後兩段；`(at)`、`[at]` 兩側可有空白（不跨行），此時頂級網域須全小寫、本地部分須是以 `.`、`_`、`+` 連接的字（`wang.yichun`）且不以 `self.`、`this.` 等程式根開頭。`name @ domain`（`@` 兩側有空白）與單獨的 ` at ` **不遮**：shell 提示字元（`root @ web01.example.com`）、帳號標記（`cc @ alice.me`、`meet @ cafe.tw`）、英文散文（`socket.io at github.com`、`contact fly.io at community.fly.io`）與矩陣程式碼（`layer.weight @ state.dx`）在字面上與地址無法區分；頂級網域白名單與關鍵詞閘門都試過（WO-6 第 3、4 輪），前者擋不住誤遮、後者使召回掉到 41/54。這類 email 只有隱私分類器把關。 |
+| `email` | `EMAIL` | 以 `@` 為錨點、有上限地向兩側展開。也接受防爬寫法：`＠`、`(at)`、`[at]`，以及網域中的 `[dot]`、`(dot)`；這些寫法要求頂級網域是兩字母國碼或常見 gTLD（`com`、`org`、`dev`、`test` 等）。`@`、`＠` 必須緊貼前後兩段；`(at)`、`[at]` 兩側可有空白（不跨行），此時頂級網域須全小寫、本地部分須是以 `.`、`_`、`+` 連接的字（`wang.yichun`）且不以 `self.`、`this.` 等程式根開頭。`name @ domain`（`@` 兩側有空白）與單獨的 ` at ` **不遮**：shell 提示字元（`root @ web01.example.com`）、帳號標記（`cc @ alice.me`、`meet @ cafe.tw`）、英文散文（`socket.io at github.com`、`contact fly.io at community.fly.io`）與矩陣程式碼（`layer.weight @ state.dx`）在字面上與地址無法區分；頂級網域白名單與關鍵詞閘門都試過，前者擋不住誤遮、後者使召回掉到 41/54。這類 email 只有隱私分類器把關。 |
 | `user-path` | `PATH` | 只遮家目錄前綴（`/Users/x`、`/home/x`、`C:\Users\x`、`~x/`），含 JSON 跳脫形式；路徑其餘部分保持可讀。 |
 | `api-key` | `KEY` | PEM、AWS `AKIA`/`ASIA`、GitHub `ghp_` 系列、`sk-`、Slack `xox` 與 webhook、Google `AIza`、JWT、`Authorization`/`Bearer`、URL 中的帳密、`curl -u`、`--password x`，以及鍵名代表憑證的 `key=value` 指派（含中英文關鍵詞）。值是 schema 用字、聊天協定的欄位名稱、角色與內容類型、型別名稱、遮蔽寫法或範本佔位時不遮（`password: required`、`text`、`assistant`、`messages`、`str`、`***`、`xxx`、`<redacted>`、`your-password`、`<your secret>`、`{password}`、`{{ secrets.DB_PW }}`、`${{ secrets.PW2 }}`），因為這類字被綁成憑證後，之後每個請求的 `role`、`type` 欄位與欄位名稱都會對到它；雙大括號範本可含數字，單大括號中有數字的值是字面值（`{hunter2}` 照常遮）。OpenAI Chat Completions、Responses 與 Anthropic Messages API 的請求與回應欄位名稱（`password: max_tokens`、`top_p`、`temperature`、`metadata`、`reasoning`、`truncation`、`tool_calls`、`cache_control`）不論是否加引號、是否在 `.env` 行上、大小寫為何都不遮（`{"password":"max_tokens"}`、`DB_PASSWORD=cache_control` 也不遮），因為遮了會讓同一請求中同名的 JSON 鍵被外洩檢查擋下（422），而 Anthropic 每個請求都帶 `max_tokens`。由 API 欄位用字組成的其他 snake_case 值（`data_store`、`web_server`、`blue_horse_battery`）照常遮；`admin`、`changeme`、`123456` 這類弱密碼是真的密碼，照常遮（`.env` 範例的 `DB_PASSWORD=changeme` 也會遮）。未加引號的值中，後面緊接英數字或非 ASCII 的字母、數字、符號的引號屬於值（`password: ab"cd12ef`、`password: p@ss"🔑x12`）；其他引號結束外層字串。 |
 | `tw-national-id` | `TWID` | 身分證字號（第二碼 1/2）與居留證號（第二碼 8/9），**驗證檢查碼**。也接受字母後（`A 123456789`）或第四字元後（`A123-456789`）的一個空白或連字號；其他位置的分隔不算。 |
@@ -190,7 +195,7 @@ flowchart TD
 - **用佔位符，不用假值。** 每個不同的值得到一個 `⟦CATEGORY_n⟧`。以假值替換（「數位分身」）經過實測後被否決：模型逐字保留佔位符的比例是 100%，假值只有 75%；假值還造成無法還原的靜默錯誤（18 段對話中 5 段）。
 - **編號依文字順序。** `collectSlots` 在請求最上層先收集 `tools`、`functions`、`system`、`instructions`，再依 JSON 鍵順序收集其餘欄位。
 - **前綴逐位元組穩定。** 用戶端每次都重送完整歷史，所以只增不改的對話中，同一個值每一輪都得到同一個佔位符，遮罩後的前綴不變，上游的提示快取照常生效。
-- **會打破穩定的情況。** 後面的訊息若含字面的 `EMAIL_3`，這個 id 會被保留，可能讓在它之後首次出現的值重新編號。用戶端若改寫了較早的歷史，前綴也會跟著改變。
+- **會打破穩定的情況。** 後面的訊息若含字面的 `EMAIL_3`，這個 id 會被保留，可能讓在它之後首次出現的值重新編號。用戶端若改寫了較早的歷史，前綴也會跟著改變。較後的輪次（或同一憑證的另一個請求）首次偵測到一個先前已出現過的值時，先前的位置也會被遮罩，前綴因此改變一次。
 
 ## 5. 不遮就轉送的欄位
 
@@ -217,11 +222,12 @@ flowchart TD
 | 401 | 設了 `authToken`，但請求沒帶 `x-redaction-proxy-token`，或值不符。以 SHA-256 摘要做固定時間比較。帶正確權杖時不檢查 `Host`。 | 固定訊息 |
 | 204 | 允許的來源發出的 CORS 預檢（`OPTIONS` 帶 `Access-Control-Request-Method`）。不需權杖，不轉送。 | 無本文 |
 | 413 | 請求本文超過 64 MiB。 | 上限 |
-| 404 | POST 到代理不遮罩的路由（例如 `/v1/embeddings`），或 GET、POST 以外的方法。 | 方法與路徑 |
+| 404 | POST 到代理不遮罩的路由（例如 `/v1/embeddings`），或 GET、POST 與 OPTIONS 預檢以外的方法。 | 方法與路徑 |
 | 422 | `screen: "refuse"` 且某段文字含控制字元、U+FFFD、孤立 surrogate 或 `⟦`/`⟧`。 | JSON 路徑與字元類別 |
 | 422 | **送出前外洩檢查**：遮罩後請求的任一字串或鍵中，仍找得到這個請求偵測到的某個原始值（原樣或 JSON 跳脫形式）。規則值在任何位置、不分 ASCII 大小寫都算（`LIN@EXAMPLE.TEST` 算 `lin@example.test`）。只由先前請求記住的值（第 8 節）不檢查。名稱模型的值與 `terms`、`projectNames` 的字面值：以空格分詞的文字只算完整單字（`Leeds` 裡的 `Lee`、`Hsinchu` 裡的 `Hsin` 不算），中日韓文字在任何位置都算；字面值不分 ASCII 大小寫，只有一個字的模型值不檢查。列舉欄位（`role`、`type` 等）的值像列舉值時不檢查，`metadata`、`stop` 底下與工具呼叫輸入中照常檢查，見第 8 節。 | 最多 5 個欄位路徑，各附所含值的類別 |
 | 422 | 帶 `previous_response_id`，但代理沒有這個用戶端憑證的先前輸入（重啟、被擠出、從未經過代理，或屬於另一個用戶端）。 | 固定訊息 |
 | 422 | 與 `previous_response_id` 先前輸入合併後 `mask` 拋出 `RedactionError`。 | 錯誤代碼 |
+| 503 | 開啟人名模型且 `nameModel.required` 為 `true`，而模型在這個請求上推論失敗。不轉送。 | 固定訊息 |
 | 502 | 連不上上游。 | 網路錯誤代碼 |
 | 502 | 上游回 3xx 並帶 `Location`（重新導向）。代理不跟隨，不把請求送往別處；不帶 `Location` 的 `304` 照常轉回。 | 狀態碼 |
 
@@ -438,18 +444,18 @@ POST /v1/messages tool arguments: kept by the tool restore policy KEY_1 in bash 
 | — | `REDACTION_PROXY_OPENAI_API_KEY` | 無 | OpenAI 型用戶端沒送 `authorization` 時才以 `Bearer` 補上。只存記憶體。 |
 | — | `REDACTION_PROXY_ANTHROPIC_API_KEY` | 無 | Anthropic 型用戶端沒送 `x-api-key` 與 `authorization` 時才補上。只存記憶體。 |
 
-**國際規則、延伸規則與政策摘要。** 偵測器的 `policyDigest` 是偵測器版本與啟用規則清單的雜湊，持久化 span 索引的宿主（DeepSeek Harness 的隱私路由）用它判斷先前記錄的遮罩是否仍適用；摘要不同時，`mask` 以 `policy` 拒絕。核心預設不含國際規則與延伸規則。`rules-7` 讓 `api-key` 不再遮 schema 用字、協定用字與遮蔽寫法（見[第 3 節](#3-偵測規則)），也不再把 `Authorization:` 後的空白算進值；`rules-8` 再讓它不遮由協定用字組成的 snake_case 欄位名稱（`max_tokens`）與範本佔位（`<your secret>`），並遮含引號的值（`ab"cd12ef`）；`rules-9` 改為只不遮未加引號、不在 `.env` 行上的知名 API 欄位名稱，再遮 `data_store`、`web_server` 這類由協定用字組成的密碼，並把含數字的 `${{ secrets.PW2 }}` 整段當成範本；`rules-10` 讓 OpenAI 與 Anthropic API 的欄位名稱在任何寫法都不遮，並讓首尾是英文字母或數字的 `terms`、`projectNames` 只比對完整的詞（這項只少遮，所以也遞增版本）。`rules-11` 讓原文中是完整單字、但 NFKC 投影上不是的 `terms`、`projectNames` 出現處也遮（`Orion™`、`Lin№5`、`Orion\u200Bcloud`），與外洩檢查的判斷一致，並讓 `api-key` 未加引號的值在引號後接非 ASCII 字母、數字或符號時延續（`p@ss"🔑x12` 整段遮）。`rules-12` 讓 `terms`、`projectNames` 的原文邊界把 BMP 以外的字母與數字當成字母與數字（`Lin𝐀bc` 不再遮，這項只少遮），外洩檢查也把零寬字元後接的組合符號算在前一個字母上（`Orion\u200B\u0301`）。所以未設定 `rules` 的宿主的偵測器版本從 `rules-11` 變成 `rules-12`，摘要從 `sha256:de67f507…a04124` 變成 `sha256:2e02d33a…8c674d`，以 `rules-11` 記錄的 session 會遇到 `policy` 拒絕（隱私路由會改在本機回答）。在這類宿主啟用任一國際規則，偵測器版本變成 `rules-12+intl-2`；啟用任一延伸規則再加上 `+ext-1`；摘要隨之改變，之前記錄的 session 會遇到 `policy` 拒絕（隱私路由會改在本機回答）。國際規則的結果改變時只遞增 `INTERNATIONAL_RULES_VERSION`，延伸規則只遞增 `EXTENDED_RULES_VERSION`，都不影響未啟用它們的宿主。`intl-2` 加入 8 條電話規則，並讓 `e164-phone` 在行首只認分組寫法、略過日期。`intl-2` 與 `ext-1` 尚未發布，所以發布前的修改沿用這兩個版本；發布之後，任何改變其結果的修改都必須遞增版本。`terms`、`projectNames` 的比對改為詞的部分之間可有一串分隔符（`Margaret  Holloway`、換行縮排）時沿用 `rules-6`：摘要只含字面值的數量，不含比對方式；新的比對只多遮、不少遮；已記錄的訊息不重新掃描，其中這類寫法只在新訊息綁定同一寫法後才經值傳播遮掉。代理不保存索引，每個請求都用空索引，所以摘要對代理沒有影響，代理因此預設啟用全部規則（嚴格版取代 `card`、`entropy`）。
+**國際規則、延伸規則與政策摘要。** 偵測器的 `policyDigest` 是偵測器版本與啟用規則清單的雜湊，持久化 span 索引的宿主（DeepSeek Harness 的隱私路由）用它判斷先前記錄的遮罩是否仍適用；摘要不同時，`mask` 以 `policy` 拒絕。核心預設不含國際規則與延伸規則。`rules-7` 讓 `api-key` 不再遮 schema 用字、協定用字與遮蔽寫法（見[第 3 節](#3-偵測規則)），也不再把 `Authorization:` 後的空白算進值；`rules-8` 再讓它不遮由協定用字組成的 snake_case 欄位名稱（`max_tokens`）與範本佔位（`<your secret>`），並遮含引號的值（`ab"cd12ef`）；`rules-9` 改為只不遮未加引號、不在 `.env` 行上的知名 API 欄位名稱，再遮 `data_store`、`web_server` 這類由協定用字組成的密碼，並把含數字的 `${{ secrets.PW2 }}` 整段當成範本；`rules-10` 讓 OpenAI 與 Anthropic API 的欄位名稱在任何寫法都不遮，並讓首尾是英文字母或數字的 `terms`、`projectNames` 只比對完整的詞（這項只少遮，所以也遞增版本）。`rules-11` 讓原文中是完整單字、但 NFKC 投影上不是的 `terms`、`projectNames` 出現處也遮（`Orion™`、`Lin№5`、`Orion\u200Bcloud`），與外洩檢查的判斷一致，並讓 `api-key` 未加引號的值在引號後接非 ASCII 字母、數字或符號時延續（`p@ss"🔑x12` 整段遮）。`rules-12` 讓 `terms`、`projectNames` 的原文邊界把 BMP 以外的字母與數字當成字母與數字（`Lin𝐀bc` 不再遮，這項只少遮），外洩檢查也把零寬字元後接的組合符號算在前一個字母上（`Orion\u200B\u0301`）。所以未設定 `rules` 的宿主的偵測器版本從 `rules-11` 變成 `rules-12`，摘要從 `sha256:de67f507…a04124` 變成 `sha256:2e02d33a…8c674d`，以 `rules-11` 記錄的 session 會遇到 `policy` 拒絕（隱私路由會改在本機回答）。在這類宿主啟用任一國際規則，偵測器版本變成 `rules-12+intl-2`；啟用任一延伸規則再加上 `+ext-1`；摘要隨之改變，之前記錄的 session 會遇到 `policy` 拒絕（隱私路由會改在本機回答）。國際規則的結果改變時只遞增 `INTERNATIONAL_RULES_VERSION`，延伸規則只遞增 `EXTENDED_RULES_VERSION`，都不影響未啟用它們的宿主。`intl-2` 加入 8 條電話規則，並讓 `e164-phone` 在行首只認分組寫法、略過日期。`intl-2` 與 `ext-1` 在 v0.1.0 之前的修改沿用這兩個版本。自 v0.1.0 起，任何改變偵測結果的修改都必須遞增對應的版本（`DETECTOR_VERSION`、`INTERNATIONAL_RULES_VERSION` 或 `EXTENDED_RULES_VERSION`），因為以 git submodule 固定使用這份核心的宿主（dsh-addons 的 redaction 套件）會比對政策摘要。`terms`、`projectNames` 的比對改為詞的部分之間可有一串分隔符（`Margaret  Holloway`、換行縮排）時沿用 `rules-6`：摘要只含字面值的數量，不含比對方式；新的比對只多遮、不少遮；已記錄的訊息不重新掃描，其中這類寫法只在新訊息綁定同一寫法後才經值傳播遮掉。代理不保存索引，每個請求都用空索引，所以摘要對代理沒有影響，代理因此預設啟用全部規則（嚴格版取代 `card`、`entropy`）。
 
 上游 base 要設成讓 `<base>/v1/chat/completions`（或 `<base>/v1/messages`）是真正的端點，例如 `https://api.deepseek.com`。結尾斜線會被去掉。
 
 ## 13. 測試
 
-`pnpm test`（vitest）執行 29 個檔案、1,259 個測試（7 個需要真模型，預設略過）：
+`pnpm test`（vitest）執行 30 個檔案、1,956 個測試：1,948 個通過；需要真模型的 1 個檔案（8 個測試）未設定模型目錄時略過。
 
 | 檔案 | 內容 |
 | --- | --- |
 | `rules-detection`、`rules-secrets`、`rules-normalization`、`rules-propagation`、`rules-config`、`rules-synthetic-corpus` | 與 DeepSeek Harness 轉接層共用的規則測試：各規則、憑證樣式、NFKC 與零寬字元、同值擴散、設定驗證、合成語料。 |
-| `rules-regroup`、`rules-regroup-review*`、`rules-percent*` | 拆開寫法（WO-6）、百分比編碼的值與逐位元組還原、手機號碼的字母邊界（WO-7）、逐字元解碼與解碼後的 NFKC 投影，含兩組各 10,000 筆、不同種子的模糊測試（WO-9），以及緊接在無效 `%XX` 後面的值（WO-9b）。 |
+| `rules-regroup`、`rules-regroup-review*`、`rules-percent*` | 拆開寫法、百分比編碼的值與逐位元組還原、手機號碼的字母邊界、逐字元解碼與解碼後的 NFKC 投影，含兩組各 10,000 筆、不同種子的模糊測試，以及緊接在無效 `%XX` 後面的值。 |
 | `rules-international` | 國際規則：每條規則的合成正例、檢查碼錯誤與結構不符的反例、程式碼與日誌形狀的反例（時間戳、雜湊、訂單號、版本字串、UUID）、與卡號重疊時的類別、全形與百分比編碼、預設政策摘要不變、代理預設規則、diff 新增行與 `+` 後的日期不被當成電話；國內電話格式的正例，與時間戳、ISBN、SSN、IPv4、表格列、十六進位傾印、UUID、CSV 列等反例。`rules-synthetic-corpus` 另有國際規則在隨機日誌 id 與數字列上的誤遮上限，`adversarial` 另有 52 種國際規則的 200 KB 病態輸入。 |
 | `rules-extended` | 延伸規則：每條規則的正例與反例（程式碼、套件名、檔名、命名空間、環境變數、資源路徑、成員鏈、版本範圍、純數字 UUID）、預設 `card`、`entropy` 的結果不變、偵測器版本與摘要，以及 32 種 200 KB 病態輸入。 |
 | `engine` | 遮罩引擎：編號、保留 id、索引重用、嚴格還原。 |
@@ -457,19 +463,21 @@ POST /v1/messages tool arguments: kept by the tool restore policy KEY_1 in bash 
 | `proxy` | 對本機假上游的端對端測試：Chat Completions、Responses、Anthropic Messages 的 JSON 與 SSE，佔位符跨越分塊邊界並出現在工具呼叫 JSON 中；413、未知接續的 422、鍵中原始值寫成 `<key>`；上游重新導向回 502、巢狀過深的本文回 400、未結束或格式錯誤的串流仍送出殘留與其餘事件、用戶端中途斷線也記一行日誌。 |
 | `proxy-host`、`restore-urls` | 綁定位址、權杖、`allowedOrigins` 與設定錯誤即拒絕啟動；403（`Host`、`Origin`）與 401；工具呼叫參數中 URL 內的佔位符不還原，其他還原的佔位符回報 JSON 指標而不含原始值。 |
 | `cli` | 未知選項、多餘的位置參數與埠已被占用時，只印一行 `redaction-proxy: …` 並以代碼 1 結束。 |
+| `name-model-config`、`name-model-detector`、`name-model-spans`、`proxy-name-model`、`name-model-real` | 人名模型：設定驗證、以假模型（`name-model-fake.ts`）測哪些文字送進模型、規則優先、敬稱切除、整個請求中的擴散、推論失敗時只用規則或在 `nameModel.required` 時回 503；`name-model-real` 載入真模型，只在設定模型目錄時執行。 |
+| `public-bench`、`real-e2e-harness` | 公開評測：開發集的產生與檢查碼、計分方式（完全、部分遮罩與未遮罩，macro 平均，精確率）、保留集的載入與 `MANIFEST` 雜湊檢查；真實服務驗證工具對本機假上游的完整流程（沒有金鑰時略過、上游錯誤訊息引用的金鑰被替換、佔位符還原的判定）。 |
 
-`pnpm typecheck` 做型別檢查。CI（`.github/workflows/ci.yml`）在 ubuntu 與 macOS、Node 22 與 24 上跑型別檢查、測試、建置、`--demo` 與 `npm pack --dry-run`，不安裝人名模型的選用依賴；真實服務的驗證（`e2e-real.yml`）只能手動觸發，金鑰來自 repository secrets。所有端對端測試與 `pnpm demo` 都只用本機假上游，尚未對真實 API 或真實用戶端驗證。
+`pnpm typecheck` 做型別檢查。CI（`.github/workflows/ci.yml`）在 ubuntu 與 macOS、Node 22 與 24 上跑型別檢查、測試、建置、`--demo` 與 `npm pack --dry-run`，不安裝人名模型的選用依賴；真實服務的驗證（`e2e-real.yml`）只能手動觸發，金鑰來自 repository secrets。`pnpm test` 的端對端測試與 `pnpm demo` 都只用本機假上游。真實服務只驗證過 DeepSeek：2026-10-08 只設 `DEEPSEEK_API_KEY` 執行 `pnpm run e2e:real`，DeepSeek Chat Completions 的 4 個情境全部通過，OpenAI 與 Anthropic 因沒有金鑰而略過（[e2e/real](../e2e/real/README.md)）。尚未對真實用戶端驗證。
 
 ## 14. 誤遮率量測方法
 
 `pnpm bench`（`bench/false-positives.mjs`）：
 
-1. 以 `git archive` 匯出語料倉庫指定 commit 的 `packages`、`docs`、`scripts`（DeepSeek Harness 在 commit `6d3b7608bf` 的本機 checkout，以 `CORPUS_REPO` 指定，必填；`CORPUS_REF` 預設 `master`）到 `.corpus-work`，結束後刪除。
+1. 以 `git archive` 匯出語料儲存庫指定 commit 的 `packages`、`docs`、`scripts`（DeepSeek Harness 在 commit `6d3b7608bf` 的本機 checkout，以 `CORPUS_REPO` 指定，必填；`CORPUS_REF` 預設 `master`）到 `.corpus-work`，結束後刪除。
 2. 選取 `.ts .md .yml .yaml .json .sh .py`、小於 512 KB 的檔案，排除 snapshot、session、fixture、`node_modules`、`lib`、`dist`、`coverage`。
 3. 每個檔案以預設規則整份 `mask`，再以嚴格 `restore` 確認逐位元組還原。
 4. 主要指標：程式碼檔（`.md`、`.yml`、`.yaml` 以外）中的 `KEY` 數量除以程式碼行數。原始碼不含可用的憑證，所以每一個都是誤遮。其他類別以全部行數與程式碼行數各計一次，是誤遮的上限，因為文件裡確實有應被遮的範例路徑與地址。預設設定不含 `terms`，所以 `TERM`、`PROJECT` 不出現。
 
-最近一次結果（`rules-12`；DeepSeek Harness `6d3b7608bf`，4,789 個檔案、848,546 行，其中程式碼檔 697,669 行，Apple M5 Max 約 8 秒；除 `KEY` 外與 `rules-6`、`rules-5`、`rules-4`、`rules-3`、`rules-2` 每一類數量相同，`TAXID` 為 0；`KEY` 因憑證不論長度都擴散而從 527 增為 602，`rules-7` 不再遮佔位用字後降為 598，`rules-8` 不再遮協定欄位名稱與範本佔位後降為 592，`rules-9` 把含數字的雙大括號範本整段當成範本後降為 590，`rules-10`、`rules-11`、`rules-12` 不變）：
+最近一次結果（`rules-12`；DeepSeek Harness `6d3b7608bf`，4,789 個檔案、848,546 行，其中程式碼檔 697,669 行，約 5–8 秒（依機器而定）；除 `KEY` 外與 `rules-6`、`rules-5`、`rules-4`、`rules-3`、`rules-2` 每一類數量相同，`TAXID` 為 0；`KEY` 因憑證不論長度都擴散而從 527 增為 602，`rules-7` 不再遮佔位用字後降為 598，`rules-8` 不再遮協定欄位名稱與範本佔位後降為 592，`rules-9` 把含數字的雙大括號範本整段當成範本後降為 590，`rules-10`、`rules-11`、`rules-12` 不變）：
 
 | 類別 | 數量 | 每千行 |
 | --- | --- | --- |
@@ -486,9 +494,9 @@ POST /v1/messages tool arguments: kept by the tool restore policy KEY_1 in bash 
 
 以 `BENCH_RULES=proxy pnpm bench` 量測代理預設（42 條規則，`rules-12+intl-2+ext-1`）：`ENTROPY` 從 873 降為 18（翻譯目錄 `*.i18n.yaml` 以檔名為鍵的來源雜湊與 `@` 後的 commit id 不再遮），`CARD` 從 3 降為 0，`IP` 從 42 增為 44（`ip-cgnat-ula` 遮到 SSRF 測試中真正的 `100.64.0.1` 與 `fc00::1`），其他每一類的數量與上表完全相同，其餘新規則在這份語料上新增 0 個遮罩，耗時約 9 秒。`BENCH_RULES=all` 同時啟用預設與嚴格版，結果是兩者的聯集。英文程式碼語料幾乎不含這類識別碼形狀，所以這個數字只說明它們不會誤遮一般程式碼；隨機日誌 id 上的誤遮率由 `rules-synthetic-corpus` 的上限測試把關。與識別碼格式完全相同的值本來就會被遮：任何 `123-45-6789` 形式的數字（SSN 沒有檢查碼）、`+` 後接 10–15 位數且國碼已分配的數字（例如寫成 `+12345678901` 的帶號整數），以及約 1/10 到 1/97 通過檢查碼的同格式隨機值。語料是英文程式碼；以中文為主的散文語料尚未量測。
 
-## 15. 公開前尚待完成
+## 15. 尚待完成
 
-- 對真實 OpenAI、Anthropic、DeepSeek API 與真實用戶端（Claude Code、OpenAI SDK）做端對端驗證。
+- 對真實 OpenAI、Anthropic API 與真實用戶端（Claude Code、OpenAI SDK）做端對端驗證。
 - 量測中文散文語料的誤遮率。
 - 發布到 npm。套件已可發布（`bin` 入口 `redaction-proxy`，`npm pack` 只含 `lib/`、README、LICENSE、NOTICE），但 `package.json` 仍是 `"private": true`；決定發布時刪掉這一行即可（若改用 scoped 名稱，另加 `"publishConfig": { "access": "public" }`）。`prepublishOnly` 會先跑型別檢查與測試。授權條款已定為 Apache-2.0（[LICENSE](../LICENSE)）。
 - 實際建置並執行 Docker 映像（`Dockerfile` 已寫好，尚未在有 Docker 的環境建置）。映像綁定 `0.0.0.0`，所以必須以 `-e REDACTION_PROXY_AUTH_TOKEN` 傳入權杖，並以 `-p 127.0.0.1:8787:8787` 只發布到本機。
@@ -500,7 +508,7 @@ POST /v1/messages tool arguments: kept by the tool restore policy KEY_1 in bash 
 
 它讀什麼、不讀什麼：
 
-- 只讀使用者訊息中你自己寫的散文段落。系統提示、助理回覆、工具結果、程式碼區塊，以及看起來像程式碼、JSON、YAML 或日誌的行都不讀，所以貼上的程式碼或日誌裡的人名在那裡不會被找到。
+- 只讀使用者訊息中你自己寫的一般文字段落。系統提示、助理回覆、工具結果、程式碼區塊，以及看起來像程式碼、JSON、YAML 或日誌的行都不讀，所以貼上的程式碼或日誌裡的人名在那裡不會被找到。
 - 它找到的人名、公司、地名、地址，會在整個請求中遮掉：系統提示、助理回覆、工具結果、工具呼叫參數（找到 `許雅雯` 也遮 `許 雅 雯`，找到 `Jordan` 也遮 `JORDAN`）。每種寫法各有自己的佔位符，還原時才能逐字寫回原本的寫法。以空格分詞的文字只比對完整單字（`Leeds` 裡的 `Lee` 不遮）；中文、日文、韓文在任何位置都比對。只有一個字的值只在找到的位置遮。
 - 全名只會遮其他地方的全名：找到 `Lee Morgan` 後，單獨出現的 `Lee`、`Morgan`，或 `Lee "Lefty" Morgan`，都照原樣送出。編碼過的寫法（URL 中的 `Lee%20Morgan`）與黏在一起的寫法（`LeeMorgan`）既不遮也不拒絕。
 - 模型誤認成人名的字也會在整個請求中被遮，靠允許清單擋下。
@@ -512,16 +520,16 @@ POST /v1/messages tool arguments: kept by the tool restore policy KEY_1 in bash 
 
 | 項目 | 結果 | 說明 |
 | --- | --- | --- |
-| 散文中的人名，英文／日文 | 1.00／1.00 | |
-| 散文中的人名，繁體中文 | **0.87** | 未達 0.90 目標：大約每 8 個人名漏 1 個。 |
-| 散文中的人名，簡體中文 | 保留集 1.00、開發集 0.75 | 樣本小（開發集 16 個人名）。 |
+| 一般文字中的人名，英文／日文 | 1.00／1.00 | |
+| 一般文字中的人名，繁體中文 | **0.87** | 未達 0.90 目標：大約每 8 個人名漏 1 個。 |
+| 一般文字中的人名，簡體中文 | 保留集 1.00、開發集 0.75 | 樣本小（開發集 16 個人名）。 |
 | 貼上的程式碼、日誌、JSON 中的人名 | 0.10–0.30 | 設計上不處理；這類人名請列進 `terms`。 |
-| 散文中的公司／地名／地址 | 0.71／0.88／0.82 | 地址：簡體中文 0.42、法文 0.67。 |
+| 一般文字中的公司／地名／地址 | 0.71／0.88／0.82 | 地址：簡體中文 0.42、法文 0.67。 |
 | 精確率 | 0.94 | 被遮的範圍中確實是人名、公司或地名的比例。 |
 | 技術對話中的誤遮 | 每千句 46 處（開發集 113 處） | 量測時尚未有允許清單；多半是 `Default` 或工具名稱。加上預設允許清單後，開發集每千句 4 處，但清單正是依這組資料建的。每一處都會在整個請求中被遮。 |
 | 程式碼中的誤遮 | 0 | 程式碼不讀。 |
 | 增加的記憶體 | 約 +420 MB | 512 token 視窗；處理過 16 KB 訊息後約 +440 MB。 |
-| 增加的延遲 | 2 KB 中文散文 p95 約 130 ms，中英混合約 80 ms | 16 KB 中文散文約 1 秒。看過的段落會快取。 |
+| 增加的延遲 | 2 KB 中文一般文字 p95 約 130 ms，中英混合約 80 ms | 16 KB 中文一般文字約 1 秒。看過的段落會快取。 |
 
 設定方式：
 
@@ -569,18 +577,18 @@ node scripts/fetch-name-model.mjs ~/models/nym       # 從 Hugging Face 下載�
 | 工具參數只還原允許的類別 | 回應中 URL 內的佔位符保持原樣（合法的 `https://host/⟦PATH_1⟧` 也一樣）。工具參數只還原 `toolRestore` 允許的類別（預設 `PATH`、`TERM`、`PROJECT`），需要其他值的工具拿到佔位符，可能失敗，直到使用者為它開放。允許的類別照常還原並記入日誌，所以 shell 指令等仍可能把它們送出。 |
 | 請求大小 | 本文超過 64 MiB 以 413 拒絕。 |
 | 沒有上游逾時 | 代理不限制等待上游的時間；上游不回應時，請求一直等到用戶端自己的逾時或斷線，代理隨即中止上游請求。 |
-| 尚未對真實服務測試 | 測試與示範都用本機假上游，尚未對 OpenAI、Anthropic、DeepSeek 或真實用戶端驗證。驗證工具已備妥（[e2e/real](../e2e/real/README.md)），尚未執行。 |
+| 真實服務只驗證過 DeepSeek | 2026-10-08 以[真實服務驗證工具](../e2e/real/README.md)對 DeepSeek Chat Completions 驗證，4 個情境全部通過。OpenAI、Anthropic 與真實用戶端尚未驗證；其餘測試與示範都用本機假上游。 |
 
 ## 18. 實測數字
 
 | 項目 | 結果 | 代表什麼 |
 | --- | --- | --- |
-| 測試 | 1,252 個通過、7 個需要真模型而略過（共 1,259 個） | 規則、引擎、對抗輸入、對假上游的三種 API 串流與非串流、Host／Origin／權杖檢查。 |
-| 憑證誤遮 | 每千行程式碼 **0.86** 處 | 在不含真實金鑰的 DeepSeek Harness 原始碼上量測（69.8 萬行程式碼），平均約 1,160 行有一處被誤當成金鑰而遮掉。 |
+| 測試 | 1,948 個通過、8 個需要真模型而略過（30 個檔案、共 1,956 個） | 規則、引擎、對抗輸入、對假上游的三種 API 串流與非串流、Host／Origin／權杖檢查。 |
+| 憑證誤遮 | 每千行程式碼 **0.85** 處 | 在不含真實金鑰的 DeepSeek Harness 原始碼上量測（69.8 萬行程式碼），平均約 1,180 行有一處被誤當成金鑰而遮掉。 |
 | 還原失敗 | 0 | 遮罩成功的檔案全部都能逐位元組還原。 |
-| 速度 | 約 85 萬行 / 5 秒 | Apple M5 Max。 |
-| 合成多語提示，保留集第 2 版（盲寫、只跑一次） | 英文 1,527 個值、10 類宏平均完全遮蔽：核心預設 25.9%、代理預設 39.5%、加人名模型 44.8%；Presidio cutoff 0 為 40.4%、cutoff 0.4 為 37.8%。完全沒遮：核心預設 64.0%、代理預設 49.9%、加人名模型 35.6%、Presidio 29.3–35.0%。遮掉的範圍確實是敏感值：規則 94.3–95.8%、加人名模型 94.8%、Presidio 64.9–68.0%。中位數耗時：規則 0.10–0.12 ms、加人名模型 10.8 ms、Presidio 11.2–11.4 ms。全部 7 種語言的宏平均：核心預設 27.3%、代理預設 37.9%、加人名模型 44.4%（Presidio 34.5%、32.8%，只當英文分析，僅供參考）。還原：只用規則時 1,617 筆全部逐位元組還原，開啟人名模型時 1,587 筆（30 筆不一致） | `heldout-v2.jsonl`（SHA-256 `e3d45536…0bb04`）：英、繁中、簡中、日、韓、德、法共 1,617 筆、10,268 個敏感值、2,997 個困難反例，撰寫者沒看過規則與評測程式，約 60% 的值是非標準寫法；凍結後只評分一次，量測的是 commit `01489cd`（`rules-6+intl-2+ext-1`）。標準寫法與非標準寫法（英文、代理預設、完全遮蔽）：email 100%（n=107）／61.5%（n=148）、電話 70.4%／41.1%、身分證號 89.5%／30.4%、卡號 94.7%／0.0%（n=40）、IBAN 100%（n=15）／0.0%（n=46）、金鑰 95.9%／80.7%、主機 100%（n=93）／43.6%；100% 只出現在標準寫法，且樣本小。弱點（英文、代理預設）：非標準的 IBAN、卡號、身分證號大多抓不到，38% 的非標準 email 完全沒遮；路徑 88% 只遮掉一部分；沒有地址規則（0%）；人名要靠人名模型，完全遮蔽 49%（全部語言 52%）；電話完全遮蔽 51%（Presidio 85%），帶分機的 30 個沒有一個被完全遮蔽。量測之後的兩項修正不在這些數字中：`card-strict` 改認重新分組、點分隔、混用空格和 `-`，以及換行斷開的卡號（這次代理預設的英文卡號完全遮蔽 30.5%，低於核心預設的 44.1%）；人名模型的還原錯誤已修正：同一個名字的不同寫法（`Jordan`、`JORDAN`）現在各拿一個代號，2,908 筆合成資料的還原檢查從 754 筆不一致降到 0 筆。完整結果：[bench/results/public-bench-held-out-v2.md](../bench/results/public-bench-held-out-v2.md)。第 1 版（1,518 筆、較舊的 `rules-6+intl-1`、只有標準寫法）留作紀錄：[bench/results/public-bench-held-out.md](../bench/results/public-bench-held-out.md)。 |
-| 合成多語提示，開發集（初步） | 代理預設（`rules-6+intl-2+ext-1`）、9 類宏平均完全遮蔽：英文 88.9%、全部語言 86.1% | 1,200 筆固定種子的提示（英、繁中、簡中、日），由規則作者撰寫、和規則一起調整，所以分數比保留集高得多；只當開發時的檢查：[bench/results/public-bench-dev.md](../bench/results/public-bench-dev.md)。 |
+| 速度 | 約 85 萬行 / 約 5–8 秒 | 依機器而定；Apple M5 Max 約 5 秒。 |
+| 合成多語提示，保留集第 2 版（盲寫、只跑一次） | 英文 1,527 個值、10 類 macro 平均完全遮蔽：核心預設 25.9%、代理預設 39.5%、加人名模型 44.8%；Presidio cutoff 0 為 40.4%、cutoff 0.4 為 37.8%。完全沒遮：核心預設 64.0%、代理預設 49.9%、加人名模型 35.6%、Presidio 29.3–35.0%。遮掉的範圍與敏感值重疊的比例：規則 94.3–95.8%、加人名模型 94.8%、Presidio 64.9–68.0%。中位數耗時：規則 0.10–0.12 ms、加人名模型 10.8 ms、Presidio 11.2–11.4 ms。全部 7 種語言的 macro 平均：核心預設 27.3%、代理預設 37.9%、加人名模型 44.4%（Presidio 34.5%、32.8%，只當英文分析，僅供參考）。還原：只用規則時 1,617 筆全部逐位元組還原，開啟人名模型時 1,587 筆（30 筆不一致） | `heldout-v2.jsonl`（SHA-256 `e3d45536…0bb04`）：英、繁中、簡中、日、韓、德、法共 1,617 筆、10,268 個敏感值、2,997 個困難反例，撰寫者沒看過規則與評測程式，約 60% 的值是非標準寫法；凍結後在 2026-10-07 只評分一次，使用代理預設的偵測器 `rules-6+intl-2+ext-1`。標準寫法與非標準寫法（英文、代理預設、完全遮蔽）：email 100%（n=107）／61.5%（n=148）、電話 70.4%／41.1%、身分證號 89.5%／30.4%、卡號 94.7%／0.0%（n=40）、IBAN 100%（n=15）／0.0%（n=46）、金鑰 95.9%／80.7%、主機 100%（n=93）／43.6%；100% 只出現在標準寫法，且樣本小。弱點（英文、代理預設）：非標準的 IBAN、卡號、身分證號大多抓不到，38% 的非標準 email 完全沒遮；路徑 88% 只遮掉一部分；沒有地址規則（0%）；人名要靠人名模型，完全遮蔽 49%（全部語言 52%）；電話完全遮蔽 51%（Presidio 85%），帶分機的 30 個沒有一個被完全遮蔽。量測之後的所有修改（偵測器從 `rules-6` 到 `rules-12`，見[第 12 節](#12-完整設定)與 README）都不在這些數字中，其中包括：`card-strict` 改認重新分組、點分隔、混用空格和 `-`，以及換行斷開的卡號（這次代理預設的英文卡號完全遮蔽 30.5%，低於核心預設的 44.1%）；人名模型的還原錯誤已修正：同一個名字的不同寫法（`Jordan`、`JORDAN`）現在各拿一個佔位符。完整結果：[bench/results/public-bench-held-out-v2.md](../bench/results/public-bench-held-out-v2.md)。第 1 版（1,518 筆、較舊的 `rules-6+intl-1`、只有標準寫法）留作紀錄：[bench/results/public-bench-held-out.md](../bench/results/public-bench-held-out.md)。 |
+| 合成多語提示，開發集（初步） | 代理預設（`rules-6+intl-2+ext-1`）、9 類 macro 平均完全遮蔽：英文 88.9%、全部語言 86.1% | 1,200 筆固定種子的提示（英、繁中、簡中、日），由規則作者撰寫、和規則一起調整，所以分數比保留集高得多；只當開發時的檢查：[bench/results/public-bench-dev.md](../bench/results/public-bench-dev.md)。 |
 
 誤遮的代價是模型看到一個不必要的佔位符，回覆時會被換回原值。語料是英文程式碼，中文散文的誤遮率尚未量測。以 `pnpm test`、`pnpm bench` 與 `pnpm run bench:public` 重現；加上 `--heldout bench/heldout/heldout-v2.jsonl`（或 `heldout-v1.jsonl`）可另外評分凍結的保留集；兩個檔案的 SHA-256 記在同目錄的 `MANIFEST`，載入時檢查（格式見 `bench/public/heldout.ts`）。
 
@@ -594,9 +602,9 @@ node scripts/fetch-name-model.mjs ~/models/nym       # 從 Hugging Face 下載�
 
 **為什麼請求被 422 拒絕？** 遮罩後的請求中仍有偵測到的值，通常是在代理不改寫的欄位（例如圖片 URL 或 metadata），或你設定了 `screen: "refuse"`。訊息會指出欄位，不含值。
 
-**代理會存我的金鑰或對話嗎？** 金鑰原樣轉送，不儲存。對話不存，唯一例外是 Responses API 接續用的最近 256 份輸入，只在記憶體中。
+**代理會存我的金鑰或對話嗎？** 金鑰原樣轉送，不儲存。對話不存，例外是記憶體中的兩樣東西：Responses API 接續用的最近 256 份輸入，以及偵測到的原始值（[第 8 節](#已知原始值)，預設從最後一次偵測起保留 24 小時）。兩者都不寫入磁碟，重啟即消失。
 
-**能放在伺服器上給別人用嗎？** 不建議。`host` 改成非本機位址時必須設 `authToken`，但只有一個共用權杖、以明文 HTTP 傳送，接續對話的記憶也不分用戶端（第 8 節）。它是給本機或容器網路用的。
+**能放在伺服器上給別人用嗎？** 不建議。`host` 改成非本機位址時必須設 `authToken`，但只有一個共用權杖、以明文 HTTP 傳送；記憶依用戶端憑證分開，共用同一把憑證（或代理備援金鑰）的呼叫者共用一個範圍（第 8 節）。它是給本機或容器網路用的。
 
 ## 20. README 圖片與影片
 
@@ -607,7 +615,7 @@ README 的圖片與影片都放在 `docs/media/`，可重新產生：
 | `hero.svg` | 手繪 SVG | 直接編輯 |
 | `results.svg` | 評測結果 JSON | `node bench/results-chart.mjs`；預設讀 `bench/results/public-bench-held-out-v2.json` 的英文提示，畫代理預設、加人名模型與 Presidio cutoff 0.4 三個系統；`--split allLanguages`、`--systems "名稱;名稱"`、`--input`、`--out`、`--label` 可改（見腳本開頭） |
 | `src/captured.json` | 真實代理輸出：`lib/cli.js --demo`，以及另一個經代理送往本機假上游的串流請求 | `pnpm build && node docs/media/src/capture.mjs` |
-| `before-after.png`、`intro.mp4`、`intro.gif` | `src/before-after.html`、`src/intro.html` 讀 `captured.json` | `PLAYWRIGHT=… FFMPEG=… node docs/media/src/render.mjs`（Playwright 與 ffmpeg 都不是倉庫依賴，取得方式見腳本開頭） |
+| `before-after.png`、`intro.mp4`、`intro.gif` | `src/before-after.html`、`src/intro.html` 讀 `captured.json` | `PLAYWRIGHT=… FFMPEG=… node docs/media/src/render.mjs`（Playwright 與 ffmpeg 都不是儲存庫依賴，取得方式見腳本開頭） |
 
 示範資料全是虛構的值（`example.test` 網域、虛構人名、假金鑰）。
 
