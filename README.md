@@ -18,7 +18,7 @@ The recording replays real output of `pnpm demo` and of one more request through
 
 ## Quick start (30 seconds)
 
-Requires Node 22.19+ and pnpm. From a clone of this repository:
+Requires Node 22.19+ or 24+ and pnpm. From a clone of this repository:
 
 ```sh
 pnpm install
@@ -146,7 +146,7 @@ Every POST to a masked route goes through the same steps; a GET is relayed witho
 
 ```mermaid
 flowchart TD
-  A["Your tool sends a request with its own API key"] --> B{"Allowed? loopback origin; loopback host or auth token; a known route; at most 64 MiB"}
+  A["Your tool sends a request with its own API key"] --> B{"Allowed? no Origin, or a loopback or allowed origin; loopback host or auth token; a known route; at most 64 MiB"}
   B -- "no" --> B2["403 / 401 / 404 / 413, not forwarded"]
   B -- "GET" --> P["Not masked; reply not restored"]
   B -- "POST to a masked route" --> C["Parse JSON; collect every text field; skip ids, names, enum values, metadata, stop strings, url and image_url, files, signed or encrypted state"]
@@ -211,7 +211,7 @@ What it reads, every number, and the options: [technical details §16](docs/DETA
 | --- | --- | --- | --- | --- | --- |
 | Fully masked (macro average of 10 categories) | 25.9% | 39.5% | **44.8%** | 40.4% | 37.8% |
 | Left untouched (macro average) | 64.0% | 49.9% | 35.6% | **29.3%** | 35.0% |
-| Masked regions that were sensitive | 94.3% | **95.8%** | 94.8% | 64.9% | 68.0% |
+| Masked regions overlapping a sensitive value | 94.3% | **95.8%** | 94.8% | 64.9% | 68.0% |
 | Median time per prompt | 0.10 ms | 0.12 ms | 10.8 ms | 11.4 ms | 11.2 ms |
 | Fully masked, all 7 languages | 27.3% | 37.9% | 44.4% | 34.5%* | 32.8%* |
 

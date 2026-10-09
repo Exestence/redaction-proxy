@@ -18,7 +18,7 @@
 
 ## 30 秒上手
 
-需要 Node 22.19 及以上和 pnpm。在本仓库的克隆目录里执行：
+需要 Node 22.19 及以上（或 24 及以上）和 pnpm。在本仓库的克隆目录里执行：
 
 ```sh
 pnpm install
@@ -63,7 +63,7 @@ npx redaction-proxy           # 启动代理，地址 http://127.0.0.1:8787（�
 
 ## 接入你的工具
 
-> **真实服务目前只验证了 DeepSeek。** 2026-10-08 用[真实服务验证脚本](e2e/real/README.md)对 DeepSeek 跑了 4 个场景（Chat Completions；非流式（JSON）与流式；纯文本与强制工具调用），全部通过：上游只看到占位符，每次 5 个值都正确还原。OpenAI、Anthropic 因没有密钥而跳过，也还没试过真实客户端。
+> **真实服务目前只验证了 DeepSeek。** 2026-10-08 用[真实服务验证工具](e2e/real/README.md)对 DeepSeek 跑了 4 个场景（Chat Completions；非流式 JSON 与流式；纯文本与强制工具调用），全部通过：上游只看到占位符，每次 5 个值都还原。OpenAI、Anthropic 因没有密钥而跳过，也还没试过真实客户端。
 
 工具照常发送自己的 API 密钥；代理原样转发，从不保存。
 
@@ -72,7 +72,7 @@ npx redaction-proxy           # 启动代理，地址 http://127.0.0.1:8787（�
 | Claude Code | `ANTHROPIC_BASE_URL=http://127.0.0.1:8787 claude` | 未测试 |
 | Anthropic SDK | `ANTHROPIC_BASE_URL=http://127.0.0.1:8787`（不带 `/v1`） | 未测试 |
 | OpenAI SDK 及大多数兼容工具 | `OPENAI_BASE_URL=http://127.0.0.1:8787/v1`（要带 `/v1`） | 未测试 |
-| DeepSeek | 用 `REDACTION_PROXY_OPENAI_UPSTREAM=https://api.deepseek.com node lib/cli.js` 启动代理，再配 `OPENAI_BASE_URL=http://127.0.0.1:8787/v1` 和你的 DeepSeek 密钥。这会替换掉 OpenAI 上游。 | 已用真实服务验证脚本验证（仅 API） |
+| DeepSeek | 用 `REDACTION_PROXY_OPENAI_UPSTREAM=https://api.deepseek.com node lib/cli.js` 启动代理，再配 `OPENAI_BASE_URL=http://127.0.0.1:8787/v1` 和你的 DeepSeek 密钥。这会替换掉 OpenAI 上游。 | 已用真实服务验证工具验证（仅 API） |
 | Cursor | 不支持：Cursor 的自定义 base URL 请求从 Cursor 自己的服务器发出，访问不到你的 `127.0.0.1`。 | — |
 
 <details><summary>curl 示例与配置文件</summary>
@@ -142,11 +142,11 @@ curl http://127.0.0.1:8787/v1/chat/completions \
 
 ## 工作原理
 
-每个发往脱敏路由的 POST 都走同样的步骤；GET 不脱敏，直接转发。代理不保存各段对话的占位符对照表：每次请求都从完整历史重新编号，所以只往后增加的对话中，每一轮脱敏后的前缀不变，云端的提示缓存照常生效；例外是较后的轮次（或同一凭证的另一个请求）首次检测到一个之前已出现过的值，此时之前的位置也会被脱敏，前缀因此改变一次（[原因与会打破的情况](docs/DETAILS.md#4-遮罩順序與提示快取)）。有两样东西会按客户端凭证留在内存中，最多保留到重启：Responses API 回复的原始输入（给以 `previous_response_id` 接续、不重发历史的请求用），以及下表「记忆」行的值。
+每个发往脱敏路由的 POST 都走同样的步骤；GET 不脱敏，直接转发。代理不保存各段对话的占位符对照表：每次请求都从完整历史重新编号，所以只往后增加的对话中，每一轮脱敏后的前缀不变，云端的提示缓存照常生效；例外是较后的轮次（或同一凭证的另一个请求）首次检测到一个之前已出现过的值，此时之前的位置也会被脱敏，前缀因此改变一次（[原因与会打破的情况](docs/DETAILS.md#4-遮罩順序與提示快取)）。有两样东西会按客户端凭证留在内存中，最多保留到重启：Responses API 回复的原始输入（给以 `previous_response_id` 接续、不重发历史的请求用），以及下表“记忆”行的值。
 
 ```mermaid
 flowchart TD
-  A["你的工具发出请求，带它自己的 API 密钥"] --> B{"允许吗？本机来源；本机主机或 auth token；已知的路由；最多 64 MiB"}
+  A["你的工具发出请求，带它自己的 API 密钥"] --> B{"允许吗？没有 Origin，或本机或允许的来源；本机主机或 auth token；已知的路由；最多 64 MiB"}
   B -- "否" --> B2["403 / 401 / 404 / 413，不转发"]
   B -- "GET" --> P["不脱敏；响应不还原"]
   B -- "POST 到脱敏路由" --> C["解析 JSON；收集每个文本字段；跳过 id、名称、枚举值、metadata、stop 字符串、url 与 image_url、文件、签名或加密状态"]
@@ -211,7 +211,7 @@ REDACTION_PROXY_NAME_MODEL_DIR=$HOME/models/nym node lib/cli.js
 | --- | --- | --- | --- | --- | --- |
 | 完整脱敏（10 类宏平均） | 25.9% | 39.5% | **44.8%** | 40.4% | 37.8% |
 | 完全未脱敏（宏平均） | 64.0% | 49.9% | 35.6% | **29.3%** | 35.0% |
-| 脱敏的区域确实是敏感值 | 94.3% | **95.8%** | 94.8% | 64.9% | 68.0% |
+| 与敏感值重叠的脱敏区域 | 94.3% | **95.8%** | 94.8% | 64.9% | 68.0% |
 | 每条提示词的中位耗时 | 0.10 ms | 0.12 ms | 10.8 ms | 11.4 ms | 11.2 ms |
 | 完整脱敏，全部 7 种语言 | 27.3% | 37.9% | 44.4% | 34.5%* | 32.8%* |
 
