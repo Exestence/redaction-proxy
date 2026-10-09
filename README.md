@@ -8,13 +8,13 @@ A small proxy on your own machine that replaces emails, API keys, ID numbers, an
 
 It works with any OpenAI- or Anthropic-compatible client, streaming included, and needs no local model. It **reduces** leaks of personal data and secrets; it does **not** make a conversation private.
 
-> **Status:** pre-release, not on npm. Verified against the real DeepSeek Chat Completions API (2026-10-08, see below); OpenAI, Anthropic and real clients such as Claude Code are not verified yet.
+> **Status:** 0.1.0, not yet on npm. Verified against the real DeepSeek Chat Completions API (2026-10-08, see below); OpenAI, Anthropic and real clients such as Claude Code are not verified yet.
 
 ## Intro video
 
 [![A 30-second terminal recording: pnpm demo sends an email, a national ID, and a home path; the cloud sees only placeholders; the reply comes back with the real values.](docs/media/intro.gif)](docs/media/intro.mp4)
 
-The recording replays real output of `pnpm demo` and of one more request through the proxy. [MP4 version](docs/media/intro.mp4).
+The recording replays real output of `pnpm demo` and of one more request through the proxy (captions in English). [MP4 version](docs/media/intro.mp4).
 
 ## Quick start (30 seconds)
 
@@ -27,7 +27,7 @@ pnpm build
 node lib/cli.js    # the proxy, on http://127.0.0.1:8787
 ```
 
-`pnpm demo` prints:
+`pnpm demo` prints (the demo input is Traditional Chinese):
 
 ```text
 client sends:      請寄信給 lin.fictional@example.test，身分證 A123456789，檔案在 /Users/fictional-user/notes.md
@@ -117,11 +117,13 @@ Pass a JSON file with `node lib/cli.js --config redaction.json`; environment var
 
 Environment variables and every option: [technical details §12](docs/DETAILS.md#12-完整設定) (Traditional Chinese). The log has one line per request with counts and duration, and one line per placeholder in tool-call arguments (restored or kept, its id, the tool, and the argument path); never an original value or a header, unless `debugMasked` is on.
 
+For clients that send no API key, the proxy adds one from two environment-only variables: `REDACTION_PROXY_OPENAI_API_KEY` (sent as `Authorization: Bearer` when an OpenAI-style client sends no `authorization`) and `REDACTION_PROXY_ANTHROPIC_API_KEY` (sent as `x-api-key` when an Anthropic-style client sends neither `x-api-key` nor `authorization`). They are kept in memory only, and all clients that rely on them share one memory scope.
+
 </details>
 
 ## What it masks
 
-![A real request through the proxy: the tool sends a host name, a private IP, a home path, an API key, and an email; the cloud LLM receives placeholders such as ⟦HOST_1⟧ and ⟦KEY_1⟧; the reply comes back with the real values.](docs/media/before-after.png)
+![A real request through the proxy to a local fake upstream: the tool sends a host name, a private IP, a home path, an API key, and an email; the cloud LLM receives placeholders such as ⟦HOST_1⟧ and ⟦KEY_1⟧; the reply comes back with the real values.](docs/media/before-after.png)
 
 | Category | Example | The cloud sees |
 | --- | --- | --- |
@@ -140,15 +142,15 @@ The same value gets the same placeholder throughout a request. If a value detect
 
 ## How it works
 
-Every request goes through the same steps. The proxy keeps no per-conversation placeholder table: it numbers placeholders again from the full history on each request, so in a conversation that only grows, the masked prefix stays the same and the provider's prompt cache keeps working ([why and when it breaks](docs/DETAILS.md#4-遮罩順序與提示快取)). Two things do stay in memory per client credential until a restart: the original inputs of Responses API replies, for requests that continue with `previous_response_id` instead of resending history, and the remembered values below.
+Every POST to a masked route goes through the same steps; a GET is relayed without masking. The proxy keeps no per-conversation placeholder table: it numbers placeholders again from the full history on each request, so in a conversation that only grows, the masked prefix stays the same and the provider's prompt cache keeps working, unless a later turn (or another request with the same credential) first detects a value that already appeared earlier; it is then masked there too, which changes the prefix once ([why and when it breaks](docs/DETAILS.md#4-遮罩順序與提示快取)). Two things do stay in memory per client credential, at most until a restart: the original inputs of Responses API replies, for requests that continue with `previous_response_id` instead of resending history, and the remembered values below.
 
 ```mermaid
 flowchart TD
   A["Your tool sends a request with its own API key"] --> B{"Allowed? loopback origin; loopback host or auth token; a known route; at most 64 MiB"}
   B -- "no" --> B2["403 / 401 / 404 / 413, not forwarded"]
-  B -- "GET" --> P["Relayed unchanged, reply unchanged"]
-  B -- "POST to a masked route" --> C["Parse JSON; collect every text field; skip ids, names, enum values, metadata, stop strings, files, signed or encrypted state"]
-  C --> S["Screen: control characters and ⟦ ⟧ become visible stand-ins by default"]
+  B -- "GET" --> P["Not masked; reply not restored"]
+  B -- "POST to a masked route" --> C["Parse JSON; collect every text field; skip ids, names, enum values, metadata, stop strings, url and image_url, files, signed or encrypted state"]
+  C --> S["Screen: control characters, U+FFFD, lone surrogates and ⟦ ⟧ become visible stand-ins by default"]
   S --> D["Detect: rules, your terms and projectNames, optional name model, values remembered for this client credential"]
   D --> E["Mask: each distinct value becomes ⟦CATEGORY_n⟧, numbered in text order"]
   E --> F{"Leak scan: is a value detected in this request still in it?"}
@@ -167,14 +169,14 @@ flowchart TD
 
 | Step | What it decides | If it goes wrong |
 | --- | --- | --- |
-| Gate | Web pages are refused unless their origin is a loopback `http(s)` page or in `allowedOrigins`; without `authToken`, requests for other host names are refused too. | 403, 401, 404 or 413; nothing is forwarded. A body that is not JSON or is nested too deep gets 400. |
+| Gate | Web pages are refused unless their origin is a loopback `http(s)` page or in `allowedOrigins`; without `authToken`, requests for other host names are refused too. It also requires a known route, and the token when `authToken` is set. | 403, 401, 404 or 413; nothing is forwarded. |
 | Detection | Format rules (emails, keys, IDs, phones, cards, IPs, hosts, home paths, long random strings), keyword context (`password: …`), the words you list, and the optional name model. | A value the detector misses is sent as is. |
-| Masking | The same value gets the same placeholder throughout the request. | A continuation whose `previous_response_id` the proxy does not hold gets 422. |
-| Leak scan | A value detected in this request that is still in it after masking blocks the request. API enum fields holding an enum value are not scanned; names and listed terms count only as whole words. | 422; the request is not sent. |
+| Masking | The same value gets the same placeholder throughout the request. | A body that is not JSON or is nested too deep gets 400. A continuation whose `previous_response_id` the proxy does not hold gets 422. |
+| Leak scan | A value detected in this request that is still in it after masking blocks the request. API enum fields holding an enum value are not scanned; names and listed terms in space-separated scripts count only as whole words; CJK ones count anywhere. | 422; the request is not sent. |
 | Memory | Values detected in earlier requests with the same client credential are masked where they stand alone, for 24 hours by default. Best effort: never refuses a request. | A remembered value glued to other text is sent as is. |
 | Restore | Placeholders in reply text are restored, except in Anthropic signed `thinking` blocks; inside a URL they stay; in tool-call arguments only the categories `toolRestore` allows are restored. A placeholder the model made up stays as written. | A tool may receive a placeholder instead of a value it needs; allow that category for that tool. A placeholder inside a URL stays whatever the category. |
 
-The proxy forwards your API key unchanged and never stores it; a SHA-256 hash of it keys the per-client memory. Each step in detail (Traditional Chinese): [technical details §1](docs/DETAILS.md#1-架構), [§4 numbering and prompt cache](docs/DETAILS.md#4-遮罩順序與提示快取), [§6 refusals](docs/DETAILS.md#6-拒絕與錯誤狀態碼), [§7 streaming restore](docs/DETAILS.md#7-串流還原), [§8 memory](docs/DETAILS.md#已知原始值), [§9 screening](docs/DETAILS.md#9-控制字元篩檢).
+The proxy forwards your API key unchanged and never stores it; a SHA-256 hash of it keys the per-client memory, and clients that rely on the proxy's fallback key share one scope. Each step in detail (Traditional Chinese): [technical details §1](docs/DETAILS.md#1-架構), [§4 numbering and prompt cache](docs/DETAILS.md#4-遮罩順序與提示快取), [§6 refusals](docs/DETAILS.md#6-拒絕與錯誤狀態碼), [§7 streaming restore](docs/DETAILS.md#7-串流還原), [§8 memory](docs/DETAILS.md#已知原始值), [§9 screening](docs/DETAILS.md#9-控制字元篩檢).
 
 ## Optional name model (experimental)
 
@@ -191,7 +193,6 @@ It misses some names and masks some words that are not names. Measured on synthe
 | | Result |
 | --- | --- |
 | Names in prose: English, Japanese | 1.00, 1.00 recall |
-| Names in pasted code, logs, config | not read by the model; on held-out v2 it fully masks 52% of all names (49% in English) |
 | Names in prose: Traditional Chinese | **0.87** recall (about 1 name in 8 missed) |
 | Names in pasted code, logs, JSON | 0.10–0.30 recall: code is not read; list such names in `terms` |
 | Precision | 0.94 |
@@ -202,7 +203,7 @@ What it reads, every number, and the options: [technical details §16](docs/DETA
 ## Results
 
 <!-- RESULTS:START -->
-**held-out set v2 (written blind, run once).** 1,617 synthetic prompts in 7 languages (English, Traditional and Simplified Chinese, Japanese, Korean, German, French) with 10,268 sensitive values and 2,997 hard negatives. The author never read the rules or the benchmark code; about 60% of the values use non-standard spellings (dotted cards, lower-case IBANs, `name at example dot com`, phone extensions). The set was frozen with a SHA-256 checksum and scored once, on commit `01489cd`; both held-out sets and their checksums are in [bench/heldout/](bench/heldout/). Every credential-shaped token in them (`ghp_`, `AKIA`, `npm_`, PEM blocks) is synthetic and non-functional, so secret scanners flag them as expected.
+**held-out set v2 (written blind, run once).** 1,617 synthetic prompts in 7 languages (English, Traditional and Simplified Chinese, Japanese, Korean, German, French) with 10,268 sensitive values and 2,997 hard negatives. The author never read the rules or the benchmark code; about 60% of the values use non-standard spellings (dotted cards, lower-case IBANs, `name at example dot com`, phone extensions). The set was frozen with a SHA-256 checksum and scored once, on 2026-10-07, with the proxy-default detector `rules-6+intl-2+ext-1`; both held-out sets and their checksums are in [bench/heldout/](bench/heldout/). Every credential-shaped token in them (`ghp_`, `AKIA`, `npm_`, PEM blocks) is synthetic and non-functional, so secret scanners flag them as expected.
 
 ![Bar chart: share of sensitive values fully masked per category on the English held-out v2 prompts, proxy-default rules and rules plus name model against Presidio at cutoff 0.4.](docs/media/results.svg)
 
@@ -241,7 +242,7 @@ Where it is weak (English, proxy default):
 
 Restore, a self-check rather than a score: with rules only, restoring the masked text gave the original byte for byte in all 1,617 prompts; with the name model on, in 1,587 of 1,617 (30 were not exact).
 
-These numbers were measured with detector `rules-6`; the released detector is `rules-12`, and none of the later changes is in them. Since then, credential values that are schema words, API field names, placeholders, or templates (`password: required`, `${{ secrets.X }}`) are no longer masked, and a term starting or ending with a Latin letter or digit matches only as a whole word. Earlier changes also not in these numbers: the proxy default now also masks lower-case and no-break-spaced Taiwan IDs, mobile numbers grouped by `.`, `/`, or `_` or with a bracketed prefix (`(0912)345678`), Taiwan passport and health-insurance card numbers after their keyword, email addresses with an HTML- or JSON-escaped `@`, quoted credential keys (`"密碼": "…"`, `"jwt": "…"`), and `100.64.0.0/10` and IPv6 unique local addresses; `card-strict` now reads regrouped, dotted, space-and-dash mixed, and line-wrapped card numbers (the proxy default masked 30.5% of English cards here against 44.1% for the core default), and the name model's restore errors are fixed: different spellings of one name (`Jordan`, `JORDAN`) now get separate placeholders (configured terms work the same way, so `Nimbus` and `NIMBUS` each restore as written), and a 2,908-prompt synthetic round-trip check went from 754 altered prompts to 0.
+These numbers were measured with detector `rules-6+intl-2+ext-1`; the released detector is `rules-12+intl-2+ext-1`, and none of the later changes is in them. Since then, credential values that are schema words, API field names, placeholders, or templates (`password: required`, `${{ secrets.X }}`) are no longer masked, and a term starting or ending with a Latin letter or digit matches only as a whole word. Earlier changes also not in these numbers: the proxy default now also masks lower-case and no-break-spaced Taiwan IDs, mobile numbers grouped by `.`, `/`, or `_` or with a bracketed prefix (`(0912)345678`), Taiwan passport and health-insurance card numbers after their keyword, email addresses with an HTML- or JSON-escaped `@`, quoted credential keys (`"密碼": "…"`, `"jwt": "…"`), and `100.64.0.0/10` and IPv6 unique local addresses; `card-strict` now reads regrouped, dotted, space-and-dash mixed, and line-wrapped card numbers (the proxy default masked 30.5% of English cards here against 44.1% for the core default), and the name model's restore errors are fixed: different spellings of one name (`Jordan`, `JORDAN`) now get separate placeholders (configured terms work the same way, so `Nimbus` and `NIMBUS` each restore as written).
 
 Full tables: [held-out v2 results](bench/results/public-bench-held-out-v2.md). The earlier [held-out v1 run](bench/results/public-bench-held-out.md) (1,518 prompts, older rules `rules-6+intl-1`, standard spellings only) is kept for history. Method and other measurements: [technical details §18](docs/DETAILS.md#18-實測數字).
 <!-- RESULTS:END -->
