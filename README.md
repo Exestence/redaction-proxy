@@ -140,15 +140,16 @@ The same value gets the same placeholder throughout a request. If a value detect
 
 ## How it works
 
-Every request goes through the same steps. The proxy keeps no conversation state: it numbers placeholders again from the full history on each request, so the masked prefix stays the same from turn to turn and the provider's prompt cache keeps working.
+Every request goes through the same steps. The proxy keeps no per-conversation placeholder table: it numbers placeholders again from the full history on each request, so in a conversation that only grows, the masked prefix stays the same and the provider's prompt cache keeps working ([why and when it breaks](docs/DETAILS.md#4-遮罩順序與提示快取)). Two things do stay in memory per client credential until a restart: the original inputs of Responses API replies, for requests that continue with `previous_response_id` instead of resending history, and the remembered values below.
 
 ```mermaid
 flowchart TD
-  A["Your tool sends a request with its own API key"] --> B{"Allowed? loopback origin and host, auth token if set, at most 64 MiB, a known route"}
-  B -- "no" --> B2["403 / 401 / 413 / 404, not forwarded"]
-  B -- "GET" --> U
-  B -- "POST to a masked route" --> C["Collect every text field; skip ids, names, enum values, metadata, files, signed or encrypted state"]
-  C --> D["Detect: rules, your terms and projectNames, optional name model, values remembered for this client"]
+  A["Your tool sends a request with its own API key"] --> B{"Allowed? loopback origin; loopback host or auth token; a known route; at most 64 MiB"}
+  B -- "no" --> B2["403 / 401 / 404 / 413, not forwarded"]
+  B -- "GET" --> P["Relayed unchanged, reply unchanged"]
+  B -- "POST to a masked route" --> C["Parse JSON; collect every text field; skip ids, names, enum values, metadata, stop strings, files, signed or encrypted state"]
+  C --> S["Screen: control characters and ⟦ ⟧ become visible stand-ins by default"]
+  S --> D["Detect: rules, your terms and projectNames, optional name model, values remembered for this client credential"]
   D --> E["Mask: each distinct value becomes ⟦CATEGORY_n⟧, numbered in text order"]
   E --> F{"Leak scan: is a value detected in this request still in it?"}
   F -- "yes" --> F2["422 naming the fields, never the value; not forwarded"]
@@ -161,18 +162,19 @@ flowchart TD
   G1 --> Z["Your tool receives the reply"]
   G2 --> Z
   G3 --> Z
+  P --> Z
 ```
 
 | Step | What it decides | If it goes wrong |
 | --- | --- | --- |
-| Gate | Only programs on your machine (or holders of `authToken`) may use the proxy; web pages and other host names are refused. | 403 or 401; nothing is forwarded. |
+| Gate | Web pages are refused unless their origin is a loopback `http(s)` page or in `allowedOrigins`; without `authToken`, requests for other host names are refused too. | 403, 401, 404 or 413; nothing is forwarded. A body that is not JSON or is nested too deep gets 400. |
 | Detection | Format rules (emails, keys, IDs, phones, cards, IPs, hosts, home paths, long random strings), keyword context (`password: …`), the words you list, and the optional name model. | A value the detector misses is sent as is. |
-| Masking | The same value gets the same placeholder throughout the request. | — |
-| Leak scan | A value detected in this request that is still anywhere in it after masking blocks the request. | 422; the request is not sent. |
-| Memory | Values detected in earlier requests of the same client are masked for 24 hours where they stand alone. Best effort: never refuses a request. | A remembered value glued to other text is sent as is. |
-| Restore | Placeholders in reply text are restored; inside a URL they stay; in tool-call arguments only the categories `toolRestore` allows are restored. A placeholder the model made up stays as written. | The tool may receive a placeholder instead of a value it needs; allow that category for that tool. |
+| Masking | The same value gets the same placeholder throughout the request. | A continuation whose `previous_response_id` the proxy does not hold gets 422. |
+| Leak scan | A value detected in this request that is still in it after masking blocks the request. API enum fields holding an enum value are not scanned; names and listed terms count only as whole words. | 422; the request is not sent. |
+| Memory | Values detected in earlier requests with the same client credential are masked where they stand alone, for 24 hours by default. Best effort: never refuses a request. | A remembered value glued to other text is sent as is. |
+| Restore | Placeholders in reply text are restored, except in Anthropic signed `thinking` blocks; inside a URL they stay; in tool-call arguments only the categories `toolRestore` allows are restored. A placeholder the model made up stays as written. | A tool may receive a placeholder instead of a value it needs; allow that category for that tool. A placeholder inside a URL stays whatever the category. |
 
-The proxy forwards your API key unchanged and never stores it. Each step in detail: [technical details §1](docs/DETAILS.md#1-架構), [§6 refusals](docs/DETAILS.md#6-拒絕與錯誤狀態碼), [§7 streaming restore](docs/DETAILS.md#7-串流還原), [§8 memory](docs/DETAILS.md#已知原始值).
+The proxy forwards your API key unchanged and never stores it; a SHA-256 hash of it keys the per-client memory. Each step in detail (Traditional Chinese): [technical details §1](docs/DETAILS.md#1-架構), [§4 numbering and prompt cache](docs/DETAILS.md#4-遮罩順序與提示快取), [§6 refusals](docs/DETAILS.md#6-拒絕與錯誤狀態碼), [§7 streaming restore](docs/DETAILS.md#7-串流還原), [§8 memory](docs/DETAILS.md#已知原始值), [§9 screening](docs/DETAILS.md#9-控制字元篩檢).
 
 ## Optional name model (experimental)
 
