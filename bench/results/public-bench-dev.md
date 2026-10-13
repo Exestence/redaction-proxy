@@ -1,6 +1,6 @@
 # Public redaction benchmark: dev set
 
-**dev set.** Generated from `bench/public/templates.ts`, seed 20261005, 50 prompts per language and format: 1200 synthetic prompts, 3122 sensitive values, 1966 hard negatives. Built-in rules `rules-6`; each system names its rule set. Reproduce with `pnpm run bench:public --seed 20261005 --per-cell 50 --name-model <model directory>`.
+**dev set.** Generated from `bench/public/templates.ts`, seed 20261005, 50 prompts per language and format: 1200 synthetic prompts, 3122 sensitive values, 1966 hard negatives. Built-in rules `rules-12`; each system names its rule set. Reproduce with `pnpm run bench:public --seed 20261005 --per-cell 50 --name-model <model directory>`.
 
 ## English prompts by category (dev)
 
@@ -29,11 +29,11 @@ Each cell: fully masked / partly masked / untouched, as a share of the sensitive
 
 | System | Region precision | Restore exact | Median ms | p95 ms |
 | --- | --- | --- | --- | --- |
-| rules, core default | 95.7% | 100.0% | 0.05 | 0.13 |
+| rules, core default | 95.7% | 100.0% | 0.05 | 0.12 |
 | rules, proxy default | 96.3% | 100.0% | 0.05 | 0.09 |
-| rules + name model (experimental) | 96.6% | 100.0% | 5.81 | 12.73 |
-| Presidio 2.2.364 (en_core_web_lg, cutoff 0) | 62.4% | n/a | 6.05 | 8.42 |
-| Presidio 2.2.364 (en_core_web_lg, cutoff 0.4) | 72.1% | n/a | 6.14 | 8.11 |
+| rules + name model (experimental) | 96.6% | 100.0% | 5.83 | 12.89 |
+| Presidio 2.2.364 (en_core_web_lg, cutoff 0) | 62.4% | n/a | 5.67 | 7.38 |
+| Presidio 2.2.364 (en_core_web_lg, cutoff 0.4) | 72.1% | n/a | 5.73 | 7.48 |
 
 | Hard negatives masked (lower is better) | rules, core default | rules, proxy default | rules + name model (experimental) | Presidio 2.2.364 (en_core_web_lg, cutoff 0) | Presidio 2.2.364 (en_core_web_lg, cutoff 0.4) |
 | --- | --- | --- | --- | --- | --- |
@@ -101,7 +101,7 @@ Systems marked "reference only: English analyzer" analyze every prompt as Englis
 </details>
 
 ## Notes
-- rules + name model (experimental): the proxy-default rules plus the nym name model (`rules-6+intl-2+ext-1+nym-edge-int8-2`, shipped `nameModel` defaults), through the code path the proxy uses for user-written text. Each prompt is one user message; the model reads only its prose lines and skips code, log, config, and data lines by design, so it cannot find names there except by propagation of a value found in prose. Sensitive values inside prose lines, by format: chat 100%, code 0%, log 60%, config 0%, email 100%, stacktrace 0%. Its latency includes inference.
+- rules + name model (experimental): the proxy-default rules plus the nym name model (`rules-12+intl-2+ext-1+nym-edge-int8-3`, shipped `nameModel` defaults), through the code path the proxy uses for user-written text. Each prompt is one user message; the model reads only its prose lines and skips code, log, config, and data lines by design, so it cannot find names there except by propagation of a value found in prose. Sensitive values inside prose lines, by format: chat 100%, code 0%, log 60%, config 0%, email 100%, stacktrace 0%. Its latency includes inference.
 - Presidio: presidio-analyzer 2.2.364, spaCy 3.8.16, en_core_web_lg 3.8.0, the default model; default recognizers; language "en" for every prompt; the cutoff is Presidio's `score_threshold`, below which detections are dropped; latency is analysis only.
 - Matching ignores category names. Fully masked: detections cover every character of the value. Partly masked: a detection overlaps the value but leaves part of it in the text. Untouched: no detection overlaps the value. Identifying core: the part of a value that names someone or something (a phone number without its country code, the user name of a home path, the first label of a host name); a system that masks only that part still hides who it is.
 - Region precision: a masked region (overlapping detections merged) counts when it overlaps a sensitive value; one detection spanning a whole prompt would score 100%. Restore exact: in the same process, restoring the masked text with the same placeholder registry gives the original byte for byte; no model is involved.
