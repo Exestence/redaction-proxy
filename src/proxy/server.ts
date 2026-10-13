@@ -51,6 +51,9 @@ const SKIP_MASK = new Set([
   'cache_control', 'format', 'status', 'service_tier', 'reasoning_effort', 'tool_choice',
 ])
 
+/** Keys of a resent `*_call` item that hold what the tool or server answered, not what the model wrote. */
+const TOOL_OUTPUT = new Set(['output', 'outputs', 'error'])
+
 /** Request keys whose whole value is forwarded unmasked: caller metadata and exact stop strings. */
 const SKIP_SUBTREE = new Set(['metadata', 'stop'])
 
@@ -116,7 +119,7 @@ interface Slot {
   key: string | number
   /** JSON pointer of the string, keys through {@link pointerSegment}, for diagnostics that never carry text. */
   path: string
-  /** Whether the string is a resent tool call's input, which the model wrote: Anthropic `tool_use` input, Chat or Responses `arguments`. */
+  /** Whether the string is a resent tool call's input, which the model wrote: Anthropic `tool_use` input, Chat or Responses `arguments`, a `*_call` item's fields except its output. */
   tool: boolean
 }
 
@@ -353,12 +356,13 @@ class Refusal extends Error {
  * @param path - JSON pointer of `value`.
  * @param out - slot sink.
  * @param tool - whether `value` is tool input or inside it.
+ * @param anchor - whether `value` is model-written tool input, which anchors its placeholders; a `*_call` item's {@link TOOL_OUTPUT} is masked as tool input but never anchors.
  */
-function collectSlots(value: unknown, path: string, out: Slot[], tool = false): void {
+function collectSlots(value: unknown, path: string, out: Slot[], tool = false, anchor = tool): void {
   if (Array.isArray(value)) {
     value.forEach((item, index) => {
-      if (typeof item === 'string') out.push({ parent: value, key: index, path: `${path}/${index}`, tool })
-      else collectSlots(item, `${path}/${index}`, out, tool)
+      if (typeof item === 'string') out.push({ parent: value, key: index, path: `${path}/${index}`, tool: anchor })
+      else collectSlots(item, `${path}/${index}`, out, tool, anchor)
     })
     return
   }
@@ -370,8 +374,10 @@ function collectSlots(value: unknown, path: string, out: Slot[], tool = false): 
     if (!tool && SKIP_SUBTREE.has(key)) continue
     const item = record[key]
     const at = `${path}/${pointerSegment(key)}`
-    if (typeof item !== 'string') collectSlots(item, at, out, tool || isToolInput(record, key))
-    else if (tool || !SKIP_MASK.has(key) || isTextSource(record, key)) out.push({ parent: record, key, path: at, tool: tool || key === 'arguments' || isToolInput(record, key) })
+    const input = isToolInput(record, key)
+    const answer = !tool && input && TOOL_OUTPUT.has(key)
+    if (typeof item !== 'string') collectSlots(item, at, out, tool || input, (anchor || input) && !answer)
+    else if (tool || !SKIP_MASK.has(key) || isTextSource(record, key)) out.push({ parent: record, key, path: at, tool: (anchor || key === 'arguments' || input) && !answer })
   }
 }
 
@@ -579,7 +585,7 @@ function replaceUnscreenable(text: string): string {
  * upstream as written. One the continued requests passed ({@link RequestTexts.passed})
  * already names its original upstream and passes again. Any other must be
  * anchored: written in a resent tool call's input, which the model wrote from
- * this conversation's placeholders, or kept by the proxy in a continued
+ * this conversation's placeholders, before any other occurrence in the request, or kept by the proxy in a continued
  * reply's tool-call arguments ({@link RequestTexts.kept}). A placeholder only
  * in user or assistant text or in a tool result, such as one read back from
  * a file or a summary, is not anchored: it may have been written for another
@@ -1292,8 +1298,13 @@ export function createProxyServer(
     let masking
     try {
       const anchored = new Set(prior?.kept)
+      // An id whose first occurrence is outside tool input (a file read back, a summary, the system prompt) is not anchored by a later tool call that copies it.
+      const seen = new Set<RedactionId>()
       raw.forEach((text, at) => {
-        if ((slots[at] as Slot).tool) for (const [, id] of text.matchAll(LITERAL_PLACEHOLDER)) anchored.add(id as RedactionId)
+        for (const [, id] of text.matchAll(LITERAL_PLACEHOLDER)) {
+          if (!seen.has(id as RedactionId) && (slots[at] as Slot).tool) anchored.add(id as RedactionId)
+          seen.add(id as RedactionId)
+        }
       })
       const pass = passableLiterals(raw, stored, issued, chain, anchored)
       // Any placeholder of this request that would not come out as written falls back to escaping them all, as without memory.

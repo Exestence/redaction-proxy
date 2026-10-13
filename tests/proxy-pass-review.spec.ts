@@ -1,5 +1,5 @@
 // Adversarial review of passing resent placeholders as written: a placeholder must
-// restore to the value it was written for or stay as written, never to another value.
+// restore to the value it was written for or stay as written.
 // Every value is synthetic.
 import { createServer } from 'node:http'
 import type { IncomingHttpHeaders, Server } from 'node:http'

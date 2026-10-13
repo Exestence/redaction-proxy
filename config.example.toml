@@ -109,7 +109,8 @@ maskLocalUsername = true
 
 # Control characters, U+FFFD, lone surrogates, and ⟦ ⟧ in request text:
 # "replace" turns them into visible stand-ins, "refuse" rejects the request
-# with 422. Default "replace".
+# with 422. A resent placeholder that passes as written (DETAILS §8, "resent
+# placeholders") is exempt in both modes. Default "replace".
 screen = "replace"
 
 # false: refuse a request with 422 when masking fails (a detected value is
