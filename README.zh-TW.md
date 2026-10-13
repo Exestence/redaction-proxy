@@ -8,6 +8,16 @@
 
 適用任何 OpenAI 或 Anthropic 相容的用戶端，串流回覆也一樣，不需要本機模型。它**減少**個資與機密外洩，但**不會**讓對話變成私密的。
 
+**該用哪一個？**
+
+| | 這個代理 | [dsh-privacy-router](https://github.com/PersonalAssistanceHsin/dsh-privacy-router) |
+| --- | --- | --- |
+| 需要本機模型 | 不需要 | 需要（由它回答私密的輪次） |
+| 什麼會送到雲端 | 每個請求，遮罩後送出 | 只有判為公開的輪次，遮罩後送出；私密的輪次留在你的電腦 |
+| 適用 | 任何 OpenAI 或 Anthropic 相容的用戶端 | 只限 DeepSeek Harness（dsh） |
+
+跑得動本機模型、想要更強的隱私，請先安裝分流器；它已經內含這個代理的遮罩核心。跑不動的話，單用這個代理也能多一層隱私保護。
+
 > **狀態：** 0.1.0，尚未發布到 npm。已對真實的 DeepSeek Chat Completions API 驗證（2026-10-08，見下方）；OpenAI、Anthropic 與 Claude Code 等真實用戶端尚未驗證。
 
 ## 介紹影片

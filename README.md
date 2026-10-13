@@ -8,6 +8,16 @@ A small proxy on your own machine that replaces emails, API keys, ID numbers, an
 
 It works with any OpenAI- or Anthropic-compatible client, streaming included, and needs no local model. It **reduces** leaks of personal data and secrets; it does **not** make a conversation private.
 
+**Which one do you need?**
+
+| | This proxy | [dsh-privacy-router](https://github.com/PersonalAssistanceHsin/dsh-privacy-router) |
+| --- | --- | --- |
+| Needs a local model | No | Yes (answers the private turns) |
+| What reaches the cloud | Every request, masked | Only turns judged public, masked; private turns stay on your machine |
+| Works with | Any OpenAI- or Anthropic-compatible client | DeepSeek Harness (dsh) only |
+
+If you can run a local model and want stronger privacy, install the router first; it already includes this proxy's masking core. Otherwise, this proxy alone adds a layer of privacy.
+
 > **Status:** 0.1.0, not yet on npm. Verified against the real DeepSeek Chat Completions API (2026-10-08, see below); OpenAI, Anthropic and real clients such as Claude Code are not verified yet.
 
 ## Intro video

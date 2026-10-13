@@ -1320,7 +1320,7 @@ export function createProxyServer(
     const path = (req.url ?? '/').split('?')[0] ?? '/'
     const api = ROUTES[path]
     const origin = req.headers.origin
-    const cors: Record<string, string> = origin === undefined ? {} : { 'access-control-allow-origin': origin, vary: 'origin' }
+    const cors: Record<string, string> = origin === undefined ? {} : { 'access-control-allow-origin': origin, 'access-control-expose-headers': 'x-redaction-proxy-mask-failed', vary: 'origin' }
     const fail = (status: number, message: string, headers: Record<string, string> = {}): void => {
       log(`${req.method} ${path} -> ${status} refused: ${message}`)
       if (res.headersSent) {

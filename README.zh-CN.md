@@ -8,6 +8,16 @@
 
 兼容任何 OpenAI 或 Anthropic 接口的客户端，流式输出同样支持，不需要本地模型。它能**减少**个人信息和机密信息的泄露，但**不能**让对话变成私密的。
 
+**该用哪一个？**
+
+| | 这个代理 | [dsh-privacy-router](https://github.com/PersonalAssistanceHsin/dsh-privacy-router) |
+| --- | --- | --- |
+| 需要本地模型 | 不需要 | 需要（由它回答私密的轮次） |
+| 什么会发到云端 | 每个请求，脱敏后发出 | 只有判为公开的轮次，脱敏后发出；私密的轮次留在你的电脑 |
+| 适用 | 任何 OpenAI 或 Anthropic 兼容的客户端 | 仅限 DeepSeek Harness（dsh） |
+
+跑得动本地模型、想要更强的隐私，请先安装分流器；它已经内含这个代理的脱敏核心。跑不动的话，单用这个代理也能多一层隐私保护。
+
 > **状态：** 0.1.0，尚未发布到 npm。已在真实的 DeepSeek Chat Completions API 上验证（2026-10-08，见下文）；OpenAI、Anthropic 以及 Claude Code 等真实客户端尚未验证。
 
 ## 介绍视频
