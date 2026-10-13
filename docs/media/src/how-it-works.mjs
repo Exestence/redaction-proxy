@@ -26,8 +26,8 @@ const LABELS = {
     note: 'GET: relayed as is, not masked',
     leak: ['Leak scan', 'detected value', 'still in the request?'],
     leakRefusal: ['422, not sent (default)', 'sendWhenMaskFails: sent anyway'],
-    llm: ['Cloud LLM', 'OpenAI or', 'Anthropic API'],
-    out: ['placeholders only', '(default)'],
+    llm: ['Cloud LLM', 'OpenAI- or', 'Anthropic-', 'compatible'],
+    out: ['masked request', '(default)'],
     back: ['reply with', 'placeholders'],
     restore: ['Restore the reply', 'whole JSON, or SSE as it streams'],
     rules: [
@@ -37,7 +37,7 @@ const LABELS = {
       '   (default PATH, TERM, PROJECT)',
     ],
     returned: 'restored reply',
-    legend: ['by default only placeholders leave your computer', 'check', 'action', 'refused, not sent', 'privacy boundary'],
+    legend: ['detected values leave only as placeholders (default)', 'check', 'action', 'refused, not sent', 'privacy boundary'],
   },
   'zh-TW': {
     lang: 'zh-Hant-TW',
@@ -56,7 +56,7 @@ const LABELS = {
     leak: ['外洩檢查', '偵測到的值', '還在請求裡？'],
     leakRefusal: ['422，不轉送（預設）', 'sendWhenMaskFails：照樣送出'],
     llm: ['雲端 LLM', 'OpenAI 或', 'Anthropic 相容'],
-    out: ['只有佔位符', '（預設）'],
+    out: ['遮罩後的請求', '（預設）'],
     back: ['含佔位符的回覆'],
     restore: ['還原回覆', '整份 JSON，或 SSE 邊收邊還原'],
     rules: [
@@ -66,7 +66,7 @@ const LABELS = {
       '   （預設 PATH、TERM、PROJECT）',
     ],
     returned: '已還原的回覆',
-    legend: ['預設只有佔位符離開你的電腦', '檢查', '處理', '拒絕，不轉送', '隱私邊界'],
+    legend: ['偵測到的值只以佔位符離開（預設）', '檢查', '處理', '拒絕，不轉送', '隱私邊界'],
   },
   'zh-CN': {
     lang: 'zh-Hans-CN',
@@ -85,7 +85,7 @@ const LABELS = {
     leak: ['泄露检查', '检测到的值', '还在请求里？'],
     leakRefusal: ['422，不转发（默认）', 'sendWhenMaskFails：照样发送'],
     llm: ['云端 LLM', 'OpenAI 或', 'Anthropic 兼容'],
-    out: ['只有占位符', '（默认）'],
+    out: ['脱敏后的请求', '（默认）'],
     back: ['含占位符的回复'],
     restore: ['还原回复', '整份 JSON，或 SSE 边收边还原'],
     rules: [
@@ -95,7 +95,7 @@ const LABELS = {
       '   （默认 PATH、TERM、PROJECT）',
     ],
     returned: '已还原的回复',
-    legend: ['默认只有占位符离开你的电脑', '检查', '处理', '拒绝，不转发', '隐私边界'],
+    legend: ['检测到的值只以占位符离开（默认）', '检查', '处理', '拒绝，不转发', '隐私边界'],
   },
   ja: {
     lang: 'ja',
@@ -107,14 +107,14 @@ const LABELS = {
       ['gate', '入口チェック', '送信元・ホスト', 'トークン', 'ルート・サイズ'],
       ['act', 'テキスト収集', 'id・URL などは除外', '制御文字を置換'],
       ['act', '検出', 'ルール・指定の語・', '人名モデル・記憶'],
-      ['act', 'マスク', '値ごとにプレース', 'ホルダーへ置換'],
+      ['act', 'マスク', '値ごとに置き換え', '⟦EMAIL_1⟧ …'],
     ],
     rowRefusals: [[0, '403 / 401 / 404 / 413、転送しない']],
     note: 'GET：そのまま転送、マスクなし',
     leak: ['漏えい検査', '検出した値が', 'まだ残っている？'],
     leakRefusal: ['422、転送しない（既定）', 'sendWhenMaskFails：そのまま送信'],
     llm: ['クラウド LLM', 'OpenAI または', 'Anthropic 互換'],
-    out: ['プレースホルダー', 'のみ（既定）'],
+    out: ['マスク済みの', 'リクエスト（既定）'],
     back: ['プレースホルダー', '付きの応答'],
     restore: ['応答を復元', 'JSON 全体、または SSE を受信しながら'],
     rules: [
@@ -124,7 +124,7 @@ const LABELS = {
       '   （既定は PATH、TERM、PROJECT）',
     ],
     returned: '復元済みの応答',
-    legend: ['既定ではプレースホルダーだけが外に出る', 'チェック', '処理', '拒否、転送しない', 'プライバシー境界'],
+    legend: ['検出した値はプレースホルダーとしてだけ外に出る（既定）', 'チェック', '処理', '拒否、転送しない', 'プライバシー境界'],
   },
 }
 
@@ -142,7 +142,7 @@ const DETAILS = {
   ],
   rowRefusals: [[0, '400，不轉送'], [2, 'refuse 模式：422']],
   note: null,
-  leak: ['外洩檢查', '序列化後搜尋', '每個原始值'],
+  leak: ['外洩檢查', '在遮罩後的請求中', '搜尋每個原始值'],
   leakRefusal: ['422，指出欄位路徑（預設）', 'sendWhenMaskFails：照樣送出'],
   llm: ['上游 LLM', '帶用戶端', '自己的標頭'],
   back: ['含佔位符的回應'],
@@ -159,7 +159,7 @@ const DETAILS = {
 const esc = (s) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
 const text = (x, y, cls, s, anchor = 'middle') =>
   `<text x="${x}" y="${y}" class="${cls}" text-anchor="${anchor}">${esc(s)}</text>`
-// Rough width at 12.5px, only for spacing the legend; render.mjs checks real overlap.
+// Rough width at 12.5px, only for spacing the legend.
 const width = (s) => [...s].reduce((w, c) => w + (c.charCodeAt(0) > 0x2e7f ? 12.5 : 7), 0)
 
 function svg(L) {

@@ -71,8 +71,8 @@ text{fill:#e2e7e5}
 <text x="558" y="169" class="s" text-anchor="middle">人名モデル・記憶</text>
 <rect x="638" y="100" width="132" height="90" rx="8" class="act"/>
 <text x="704" y="131" class="t" text-anchor="middle">マスク</text>
-<text x="704" y="150" class="s" text-anchor="middle">値ごとにプレース</text>
-<text x="704" y="169" class="s" text-anchor="middle">ホルダーへ置換</text>
+<text x="704" y="150" class="s" text-anchor="middle">値ごとに置き換え</text>
+<text x="704" y="169" class="s" text-anchor="middle">⟦EMAIL_1⟧ …</text>
 <path d="M170 145 H198" class="ln" marker-end="url(#a)"/>
 <path d="M332 145 H344" class="ln" marker-end="url(#a)"/>
 <path d="M478 145 H490" class="ln" marker-end="url(#a)"/>
@@ -93,8 +93,8 @@ text{fill:#e2e7e5}
 <text x="890" y="287" class="s" text-anchor="middle">OpenAI または</text>
 <text x="890" y="306" class="s" text-anchor="middle">Anthropic 互換</text>
 <path d="M770 282 H828" class="out" marker-end="url(#ag)"/>
-<text x="890" y="207" class="gl" text-anchor="middle">プレースホルダー</text>
-<text x="890" y="226" class="gl" text-anchor="middle">のみ（既定）</text>
+<text x="890" y="207" class="gl" text-anchor="middle">マスク済みの</text>
+<text x="890" y="226" class="gl" text-anchor="middle">リクエスト（既定）</text>
 <path d="M890 326 V412 H652" class="out" marker-end="url(#ag)"/>
 <text x="662" y="383" class="lbl" text-anchor="start">プレースホルダー</text>
 <text x="662" y="402" class="lbl" text-anchor="start">付きの応答</text>
@@ -108,13 +108,13 @@ text{fill:#e2e7e5}
 <path d="M300 412 H103 V184" class="ln" marker-end="url(#a)"/>
 <text x="196" y="402" class="lbl" text-anchor="start">復元済みの応答</text>
 <line x1="24" y1="532" x2="46" y2="532" class="out"/>
-<text x="54" y="536" class="lg" text-anchor="start">既定ではプレースホルダーだけが外に出る</text>
-<rect x="317.5" y="525" width="22" height="14" rx="3" class="gate"/>
-<text x="347.5" y="536" class="lg" text-anchor="start">チェック</text>
-<rect x="423.5" y="525" width="22" height="14" rx="3" class="act"/>
-<text x="453.5" y="536" class="lg" text-anchor="start">処理</text>
-<line x1="504.5" y1="532" x2="526.5" y2="532" class="stopln"/>
-<text x="534.5" y="536" class="lg" text-anchor="start">拒否、転送しない</text>
-<line x1="660.5" y1="532" x2="682.5" y2="532" class="wall"/>
-<text x="690.5" y="536" class="lg" text-anchor="start">プライバシー境界</text>
+<text x="54" y="536" class="lg" text-anchor="start">検出した値はプレースホルダーとしてだけ外に出る（既定）</text>
+<rect x="417.5" y="525" width="22" height="14" rx="3" class="gate"/>
+<text x="447.5" y="536" class="lg" text-anchor="start">チェック</text>
+<rect x="523.5" y="525" width="22" height="14" rx="3" class="act"/>
+<text x="553.5" y="536" class="lg" text-anchor="start">処理</text>
+<line x1="604.5" y1="532" x2="626.5" y2="532" class="stopln"/>
+<text x="634.5" y="536" class="lg" text-anchor="start">拒否、転送しない</text>
+<line x1="760.5" y1="532" x2="782.5" y2="532" class="wall"/>
+<text x="790.5" y="536" class="lg" text-anchor="start">プライバシー境界</text>
 </svg>

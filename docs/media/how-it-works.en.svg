@@ -90,11 +90,12 @@ text{fill:#e2e7e5}
 <text x="592" y="278" class="wl" text-anchor="end">422, not sent (default)</text>
 <text x="592" y="298" class="nl" text-anchor="end">sendWhenMaskFails: sent anyway</text>
 <rect x="830" y="238" width="120" height="88" rx="8" class="cbox"/>
-<text x="890" y="268" class="t" text-anchor="middle">Cloud LLM</text>
-<text x="890" y="287" class="s" text-anchor="middle">OpenAI or</text>
-<text x="890" y="306" class="s" text-anchor="middle">Anthropic API</text>
+<text x="890" y="258.5" class="t" text-anchor="middle">Cloud LLM</text>
+<text x="890" y="277.5" class="s" text-anchor="middle">OpenAI- or</text>
+<text x="890" y="296.5" class="s" text-anchor="middle">Anthropic-</text>
+<text x="890" y="315.5" class="s" text-anchor="middle">compatible</text>
 <path d="M770 282 H828" class="out" marker-end="url(#ag)"/>
-<text x="890" y="207" class="gl" text-anchor="middle">placeholders only</text>
+<text x="890" y="207" class="gl" text-anchor="middle">masked request</text>
 <text x="890" y="226" class="gl" text-anchor="middle">(default)</text>
 <path d="M890 326 V412 H652" class="out" marker-end="url(#ag)"/>
 <text x="662" y="383" class="lbl" text-anchor="start">reply with</text>
@@ -109,13 +110,13 @@ text{fill:#e2e7e5}
 <path d="M300 412 H103 V184" class="ln" marker-end="url(#a)"/>
 <text x="196" y="402" class="lbl" text-anchor="start">restored reply</text>
 <line x1="24" y1="532" x2="46" y2="532" class="out"/>
-<text x="54" y="536" class="lg" text-anchor="start">by default only placeholders leave your computer</text>
-<rect x="416" y="525" width="22" height="14" rx="3" class="gate"/>
-<text x="446" y="536" class="lg" text-anchor="start">check</text>
-<rect x="507" y="525" width="22" height="14" rx="3" class="act"/>
-<text x="537" y="536" class="lg" text-anchor="start">action</text>
-<line x1="605" y1="532" x2="627" y2="532" class="stopln"/>
-<text x="635" y="536" class="lg" text-anchor="start">refused, not sent</text>
-<line x1="780" y1="532" x2="802" y2="532" class="wall"/>
-<text x="810" y="536" class="lg" text-anchor="start">privacy boundary</text>
+<text x="54" y="536" class="lg" text-anchor="start">detected values leave only as placeholders (default)</text>
+<rect x="444" y="525" width="22" height="14" rx="3" class="gate"/>
+<text x="474" y="536" class="lg" text-anchor="start">check</text>
+<rect x="535" y="525" width="22" height="14" rx="3" class="act"/>
+<text x="565" y="536" class="lg" text-anchor="start">action</text>
+<line x1="633" y1="532" x2="655" y2="532" class="stopln"/>
+<text x="663" y="536" class="lg" text-anchor="start">refused, not sent</text>
+<line x1="808" y1="532" x2="830" y2="532" class="wall"/>
+<text x="838" y="536" class="lg" text-anchor="start">privacy boundary</text>
 </svg>

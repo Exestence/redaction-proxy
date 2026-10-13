@@ -60,7 +60,7 @@ DeepSeek Harness 透過 dsh-addons 的 redaction 套件以 git submodule（`dsh-
 
 一個請求的處理順序（`server.ts` 的 `forward`）：
 
-![流程圖：用戶端 POST 到遮罩路由；代理解析 JSON（失敗回 400）、依序收集可遮字串、篩檢控制字元（refuse 模式回 422）、接上先前輸入後偵測與遮罩；外洩檢查在序列化後仍找得到原始值時回 422 並指出欄位路徑（預設，sendWhenMaskFails 可照樣送出）；預設只有佔位符送往上游；回應依類型還原：JSON 整份、SSE 逐事件逐欄位，URL 內保留佔位符，工具參數只還原允許的類別。](media/details-flow.zh-TW.svg)
+![流程圖：用戶端 POST 到遮罩路由；代理解析 JSON（失敗回 400）、依序收集可遮字串、篩檢控制字元（refuse 模式回 422）、接上先前輸入後偵測與遮罩；外洩檢查在遮罩後的請求中仍找得到原始值時回 422 並指出欄位路徑（預設，sendWhenMaskFails 可照樣送出）；偵測到的值只以佔位符送往上游（預設）；回應依類型還原：JSON 整份、SSE 逐事件逐欄位，URL 內保留佔位符，工具參數只還原允許的類別。](media/details-flow.zh-TW.svg)
 
 圖中省略了路由比對之前的入口檢查（來源、`Host`、權杖、方法、大小），見[第 6 節](#6-拒絕與錯誤狀態碼)；還原的規則見[第 7 節](#7-串流還原)。
 

@@ -84,8 +84,8 @@ text{fill:#e2e7e5}
 <path d="M704 190 V240" class="ln" marker-end="url(#a)"/>
 <rect x="638" y="242" width="132" height="80" rx="8" class="gate"/>
 <text x="704" y="268" class="t" text-anchor="middle">外洩檢查</text>
-<text x="704" y="287" class="s" text-anchor="middle">序列化後搜尋</text>
-<text x="704" y="306" class="s" text-anchor="middle">每個原始值</text>
+<text x="704" y="287" class="s" text-anchor="middle">在遮罩後的請求中</text>
+<text x="704" y="306" class="s" text-anchor="middle">搜尋每個原始值</text>
 <path d="M638 282 H600" class="stopln" marker-end="url(#as)"/>
 <text x="592" y="278" class="wl" text-anchor="end">422，指出欄位路徑（預設）</text>
 <text x="592" y="298" class="nl" text-anchor="end">sendWhenMaskFails：照樣送出</text>
@@ -94,7 +94,7 @@ text{fill:#e2e7e5}
 <text x="890" y="287" class="s" text-anchor="middle">帶用戶端</text>
 <text x="890" y="306" class="s" text-anchor="middle">自己的標頭</text>
 <path d="M770 282 H828" class="out" marker-end="url(#ag)"/>
-<text x="890" y="207" class="gl" text-anchor="middle">只有佔位符</text>
+<text x="890" y="207" class="gl" text-anchor="middle">遮罩後的請求</text>
 <text x="890" y="226" class="gl" text-anchor="middle">（預設）</text>
 <path d="M890 326 V412 H652" class="out" marker-end="url(#ag)"/>
 <text x="662" y="402" class="lbl" text-anchor="start">含佔位符的回應</text>
@@ -108,13 +108,13 @@ text{fill:#e2e7e5}
 <path d="M300 412 H103 V184" class="ln" marker-end="url(#a)"/>
 <text x="196" y="402" class="lbl" text-anchor="start">已還原的回應</text>
 <line x1="24" y1="532" x2="46" y2="532" class="out"/>
-<text x="54" y="536" class="lg" text-anchor="start">預設只有佔位符離開你的電腦</text>
-<rect x="242.5" y="525" width="22" height="14" rx="3" class="gate"/>
-<text x="272.5" y="536" class="lg" text-anchor="start">檢查</text>
-<rect x="323.5" y="525" width="22" height="14" rx="3" class="act"/>
-<text x="353.5" y="536" class="lg" text-anchor="start">處理</text>
-<line x1="404.5" y1="532" x2="426.5" y2="532" class="stopln"/>
-<text x="434.5" y="536" class="lg" text-anchor="start">拒絕，不轉送</text>
-<line x1="535.5" y1="532" x2="557.5" y2="532" class="wall"/>
-<text x="565.5" y="536" class="lg" text-anchor="start">隱私邊界</text>
+<text x="54" y="536" class="lg" text-anchor="start">偵測到的值只以佔位符離開（預設）</text>
+<rect x="280" y="525" width="22" height="14" rx="3" class="gate"/>
+<text x="310" y="536" class="lg" text-anchor="start">檢查</text>
+<rect x="361" y="525" width="22" height="14" rx="3" class="act"/>
+<text x="391" y="536" class="lg" text-anchor="start">處理</text>
+<line x1="442" y1="532" x2="464" y2="532" class="stopln"/>
+<text x="472" y="536" class="lg" text-anchor="start">拒絕，不轉送</text>
+<line x1="573" y1="532" x2="595" y2="532" class="wall"/>
+<text x="603" y="536" class="lg" text-anchor="start">隱私邊界</text>
 </svg>
