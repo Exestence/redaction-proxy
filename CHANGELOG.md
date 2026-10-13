@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.2.1 — 2026-10-13
+
+Documentation only; no code change.
+
+- The README and DETAILS flowcharts are SVG diagrams in four languages instead of Mermaid. They state that detected values leave only as placeholders (default); a value the detector misses is sent as is.
+- READMEs give the status as this version.
+
 ## 0.2.0 — 2026-10-13
 
 - Config files can be TOML (`.toml`) as well as JSON (`.json`), chosen by extension, with the same keys and validation; a path without an extension (`/dev/stdin`) is read as JSON as before, and any other extension stops startup. A syntax error names the file and, for TOML, the line and column, without quoting the file. `config.example.toml` lists every option with its default. Adds the runtime dependency `smol-toml` (BSD-3-Clause).

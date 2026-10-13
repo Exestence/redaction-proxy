@@ -1,6 +1,6 @@
 {
   "name": "redaction-proxy",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "private": true,
   "description": "Local proxy that masks PII and secrets in LLM API requests and restores them in responses, plus the redaction core it is built on",
   "keywords": [
