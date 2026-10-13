@@ -92,6 +92,12 @@ export interface ProxyConfig {
    * by default, 0 remembers nothing.
    */
   knownOriginalsTtlSeconds: number
+  /**
+   * When masking fails, send the request anyway instead of refusing it with
+   * 422: the partly masked body when the leak scan finds a detected value
+   * still present, the original body when masking throws. Off by default.
+   */
+  sendWhenMaskFails: boolean
 }
 
 /**
@@ -108,6 +114,7 @@ export const PROXY_DEFAULT_RULES = RULE_NAMES.filter(rule => rule !== 'card' && 
 const FILE_KEYS = new Set([
   'port', 'host', 'authToken', 'allowedOrigins', 'openaiUpstream', 'anthropicUpstream', 'allowInsecureUpstream',
   'redaction', 'nameModel', 'screen', 'debugMasked', 'toolRestore', 'knownOriginalsTtlSeconds',
+  'sendWhenMaskFails',
 ])
 
 /** Shortest `authToken` accepted; `openssl rand -hex 32` gives 64 characters. */
@@ -247,6 +254,10 @@ export function loadConfig(path: string | undefined, env: NodeJS.ProcessEnv): Pr
   if ((file.knownOriginalsTtlSeconds !== undefined && typeof file.knownOriginalsTtlSeconds !== 'number') || !Number.isSafeInteger(knownOriginalsTtlSeconds) || knownOriginalsTtlSeconds < 0) {
     throw new Error('knownOriginalsTtlSeconds must be a whole number of seconds, 0 or more')
   }
+  const envSend = env.REDACTION_PROXY_SEND_WHEN_MASK_FAILS
+  if (envSend !== undefined && envSend !== '1' && envSend !== '0') throw new Error('REDACTION_PROXY_SEND_WHEN_MASK_FAILS must be 1 or 0')
+  if (file.sendWhenMaskFails !== undefined && typeof file.sendWhenMaskFails !== 'boolean') throw new Error('sendWhenMaskFails must be true or false')
+  const sendWhenMaskFails = envSend === undefined ? file.sendWhenMaskFails === true : envSend === '1'
   const redaction = { rules: [...PROXY_DEFAULT_RULES], ...(file.redaction ?? {}) } as RulesRedactionConfig
   resolveRulesConfig(redaction)
   const config: ProxyConfig = {
@@ -260,6 +271,7 @@ export function loadConfig(path: string | undefined, env: NodeJS.ProcessEnv): Pr
     debugMasked: env.REDACTION_PROXY_DEBUG_MASKED === '1' || file.debugMasked === true,
     toolRestore: toolRestore(file.toolRestore, env.REDACTION_PROXY_TOOL_RESTORE_CATEGORIES),
     knownOriginalsTtlSeconds,
+    sendWhenMaskFails,
   }
   const model = nameModel(file.nameModel, env.REDACTION_PROXY_NAME_MODEL_DIR)
   if (model !== undefined) config.nameModel = model
