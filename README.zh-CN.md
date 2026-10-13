@@ -18,7 +18,7 @@
 
 跑得动本地模型、想要更强的隐私，请先安装分流器；它通过 dsh-addons 的 redaction 包使用这个代理的脱敏核心，安装时一起装上。跑不动的话，单用这个代理也能多一层隐私保护。
 
-> **状态：** 0.2.0，尚未发布到 npm。已在真实的 DeepSeek Chat Completions API 上验证（2026-10-08，见下文）；OpenAI、Anthropic 以及 Claude Code 等真实客户端尚未验证。
+> **状态：** 0.2.1，尚未发布到 npm。已在真实的 DeepSeek Chat Completions API 上验证（2026-10-08，见下文）；OpenAI、Anthropic 以及 Claude Code 等真实客户端尚未验证。
 
 ## 介绍视频
 

@@ -18,7 +18,7 @@
 
 跑得動本機模型、想要更強的隱私，請先安裝分流器；它透過 dsh-addons 的 redaction 套件使用這個代理的遮罩核心，安裝時一起裝上。跑不動的話，單用這個代理也能多一層隱私保護。
 
-> **狀態：** 0.2.0，尚未發布到 npm。已對真實的 DeepSeek Chat Completions API 驗證（2026-10-08，見下方）；OpenAI、Anthropic 與 Claude Code 等真實用戶端尚未驗證。
+> **狀態：** 0.2.1，尚未發布到 npm。已對真實的 DeepSeek Chat Completions API 驗證（2026-10-08，見下方）；OpenAI、Anthropic 與 Claude Code 等真實用戶端尚未驗證。
 
 ## 介紹影片
 

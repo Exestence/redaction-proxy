@@ -18,7 +18,7 @@ It works with any OpenAI- or Anthropic-compatible client, streaming included, an
 
 If you can run a local model and want stronger privacy, install the router first; it uses this proxy's masking core through dsh-addons' redaction packages, which you install with it. Otherwise, this proxy alone adds a layer of privacy.
 
-> **Status:** 0.2.0, not yet on npm. Verified against the real DeepSeek Chat Completions API (2026-10-08, see below); OpenAI, Anthropic and real clients such as Claude Code are not verified yet.
+> **Status:** 0.2.1, not yet on npm. Verified against the real DeepSeek Chat Completions API (2026-10-08, see below); OpenAI, Anthropic and real clients such as Claude Code are not verified yet.
 
 ## Intro video
 
