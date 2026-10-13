@@ -249,7 +249,7 @@ function readConfigFile(path: string): Record<string, unknown> {
  * @param path - TOML or JSON config file, or `undefined` for none.
  * @param env - environment; `REDACTION_PROXY_*` variables override the file.
  * @returns the validated configuration.
- * @throws {Error} on an unreadable file, an unknown key, or an invalid value.
+ * @throws {Error} on an unreadable or unparsable file, an unsupported extension, an unknown key, or an invalid value.
  */
 export function loadConfig(path: string | undefined, env: NodeJS.ProcessEnv): ProxyConfig {
   const file = path === undefined ? {} : readConfigFile(path)
