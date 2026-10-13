@@ -1616,11 +1616,15 @@ describe('placeholders kept in tool calls and resent', () => {
       const headers = fresh()
       reply = () => ({ json: { choices: [] } })
       await post('/v1/chat/completions', { model: 'm', messages: [{ role: 'user', content: EMAIL }] }, headers)
-      const ok = await post('/v1/chat/completions', { model: 'm', messages: [{ role: 'user', content: EMAIL }, { role: 'assistant', content: 'mail ⟦EMAIL_1⟧' }] }, headers)
+      const call = { id: 'call1', type: 'function', function: { name: 'bash', arguments: JSON.stringify({ command: 'mail ⟦EMAIL_1⟧' }) } }
+      const ok = await post('/v1/chat/completions', { model: 'm', messages: [{ role: 'user', content: EMAIL }, { role: 'assistant', content: null, tool_calls: [call] }] }, headers)
       expect(ok.status).toBe(200)
-      expect(seen[1]!.body.messages[1].content).toBe('mail ⟦EMAIL_1⟧')
-      const refused = await post('/v1/chat/completions', { model: 'm', messages: [{ role: 'user', content: EMAIL }, { role: 'assistant', content: 'mail ⟦EMAIL_7⟧' }] }, headers)
-      expect(refused.status).toBe(422)
+      expect(JSON.parse(seen[1]!.body.messages[1].tool_calls[0].function.arguments).command).toBe('mail ⟦EMAIL_1⟧')
+      const unknown = await post('/v1/chat/completions', { model: 'm', messages: [{ role: 'user', content: EMAIL }, { role: 'assistant', content: 'mail ⟦EMAIL_7⟧' }] }, headers)
+      expect(unknown.status).toBe(422)
+      // Only in assistant text, the issued placeholder is not anchored, so it is refused like an unknown one.
+      const unanchored = await post('/v1/chat/completions', { model: 'm', messages: [{ role: 'user', content: EMAIL }, { role: 'assistant', content: 'mail ⟦EMAIL_1⟧' }] }, headers)
+      expect(unanchored.status).toBe(422)
     } finally {
       await start({ toolRestore: { categories: DEFAULT_TOOL_RESTORE_CATEGORIES, tools: new Map() } })
     }

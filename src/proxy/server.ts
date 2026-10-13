@@ -116,6 +116,8 @@ interface Slot {
   key: string | number
   /** JSON pointer of the string, keys through {@link pointerSegment}, for diagnostics that never carry text. */
   path: string
+  /** Whether the string is a resent tool call's input, which the model wrote: Anthropic `tool_use` input, Chat or Responses `arguments`. */
+  tool: boolean
 }
 
 /** Per-request counters for the log line. */
@@ -185,6 +187,8 @@ interface RequestTexts {
   userTexts: Set<string>
   /** Each identity passed upstream as written in this request or the requests it continues, mapped to its original. */
   passed: Map<RedactionId, string>
+  /** Each identity the proxy kept as written in tool-call arguments of the replies to this request or the requests it continues; filled while the reply streams. */
+  kept: Set<RedactionId>
 }
 
 /** A request body after masking; `texts` holds a continuation's earlier texts first. */
@@ -353,7 +357,7 @@ class Refusal extends Error {
 function collectSlots(value: unknown, path: string, out: Slot[], tool = false): void {
   if (Array.isArray(value)) {
     value.forEach((item, index) => {
-      if (typeof item === 'string') out.push({ parent: value, key: index, path: `${path}/${index}` })
+      if (typeof item === 'string') out.push({ parent: value, key: index, path: `${path}/${index}`, tool })
       else collectSlots(item, `${path}/${index}`, out, tool)
     })
     return
@@ -367,7 +371,7 @@ function collectSlots(value: unknown, path: string, out: Slot[], tool = false): 
     const item = record[key]
     const at = `${path}/${pointerSegment(key)}`
     if (typeof item !== 'string') collectSlots(item, at, out, tool || isToolInput(record, key))
-    else if (tool || !SKIP_MASK.has(key) || isTextSource(record, key)) out.push({ parent: record, key, path: at })
+    else if (tool || !SKIP_MASK.has(key) || isTextSource(record, key)) out.push({ parent: record, key, path: at, tool: tool || key === 'arguments' || isToolInput(record, key) })
   }
 }
 
@@ -573,19 +577,24 @@ function replaceUnscreenable(text: string): string {
 /**
  * The placeholders written in a request's new texts that may pass to the
  * upstream as written. One the continued requests passed ({@link RequestTexts.passed})
- * already names its original upstream and passes again. Any other must name an
+ * already names its original upstream and passes again. Any other must be
+ * anchored: written in a resent tool call's input, which the model wrote from
+ * this conversation's placeholders, or kept by the proxy in a continued
+ * reply's tool-call arguments ({@link RequestTexts.kept}). A placeholder only
+ * in user or assistant text or in a tool result, such as one read back from
+ * a file or a summary, is not anchored: it may have been written for another
+ * value before a restart or an expiry. An anchored one must also name an
  * identity this client's earlier requests bound to exactly one remembered
  * original, which occurs in the texts as written or JSON-escaped; an identity
  * bound to two values, such as `EMAIL_1` of two conversations, never passes.
- * Such a placeholder is typically one the proxy kept in a tool call's
- * arguments and the client now resends.
  * @param fresh - the request's own texts, unscreened, which the placeholders are read from.
  * @param texts - every text of the request, a continuation's stored texts included.
  * @param issued - remembered originals of each identity ({@link KnownOriginal.ids}).
  * @param chain - the identities the continued requests passed.
+ * @param anchored - the anchored identities.
  * @returns each passable identity mapped to its original.
  */
-function passableLiterals(fresh: readonly string[], texts: readonly string[], issued: ReadonlyMap<RedactionId, ReadonlySet<string>>, chain: ReadonlyMap<RedactionId, string>): Map<RedactionId, string> {
+function passableLiterals(fresh: readonly string[], texts: readonly string[], issued: ReadonlyMap<RedactionId, ReadonlySet<string>>, chain: ReadonlyMap<RedactionId, string>, anchored: ReadonlySet<RedactionId>): Map<RedactionId, string> {
   const pass = new Map<RedactionId, string>()
   for (const text of fresh) {
     for (const [, id] of text.matchAll(LITERAL_PLACEHOLDER)) {
@@ -596,6 +605,7 @@ function passableLiterals(fresh: readonly string[], texts: readonly string[], is
         pass.set(literal, passed)
         continue
       }
+      if (!anchored.has(literal)) continue
       const originals = issued.get(literal)
       if (originals?.size !== 1) continue
       for (const original of originals) {
@@ -681,9 +691,10 @@ function restoresInto(policy: ToolRestorePolicy, tool: unknown): (id: RedactionI
  * @param stats - counters.
  * @param policy - which categories are restored into tool arguments.
  * @param log - receives one line per placeholder met in tool arguments, written once per distinct line.
+ * @param kept - receives each identity the policy keeps as written in tool arguments.
  * @returns the context.
  */
-function restoring(registry: RedactionRegistry, stats: Stats, policy: ToolRestorePolicy, log: (line: string) => void): Restoring {
+function restoring(registry: RedactionRegistry, stats: Stats, policy: ToolRestorePolicy, log: (line: string) => void, kept: Set<RedactionId>): Restoring {
   const logged = new Set<string>()
   return {
     registry,
@@ -695,6 +706,7 @@ function restoring(registry: RedactionRegistry, stats: Stats, policy: ToolRestor
         json,
         restores: restoresInto(policy, tool),
         onPlaceholder: (event: PlaceholderEvent) => {
+          if (event.outcome === 'refused') kept.add(event.id)
           const pointer = [...base, ...event.path].map(segment => `/${pointerSegment(segment)}`).join('')
           const line = `tool arguments: ${OUTCOME_LOG[event.outcome]} ${event.id} in ${name}${pointer === '' ? '' : ` at ${pointer}`}`
           if (logged.has(line)) return
@@ -1244,15 +1256,15 @@ export function createProxyServer(
      * @param pass - placeholders to pass as written, each mapped to the original it was issued for.
      * @returns the masked texts and what they bound, or `undefined` when a passed placeholder would no longer name its original.
      */
-    const attempt = async (pass: ReadonlyMap<RedactionId, string>) => {
-      const holding = pass.size > 0 || priorHolds
+    const attempt = async (pass: ReadonlyMap<RedactionId, string>, holdPrior = true) => {
+      const holding = pass.size > 0 || (priorHolds && holdPrior)
       const sentinel = holding ? unusedPrivateUse(stored) : ''
       if (sentinel === undefined) return undefined
       const held: RedactionId[][] = stored.map(() => [])
       const all = stored.map((text, at) => {
         const ownText = at >= priorTexts.length
         const kept = !holding ? text : text.replace(LITERAL_PLACEHOLDER, (literal, id: RedactionId) => {
-          if (ownText && !pass.has(id)) return literal
+          if (ownText ? !pass.has(id) : !holdPrior) return literal
           ;(held[at] as RedactionId[]).push(id)
           return sentinel
         })
@@ -1266,21 +1278,29 @@ export function createProxyServer(
       const detected = new Set<string>()
       const result = await mask(withKnownOriginals(detectorFor(new Set(all.filter((_, at) => isUser(at))), stats), known, escaped, detected), all.map((text, seq) => ({ seq, path: '', text })), emptyRedactionIndex())
       const registry = unescaping(result.registry, escaped)
-      if (![...pass].every(([id, original]) => chain.has(id) || registry.original(id) === original)) return undefined
+      // Every held identity, a continuation's included, must still name the original the upstream knows it as.
+      if (!held.every(ids => ids.every(id => registry.original(id) === (chain.get(id) ?? pass.get(id))))) return undefined
       // A continuation's stored masked texts are discarded, so only this request's own must keep their held positions.
       if (holding && !result.masked.every((text, at) => at < priorTexts.length || text.split(sentinel).length - 1 === (held[at] as RedactionId[]).length)) return undefined
       const back = (text: string, at: number): string => {
         let k = 0
         return (held[at] as RedactionId[]).length === 0 ? text : text.replaceAll(sentinel, () => placeholder((held[at] as RedactionId[])[k++] as RedactionId))
       }
-      return { all, escaped, detected, result, registry, masked: result.masked.map(back), stored: all.map(back), passed: new Map([...chain, ...pass]) }
+      return { all, escaped, detected, result, registry, masked: result.masked.map(back), stored: all.map(back), passed: holdPrior ? new Map([...chain, ...pass]) : new Map(pass) }
     }
 
     let masking
     try {
-      const pass = passableLiterals(raw, stored, issued, chain)
+      const anchored = new Set(prior?.kept)
+      raw.forEach((text, at) => {
+        if ((slots[at] as Slot).tool) for (const [, id] of text.matchAll(LITERAL_PLACEHOLDER)) anchored.add(id as RedactionId)
+      })
+      const pass = passableLiterals(raw, stored, issued, chain, anchored)
       // Any placeholder of this request that would not come out as written falls back to escaping them all, as without memory.
-      masking = (pass.size === 0 ? undefined : await attempt(pass)) ?? await attempt(new Map())
+      // A continuation whose numbering moved escapes its stored placeholders too, which reserves their numbers: the upstream's old placeholders then restore as unknown, never as another value.
+      // That last attempt holds nothing, so it needs no free private-use character and verifies nothing.
+      // oxlint-disable-next-line typescript/no-non-null-assertion -- see above.
+      masking = (pass.size === 0 ? undefined : await attempt(pass)) ?? await attempt(new Map()) ?? (await attempt(new Map(), false))!
     } catch (error) {
       if (error instanceof NameModelError) throw new Refusal(503, 'the name model failed and nameModel.required is set')
       if (!(error instanceof RedactionError)) throw error
@@ -1288,10 +1308,8 @@ export function createProxyServer(
       if (!config.sendWhenMaskFails) throw new Refusal(422, `request text cannot be masked: ${error.code}`)
       const texts = [...priorTexts, ...raw.map(replaceUnscreenable)]
       // oxlint-disable-next-line typescript/no-non-null-assertion -- the body parsed as JSON above.
-      return { outgoing: body!.toString('utf8'), registry: EMPTY_REGISTRY, texts, userTexts: new Set(texts.filter((_, at) => isUser(at))), passed: chain, maskFailed: `request text cannot be masked: ${error.code}; the original body was sent` }
+      return { outgoing: body!.toString('utf8'), registry: EMPTY_REGISTRY, texts, userTexts: new Set(texts.filter((_, at) => isUser(at))), passed: chain, kept: new Set(prior?.kept), maskFailed: `request text cannot be masked: ${error.code}; the original body was sent` }
     }
-    // Without a free private-use character, a continuation's stored placeholders cannot be held.
-    if (masking === undefined) throw new Refusal(422, 'the continued request texts use every private-use character, so the placeholders already sent upstream cannot be kept; start a new conversation')
     const { all, escaped, detected, result, registry } = masking
     masking.masked.slice(priorTexts.length).forEach((masked, i) => {
       // oxlint-disable-next-line typescript/no-non-null-assertion -- one masked string per slot.
@@ -1344,7 +1362,7 @@ export function createProxyServer(
     if (leaks !== undefined && !config.sendWhenMaskFails) throw new Refusal(422, `a detected value is still unmasked at ${leaks}; the request was not forwarded`)
     rememberOriginals(client, registry, clientBound, detected)
     const texts = masking.stored
-    const masked: MaskedRequest = { outgoing: JSON.stringify(parsed), registry, texts, userTexts: new Set(texts.filter((_, at) => isUser(at))), passed: masking.passed }
+    const masked: MaskedRequest = { outgoing: JSON.stringify(parsed), registry, texts, userTexts: new Set(texts.filter((_, at) => isUser(at))), passed: masking.passed, kept: new Set(prior?.kept) }
     if (leaks !== undefined) masked.maskFailed = `a detected value is still unmasked at ${leaks}`
     return masked
   }
@@ -1400,21 +1418,20 @@ export function createProxyServer(
     })
     const remember = (id: string): void => {
       if (masked === undefined) return
-      setNewest(continuations, `${client}:${id}`, { texts: masked.texts, userTexts: masked.userTexts, passed: masked.passed }, CONTINUATIONS_MAX)
+      setNewest(continuations, `${client}:${id}`, { texts: masked.texts, userTexts: masked.userTexts, passed: masked.passed, kept: masked.kept }, CONTINUATIONS_MAX)
     }
     const done = (): void => {
       const counts = Object.entries(stats.masked).map(([category, n]) => `${category} ${n}`).join(', ')
       log(`${req.method} ${path} -> ${upstream.status} masked ${Object.values(stats.masked).reduce((a, b) => a + b, 0)}${counts === '' ? '' : ` (${counts})`} restored ${stats.restored}${stats.kept === 0 ? '' : ` kept ${stats.kept}`} unknown ${stats.unknown}${stats.nameModelFailed ? ' nameModel failed' : ''} ${Date.now() - started}ms`)
     }
 
-    const registry = masked?.registry
-    if (registry === undefined || upstream.body === null) {
+    if (masked === undefined || upstream.body === null) {
       res.writeHead(upstream.status, out)
       res.end(Buffer.from(await upstream.arrayBuffer()))
       done()
       return
     }
-    const ctx = restoring(registry, stats, config.toolRestore, line => log(`${req.method} ${path} ${line}`))
+    const ctx = restoring(masked.registry, stats, config.toolRestore, line => log(`${req.method} ${path} ${line}`), masked.kept)
     if (!(upstream.headers.get('content-type') ?? '').includes('text/event-stream')) {
       const text = await upstream.text()
       let payload = text
