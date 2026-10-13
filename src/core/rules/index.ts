@@ -18,6 +18,7 @@ import type { Candidate, PushCandidate } from './candidate.ts'
 import { mergeCandidates } from './candidate.ts'
 import type { OffsetProjection } from './normalize.ts'
 import { HIGH_ESCAPE, composeProjections, projectNfkc, projectPercent } from './normalize.ts'
+import { printable } from '../printable.ts'
 import { propagateValues } from './propagate.ts'
 import { screenText } from './screen.ts'
 import type { ConfiguredTerm } from './rules.ts'
@@ -183,12 +184,12 @@ export interface ResolvedRulesConfig {
  */
 export function resolveRulesConfig(config: RulesRedactionConfig = {}): ResolvedRulesConfig {
   for (const key of Object.keys(config)) {
-    if (!CONFIG_KEYS.has(key)) throw new Error(`RulesRedactionConfig: unknown key "${key}"`)
+    if (!CONFIG_KEYS.has(key)) throw new Error(`RulesRedactionConfig: unknown key ${printable(key, 'key')}`)
   }
   const rules = config.rules ?? [...DEFAULT_RULE_NAMES]
   if (!Array.isArray(rules)) throw new Error('RulesRedactionConfig: rules must be an array')
   for (const rule of rules) {
-    if (!RULE_NAMES.includes(rule)) throw new Error(`RulesRedactionConfig: unknown rule ${JSON.stringify(rule)}`)
+    if (!RULE_NAMES.includes(rule)) throw new Error(`RulesRedactionConfig: unknown rule ${printable(rule)}`)
   }
   return {
     rules: RULE_NAMES.filter(rule => rules.includes(rule)),

@@ -56,8 +56,8 @@ describe('nameModel configuration', () => {
   it('refuses a nameModel block that is not an object, also when the environment sets the directory', () => {
     const file = join(mkdtempSync(join(tmpdir(), 'name-model-config-')), 'config.json')
     writeFileSync(file, JSON.stringify({ nameModel: '/models/nym' }))
-    expect(() => loadConfig(file, {})).toThrow('nameModel: must be an object')
-    expect(() => loadConfig(file, { REDACTION_PROXY_NAME_MODEL_DIR: '/models/nym' })).toThrow('nameModel: must be an object')
+    expect(() => loadConfig(file, {})).toThrow('nameModel must be a table (a JSON object), not <value>')
+    expect(() => loadConfig(file, { REDACTION_PROXY_NAME_MODEL_DIR: '/models/nym' })).toThrow('nameModel must be a table (a JSON object), not <value>')
   })
 
   it('fails at load, naming every missing file', async () => {

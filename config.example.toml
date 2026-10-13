@@ -1,0 +1,113 @@
+# redaction-proxy configuration example.
+# Start with: node lib/cli.js --config config.example.toml
+# Active lines show the defaults; commented lines show optional settings.
+# A JSON file (.json) with the same keys works too; a dotted key such as
+# redaction.terms is the "terms" key inside the "redaction" object.
+# Environment variables (REDACTION_PROXY_*) override this file.
+# Upstream API keys never go in this file; an unknown key stops startup.
+
+# --- Server ---
+
+# TCP port to listen on. Default 8787.
+port = 8787
+
+# Address to bind. Default 127.0.0.1 (this machine only).
+# Any address that is not loopback, such as 0.0.0.0, requires authToken.
+host = "127.0.0.1"
+
+# Token every client must send in the x-redaction-proxy-token header,
+# at least 16 characters (openssl rand -hex 32). Default: none.
+# Optional on loopback, required elsewhere.
+# authToken = "replace-with-the-output-of-openssl-rand-hex-32"
+
+# Browser or Electron origins served besides loopback http(s) pages,
+# written as scheme://host[:port]. Default: none.
+allowedOrigins = []
+
+# --- Upstreams ---
+
+# Where Chat Completions and Responses requests go. Default https://api.openai.com.
+openaiUpstream = "https://api.openai.com"
+
+# Where Anthropic Messages requests go. Default https://api.anthropic.com.
+anthropicUpstream = "https://api.anthropic.com"
+
+# Allow plain http:// to an upstream that is not loopback, which sends
+# API keys in cleartext. Default false.
+allowInsecureUpstream = false
+
+# --- What to mask ---
+
+# Names and other words to mask, case-insensitive. A term starting or ending
+# with a Latin letter or digit matches only as a whole word. Default: none.
+# redaction.terms = ["Denise Whitlock"]
+
+# Project code names to mask. Default: none.
+# redaction.projectNames = ["Nimbus"]
+
+# Values never masked; replaces the default list.
+# Default ["git@github.com", "noreply@github.com"].
+# redaction.allowlist = ["git@github.com", "noreply@github.com"]
+
+# Built-in rules to enable; an empty list turns built-in detection off.
+# Default: every rule except "card" and "entropy", whose stricter variants
+# "card-strict" and "entropy-strict" are on.
+# redaction.rules = ["email", "user-path", "api-key", "phone", "card-strict", "entropy-strict"]
+
+# --- Name model (experimental) ---
+
+# Setting nameModel.dir turns the name model on; it needs the model files in
+# that directory (an absolute path). Default: off, rules only.
+# nameModel.dir = "/absolute/path/to/models/nym"
+# Minimum score for a token to count, between 0 and 1. Default 0.3.
+# nameModel.threshold = 0.3
+# Categories to report. Default all four: ["NAME", "ORG", "LOC", "ADDR"].
+# nameModel.categories = ["NAME", "ORG", "LOC", "ADDR"]
+# Tokens per model pass, at most 8192. Default 512.
+# nameModel.windowTokens = 512
+# Tokens two neighbouring passes share; must be even. Default 128.
+# nameModel.windowOverlap = 128
+# Whole words the model never reports; replaces the built-in list of tool,
+# product, and setting words.
+# nameModel.allowlist = ["Docker", "Kafka"]
+# true: refuse the request with 503 when the model fails. false: send it
+# masked by the rules only, and log "nameModel failed". Default false.
+# nameModel.required = false
+
+# --- Tool restore ---
+
+# Placeholder categories restored into tool-call arguments; other categories
+# reach the tool as the placeholder. "*" restores every category.
+# Default ["PATH", "TERM", "PROJECT"].
+toolRestore.categories = ["PATH", "TERM", "PROJECT"]
+
+# Categories for one tool, replacing toolRestore.categories for it. Tool
+# names match trimmed and in any case. Default: none.
+# toolRestore.tools.git_commit = ["PATH", "EMAIL"]
+# toolRestore.tools.bash = "*"
+
+# --- Memory ---
+
+# Seconds a detected value stays remembered for the same client's later
+# requests, counted from its last detection; 0 remembers nothing.
+# Default 86400 (24 hours).
+knownOriginalsTtlSeconds = 86400
+
+# --- Failure handling ---
+
+# Control characters, U+FFFD, lone surrogates, and ⟦ ⟧ in request text:
+# "replace" turns them into visible stand-ins, "refuse" rejects the request
+# with 422. Default "replace".
+screen = "replace"
+
+# false: refuse a request with 422 when masking fails (a detected value is
+# still in it after masking, or masking cannot run).
+# true: send it anyway, partly masked, or unmasked when masking cannot run.
+# This sends detected values to the provider. The reply then carries the
+# header x-redaction-proxy-mask-failed: 1, and the log names the fields and
+# categories, never the values. Default false.
+sendWhenMaskFails = false
+
+# Log each masked request body, including fields the proxy does not mask.
+# For debugging only. Default false.
+debugMasked = false

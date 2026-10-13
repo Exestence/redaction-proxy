@@ -1,5 +1,5 @@
 /**
- * Proxy configuration: a JSON file plus environment overrides. Keys never
+ * Proxy configuration: a TOML or JSON file plus environment overrides. Keys never
  * come from the file; an upstream key may come from the environment as a
  * fallback for clients that send no credentials, and stays in memory.
  *
@@ -7,10 +7,13 @@
  */
 
 import { readFileSync } from 'node:fs'
+import { basename, extname } from 'node:path'
+import { TomlError, parse as parseToml } from 'smol-toml'
 import { RULE_CATEGORIES, RULE_NAMES, resolveRulesConfig } from '../core/index.ts'
 import type { RulesRedactionConfig } from '../core/index.ts'
 import { NAME_MODEL_CATEGORIES, resolveNameModelConfig } from '../core/model/config.ts'
 import type { ResolvedNameModelConfig } from '../core/model/config.ts'
+import { printable } from '../core/printable.ts'
 
 /** How a request string the rules cannot reason about is handled. */
 export type ScreenMode = 'replace' | 'refuse'
@@ -92,6 +95,12 @@ export interface ProxyConfig {
    * by default, 0 remembers nothing.
    */
   knownOriginalsTtlSeconds: number
+  /**
+   * When masking fails, send the request anyway instead of refusing it with
+   * 422: the partly masked body when the leak scan finds a detected value
+   * still present, the original body when masking throws. Off by default.
+   */
+  sendWhenMaskFails: boolean
 }
 
 /**
@@ -108,6 +117,7 @@ export const PROXY_DEFAULT_RULES = RULE_NAMES.filter(rule => rule !== 'card' && 
 const FILE_KEYS = new Set([
   'port', 'host', 'authToken', 'allowedOrigins', 'openaiUpstream', 'anthropicUpstream', 'allowInsecureUpstream',
   'redaction', 'nameModel', 'screen', 'debugMasked', 'toolRestore', 'knownOriginalsTtlSeconds',
+  'sendWhenMaskFails',
 ])
 
 /** Shortest `authToken` accepted; `openssl rand -hex 32` gives 64 characters. */
@@ -123,6 +133,42 @@ export function isLoopbackHost(host: string): boolean {
 }
 
 /**
+ * Whether a value is a table: a TOML table, whose prototype is `null`, or a JSON object.
+ * @param value - a parsed file value.
+ * @returns whether it is a plain object; arrays, dates, and other instances are not.
+ */
+function isTable(value: unknown): value is Record<string, unknown> {
+  if (value === null || typeof value !== 'object') return false
+  const proto = Object.getPrototypeOf(value) as unknown
+  return proto === Object.prototype || proto === null
+}
+
+/**
+ * Read an optional table setting.
+ * @param value - the file value.
+ * @param label - setting name for the failure message.
+ * @returns the table, or an empty one when absent.
+ * @throws {Error} on a value that is not a table.
+ */
+function table(value: unknown, label: string): Record<string, unknown> {
+  if (value === undefined) return {}
+  if (!isTable(value)) throw new Error(`${label} must be a table (a JSON object), not ${printable(value)}`)
+  return value
+}
+
+/**
+ * Read an optional boolean file setting.
+ * @param value - the file value.
+ * @param label - setting name for the failure message.
+ * @returns the value, or `false` when absent.
+ * @throws {Error} on a value that is not a boolean.
+ */
+function fileBoolean(value: unknown, label: string): boolean {
+  if (value !== undefined && typeof value !== 'boolean') throw new Error(`${label} must be true or false`)
+  return value === true
+}
+
+/**
  * Check one upstream base URL.
  * @param value - candidate URL.
  * @param label - setting name for the failure message.
@@ -132,6 +178,7 @@ export function isLoopbackHost(host: string): boolean {
  */
 function upstream(value: unknown, label: string, allowInsecure: boolean): string {
   if (typeof value !== 'string' || !/^https?:\/\/[^/]/.test(value)) throw new Error(`${label} must be an http(s) URL`)
+  if (!URL.canParse(value)) throw new Error(`${label} must be an http(s) URL`)
   if (value.startsWith('http:') && !allowInsecure && !isLoopbackHost(new URL(value).hostname)) {
     throw new Error(`${label} is plain http:// to a host that is not loopback, which would send API keys in cleartext; use https:// or set allowInsecureUpstream (REDACTION_PROXY_ALLOW_INSECURE_UPSTREAM=1)`)
   }
@@ -168,7 +215,7 @@ function restoredCategories(value: unknown, label: string): RestoredCategories {
   const list = typeof value === 'string' ? value.split(',').map(item => item.trim()).filter(item => item !== '') : value
   if (!Array.isArray(list)) throw new Error(`${label} must be an array of categories or "*"`)
   for (const category of list) {
-    if (!CATEGORIES.includes(category)) throw new Error(`${label}: unknown category ${JSON.stringify(category)}; valid: ${CATEGORIES.join(', ')}`)
+    if (!CATEGORIES.includes(category)) throw new Error(`${label}: unknown category ${printable(category)}; valid: ${CATEGORIES.join(', ')}`)
   }
   return [...new Set(list as string[])]
 }
@@ -178,19 +225,17 @@ function restoredCategories(value: unknown, label: string): RestoredCategories {
  * @param value - the file's `toolRestore` value.
  * @param envCategories - the environment's default categories.
  * @returns the policy.
- * @throws {Error} on an unknown key or category.
+ * @throws {Error} on a value that is not a table, an unknown key, or an unknown category.
  */
 function toolRestore(value: unknown, envCategories: string | undefined): ToolRestorePolicy {
-  const block = value ?? {}
-  if (block === null || typeof block !== 'object' || Array.isArray(block)) throw new Error('toolRestore must be an object')
-  const { categories, tools = {}, ...rest } = block as Record<string, unknown>
+  const { categories, tools, ...rest } = table(value, 'toolRestore')
   const [unknown] = Object.keys(rest)
-  if (unknown !== undefined) throw new Error(`toolRestore: unknown key "${unknown}"`)
-  if (tools === null || typeof tools !== 'object' || Array.isArray(tools)) throw new Error('toolRestore.tools must be an object of tool names')
+  if (unknown !== undefined) throw new Error(`toolRestore: unknown key ${printable(unknown, 'key')}`)
   const byTool = new Map<string, RestoredCategories>()
-  for (const [tool, list] of Object.entries(tools)) {
-    if (byTool.has(toolKey(tool))) throw new Error(`toolRestore.tools: ${JSON.stringify(tool)} names a tool listed before; names match trimmed and in any case`)
-    byTool.set(toolKey(tool), restoredCategories(list, `toolRestore.tools.${tool}`))
+  for (const [tool, list] of Object.entries(table(tools, 'toolRestore.tools'))) {
+    const name = printable(tool, 'tool')
+    if (byTool.has(toolKey(tool))) throw new Error(`toolRestore.tools: ${name} names a tool listed before; names match trimmed and in any case`)
+    byTool.set(toolKey(tool), restoredCategories(list, `toolRestore.tools.${name.replace(/^"|"$/g, '')}`))
   }
   return {
     categories: restoredCategories(envCategories ?? categories ?? DEFAULT_TOOL_RESTORE_CATEGORIES, 'toolRestore.categories'),
@@ -207,22 +252,62 @@ function toolRestore(value: unknown, envCategories: string | undefined): ToolRes
  * @throws {Error} on an invalid block.
  */
 function nameModel(value: unknown, dir: string | undefined): ResolvedNameModelConfig | undefined {
-  if (dir === undefined) return value === undefined ? undefined : resolveNameModelConfig(value)
-  if (value !== undefined && (value === null || typeof value !== 'object' || Array.isArray(value))) throw new Error('nameModel: must be an object')
-  return resolveNameModelConfig({ ...value, dir })
+  if (dir === undefined && value === undefined) return undefined
+  const block = table(value, 'nameModel')
+  return resolveNameModelConfig(dir === undefined ? block : { ...block, dir })
+}
+
+/**
+ * Read a config file: `.toml` as TOML; `.json` or no extension (`/dev/stdin`)
+ * as JSON. A failure message names the path and, for TOML, the line and
+ * column, never the file's text.
+ * @param path - a `.toml`, `.json`, or extensionless file.
+ * @returns the file's top-level table.
+ * @throws {Error} on another extension, an unreadable file, or a syntax error.
+ */
+function readConfigFile(path: string): Record<string, unknown> {
+  const base = basename(path).toLowerCase()
+  const format = base === '.toml' || base === '.json' ? base : extname(base) || '.json'
+  if (format !== '.toml' && format !== '.json') throw new Error(`config ${path}: unsupported file extension; use .toml, .json, or none for JSON`)
+  // TOML parsers skip a leading BOM; JSON.parse does not.
+  const text = readFileSync(path, 'utf8').replace(/^\uFEFF/, '')
+  let file: unknown
+  try {
+    file = format === '.toml' ? parseToml(text) : JSON.parse(text)
+  } catch (error) {
+    // Both parsers quote the file's text in their messages, which may hold a token.
+    if (error instanceof TomlError) throw new Error(`config ${path}:${error.line}:${error.column}: invalid TOML: ${error.message.split('\n')[0]?.replace(/^Invalid TOML document: /, '')}`)
+    throw new Error(`config ${path}: invalid JSON`)
+  }
+  if (file === null || typeof file !== 'object' || Array.isArray(file)) throw new Error(`config ${path}: must hold an object`)
+  return file as Record<string, unknown>
+}
+
+/**
+ * Read an on/off environment variable, which overrides the file when set.
+ * @param env - environment.
+ * @param name - the variable.
+ * @param fileValue - the file's validated value.
+ * @returns `true` for `1`, `false` for `0`, `fileValue` when unset.
+ * @throws {Error} on any other value.
+ */
+function envFlag(env: NodeJS.ProcessEnv, name: string, fileValue: boolean): boolean {
+  const value = env[name]
+  if (value !== undefined && value !== '1' && value !== '0') throw new Error(`${name} must be 1 or 0`)
+  return value === undefined ? fileValue : value === '1'
 }
 
 /**
  * Load the configuration.
- * @param path - JSON config file, or `undefined` for none.
+ * @param path - TOML or JSON config file, or `undefined` for none.
  * @param env - environment; `REDACTION_PROXY_*` variables override the file.
  * @returns the validated configuration.
- * @throws {Error} on an unreadable file, an unknown key, or an invalid value.
+ * @throws {Error} on an unreadable or unparsable file, an unsupported extension, an unknown key, or an invalid value.
  */
 export function loadConfig(path: string | undefined, env: NodeJS.ProcessEnv): ProxyConfig {
-  const file: Record<string, unknown> = path === undefined ? {} : JSON.parse(readFileSync(path, 'utf8')) as Record<string, unknown>
+  const file = path === undefined ? {} : readConfigFile(path)
   for (const key of Object.keys(file)) {
-    if (!FILE_KEYS.has(key)) throw new Error(`config: unknown key "${key}"${/key|secret/i.test(key) ? ' (upstream API keys belong in the environment, not the file)' : ''}`)
+    if (!FILE_KEYS.has(key)) throw new Error(`config: unknown key ${printable(key, 'key')}${/key|secret/i.test(key) ? ' (upstream API keys belong in the environment, not the file)' : ''}`)
   }
   const envPort = env.REDACTION_PROXY_PORT
   if (envPort !== undefined && !/^\d{1,5}$/.test(envPort)) throw new Error('REDACTION_PROXY_PORT must be a port number')
@@ -236,9 +321,9 @@ export function loadConfig(path: string | undefined, env: NodeJS.ProcessEnv): Pr
     throw new Error(`authToken must be a string of at least ${AUTH_TOKEN_MIN} characters, such as the output of \`openssl rand -hex 32\``)
   }
   if (authToken === undefined && !isLoopbackHost(host)) {
-    throw new Error(`host ${host} is not loopback, so an auth token is required: set REDACTION_PROXY_AUTH_TOKEN (or authToken) and have clients send it in x-redaction-proxy-token`)
+    throw new Error(`host ${printable(host, 'host')} is not loopback, so an auth token is required: set REDACTION_PROXY_AUTH_TOKEN (or authToken) and have clients send it in x-redaction-proxy-token`)
   }
-  const allowInsecure = env.REDACTION_PROXY_ALLOW_INSECURE_UPSTREAM === '1' || file.allowInsecureUpstream === true
+  const allowInsecure = envFlag(env, 'REDACTION_PROXY_ALLOW_INSECURE_UPSTREAM', fileBoolean(file.allowInsecureUpstream, 'allowInsecureUpstream'))
   const screen = env.REDACTION_PROXY_SCREEN ?? file.screen ?? 'replace'
   if (screen !== 'replace' && screen !== 'refuse') throw new Error('screen must be "replace" or "refuse"')
   const envTtl = env.REDACTION_PROXY_KNOWN_ORIGINALS_TTL_SECONDS
@@ -247,7 +332,9 @@ export function loadConfig(path: string | undefined, env: NodeJS.ProcessEnv): Pr
   if ((file.knownOriginalsTtlSeconds !== undefined && typeof file.knownOriginalsTtlSeconds !== 'number') || !Number.isSafeInteger(knownOriginalsTtlSeconds) || knownOriginalsTtlSeconds < 0) {
     throw new Error('knownOriginalsTtlSeconds must be a whole number of seconds, 0 or more')
   }
-  const redaction = { rules: [...PROXY_DEFAULT_RULES], ...(file.redaction ?? {}) } as RulesRedactionConfig
+  const sendWhenMaskFails = envFlag(env, 'REDACTION_PROXY_SEND_WHEN_MASK_FAILS', fileBoolean(file.sendWhenMaskFails, 'sendWhenMaskFails'))
+  const debugMasked = envFlag(env, 'REDACTION_PROXY_DEBUG_MASKED', fileBoolean(file.debugMasked, 'debugMasked'))
+  const redaction = { rules: [...PROXY_DEFAULT_RULES], ...table(file.redaction, 'redaction') } as RulesRedactionConfig
   resolveRulesConfig(redaction)
   const config: ProxyConfig = {
     port,
@@ -257,9 +344,10 @@ export function loadConfig(path: string | undefined, env: NodeJS.ProcessEnv): Pr
     anthropicUpstream: upstream(env.REDACTION_PROXY_ANTHROPIC_UPSTREAM ?? file.anthropicUpstream ?? 'https://api.anthropic.com', 'anthropicUpstream', allowInsecure),
     redaction,
     screen,
-    debugMasked: env.REDACTION_PROXY_DEBUG_MASKED === '1' || file.debugMasked === true,
+    debugMasked,
     toolRestore: toolRestore(file.toolRestore, env.REDACTION_PROXY_TOOL_RESTORE_CATEGORIES),
     knownOriginalsTtlSeconds,
+    sendWhenMaskFails,
   }
   const model = nameModel(file.nameModel, env.REDACTION_PROXY_NAME_MODEL_DIR)
   if (model !== undefined) config.nameModel = model

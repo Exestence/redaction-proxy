@@ -6,6 +6,7 @@
  */
 
 import { isAbsolute } from 'node:path'
+import { printable } from '../printable.ts'
 
 /** Categories the name model can report, in placeholder-prefix form. */
 export const NAME_MODEL_CATEGORIES = ['NAME', 'ORG', 'LOC', 'ADDR'] as const
@@ -117,7 +118,7 @@ function resolveCategories(value: unknown): NameModelCategory[] {
   if (value === undefined) return [...NAME_MODEL_CATEGORIES]
   if (!Array.isArray(value) || value.length === 0) invalid(`categories must be a non-empty array of ${NAME_MODEL_CATEGORIES.join(', ')}`)
   for (const category of value) {
-    if (!NAME_MODEL_CATEGORIES.includes(category)) invalid(`unknown category ${JSON.stringify(category)}`)
+    if (!NAME_MODEL_CATEGORIES.includes(category)) invalid(`unknown category ${printable(category)}`)
   }
   return NAME_MODEL_CATEGORIES.filter(category => value.includes(category))
 }
@@ -145,7 +146,7 @@ export function resolveNameModelConfig(config: unknown): ResolvedNameModelConfig
   if (config === null || typeof config !== 'object' || Array.isArray(config)) invalid('must be an object')
   const input = config as NameModelConfig
   for (const key of Object.keys(input)) {
-    if (!CONFIG_KEYS.has(key)) invalid(`unknown key "${key}"`)
+    if (!CONFIG_KEYS.has(key)) invalid(`unknown key ${printable(key, 'key')}`)
   }
   if (typeof input.dir !== 'string' || !isAbsolute(input.dir)) invalid('dir must be an absolute path')
   const threshold = input.threshold ?? DEFAULTS.threshold

@@ -19,6 +19,13 @@ COPY tsconfig.json tsconfig.build.json ./
 COPY src src
 RUN pnpm build
 
+# Runtime dependencies only (the TOML parser), installed apart from the build's dev dependencies.
+FROM node:22-slim AS deps
+WORKDIR /src
+RUN npm install -g pnpm@11.7.0
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
+RUN pnpm install --prod --frozen-lockfile --ignore-scripts
+
 FROM node:22-slim
 ARG NAME_MODEL=0
 WORKDIR /app
@@ -29,6 +36,7 @@ RUN if [ "$NAME_MODEL" = 1 ]; then \
     fi
 COPY LICENSE NOTICE ./
 COPY --from=build /src/package.json ./
+COPY --from=deps /src/node_modules node_modules
 COPY --from=build /src/lib lib
 USER node
 # Inside the container 127.0.0.1 is unreachable from the host, so the image binds all interfaces;

@@ -179,7 +179,20 @@ interface MaskedRequest extends RequestTexts {
   outgoing: string
   /** Bindings of the mask call. */
   registry: RedactionRegistry
+  /** Why masking failed, naming fields and categories, never values; set only when `sendWhenMaskFails` let the body go out anyway. */
+  maskFailed?: string
 }
+
+/** Bindings of a request whose masking threw: nothing to restore. */
+const EMPTY_REGISTRY: RedactionRegistry = {
+  original: () => undefined,
+  ids: () => [],
+  originals: () => [],
+  subset: () => EMPTY_REGISTRY,
+}
+
+/** Response header set to `1` on every reply, relayed or written by the proxy, to a request sent although its masking failed. */
+const MASK_FAILED_HEADER = 'x-redaction-proxy-mask-failed'
 
 /**
  * Category of a placeholder identity: `EMAIL` of `EMAIL_3`.
@@ -466,7 +479,7 @@ function containsAnyOf(patterns: readonly string[]): (text: string) => boolean {
 }
 
 /**
- * Refuse a masked body that still holds a value this request detected: in a
+ * Find where a masked body still holds a value this request detected: in a
  * field the proxy does not rewrite (metadata, an image URL), or an occurrence
  * masking could not cover. A name-model value or configured literal is
  * matched as its propagation matches it, as a whole word for spaced scripts
@@ -482,9 +495,9 @@ function containsAnyOf(patterns: readonly string[]): (text: string) => boolean {
  * @param body - the masked request body.
  * @param bound - every spelling of a detected value the mask call bound, mapped to its category.
  * @param modelValues - the originals the name model bound.
- * @throws {Refusal} 422 naming the JSON pointers with the category of what each holds, never the value.
+ * @returns up to five JSON pointers, each with the category of what it holds, never the value; `undefined` when nothing leaks.
  */
-function refuseLeaks(body: Json, bound: ReadonlyMap<string, string>, modelValues: ReadonlySet<string>): void {
+function findLeaks(body: Json, bound: ReadonlyMap<string, string>, modelValues: ReadonlySet<string>): string | undefined {
   // A value inside a JSON-text string (`arguments`) is written JSON-escaped.
   const forms = (original: string): string[] => [original, JSON.stringify(original).slice(1, -1)]
   const isWord = (original: string, category: string): boolean => modelValues.has(original) || LITERAL_CATEGORIES.has(category)
@@ -515,8 +528,8 @@ function refuseLeaks(body: Json, bound: ReadonlyMap<string, string>, modelValues
     }
   }
   walk(body, '', '', false)
-  if (where.length === 0) return
-  // The refusal path alone looks up which value each text holds, the way `leaks` matches it.
+  if (where.length === 0) return undefined
+  // The leak path alone looks up which value each text holds, the way `leaks` matches it.
   const holds = (text: string, original: string, category: string): boolean => isWord(original, category)
     ? words.some(([word]) => word === original) && standsIn(text, foldAsciiCase(text), original)
     : forms(original).some(form => foldAsciiCase(text).includes(foldAsciiCase(form)))
@@ -525,7 +538,7 @@ function refuseLeaks(body: Json, bound: ReadonlyMap<string, string>, modelValues
     const [, category] = [...bound].find(([original, of]) => holds(text, original, of))!
     return `${path} (${category})`
   }
-  throw new Refusal(422, `a detected value is still unmasked at ${where.slice(0, 5).map(describe).join(', ')}; the request was not forwarded`)
+  return where.slice(0, 5).map(describe).join(', ')
 }
 
 /**
@@ -1092,7 +1105,7 @@ export function createProxyServer(
    * @param stats - counters; receives masked counts and a tolerated model failure.
    * @param client - the client scope, for continuations and known originals.
    * @returns the masked body and what its response needs.
-   * @throws {Refusal} on a body that is not JSON, an unscreenable text, a mask conflict, a required model's failure, or a leak.
+   * @throws {Refusal} on a body that is not JSON, an unscreenable text, an unknown continuation, a required model's failure, or, unless `sendWhenMaskFails` is set, a mask conflict or a leak.
    */
   const maskBody = async (body: Buffer | undefined, stats: Stats, client: string): Promise<MaskedRequest> => {
     let parsed: Json
@@ -1127,10 +1140,12 @@ export function createProxyServer(
     try {
       result = await mask(withKnownOriginals(detectorFor(userTexts, stats), known, escaped, detected), all.map((text, seq) => ({ seq, path: '', text })), emptyRedactionIndex())
     } catch (error) {
-      // Screening above leaves only a conflict a continuation's stored texts can raise.
-      if (error instanceof RedactionError) throw new Refusal(422, `request text cannot be masked: ${error.code}`)
       if (error instanceof NameModelError) throw new Refusal(503, 'the name model failed and nameModel.required is set')
-      throw error
+      if (!(error instanceof RedactionError)) throw error
+      // Screening above leaves only a conflict a continuation's stored texts can raise.
+      if (!config.sendWhenMaskFails) throw new Refusal(422, `request text cannot be masked: ${error.code}`)
+      // oxlint-disable-next-line typescript/no-non-null-assertion -- the body parsed as JSON above.
+      return { outgoing: body!.toString('utf8'), registry: EMPTY_REGISTRY, texts: all, userTexts, maskFailed: `request text cannot be masked: ${error.code}; the original body was sent` }
     }
     result.masked.slice(priorTexts.length).forEach((masked, i) => {
       // oxlint-disable-next-line typescript/no-non-null-assertion -- one masked string per slot.
@@ -1178,10 +1193,13 @@ export function createProxyServer(
       bound.set(original, category)
       if (MODEL_CATEGORIES.has(category)) modelValues.add(original)
     }
-    refuseLeaks(parsed, bound, modelValues)
+    const leaks = findLeaks(parsed, bound, modelValues)
+    if (leaks !== undefined && !config.sendWhenMaskFails) throw new Refusal(422, `a detected value is still unmasked at ${leaks}; the request was not forwarded`)
     const registry = unescaping(result.registry, escaped)
     rememberOriginals(client, registry, clientBound, detected)
-    return { outgoing: JSON.stringify(parsed), registry, texts: all, userTexts }
+    const masked: MaskedRequest = { outgoing: JSON.stringify(parsed), registry, texts: all, userTexts }
+    if (leaks !== undefined) masked.maskFailed = `a detected value is still unmasked at ${leaks}`
+    return masked
   }
 
   const forward = async (req: IncomingMessage, res: ServerResponse, path: string, api: Api | undefined, body: Buffer | undefined, cors: Record<string, string>): Promise<void> => {
@@ -1203,7 +1221,14 @@ export function createProxyServer(
       throw error instanceof RangeError ? new Refusal(400, 'request body is nested too deeply to mask; it was not forwarded') : error
     })
     const outgoing = masked?.outgoing
-    if (outgoing !== undefined && config.debugMasked) log(`masked ${path}: ${outgoing}`)
+    const maskFailed = masked?.maskFailed
+    // A body sent although masking failed holds originals, which the log never receives.
+    if (outgoing !== undefined && config.debugMasked && maskFailed === undefined) log(`masked ${path}: ${outgoing}`)
+    if (maskFailed !== undefined) {
+      log(`${req.method} ${path} warning: masking failed and the request is being sent anyway (sendWhenMaskFails): ${maskFailed}`)
+      // Set on the response itself, so a reply the proxy writes after the send, such as a 502, carries it too.
+      res.setHeader(MASK_FAILED_HEADER, '1')
+    }
 
     const abort = new AbortController()
     res.on('close', () => abort.abort())
@@ -1223,7 +1248,8 @@ export function createProxyServer(
     // The proxy, not the upstream, decides which browser origins may read the reply.
     const out: Record<string, string> = { ...cors }
     upstream.headers.forEach((value, name) => {
-      if (!HOP.has(name) && !name.startsWith('access-control-')) out[name] = value
+      // Only the proxy reports a failed mask, so an upstream's copy of its header is dropped.
+      if (!HOP.has(name) && !name.startsWith('access-control-') && name !== MASK_FAILED_HEADER) out[name] = value
     })
     const remember = (id: string): void => {
       if (masked === undefined) return
@@ -1298,7 +1324,7 @@ export function createProxyServer(
     const path = (req.url ?? '/').split('?')[0] ?? '/'
     const api = ROUTES[path]
     const origin = req.headers.origin
-    const cors: Record<string, string> = origin === undefined ? {} : { 'access-control-allow-origin': origin, vary: 'origin' }
+    const cors: Record<string, string> = origin === undefined ? {} : { 'access-control-allow-origin': origin, 'access-control-expose-headers': MASK_FAILED_HEADER, vary: 'origin' }
     const fail = (status: number, message: string, headers: Record<string, string> = {}): void => {
       log(`${req.method} ${path} -> ${status} refused: ${message}`)
       if (res.headersSent) {
