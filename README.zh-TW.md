@@ -66,7 +66,7 @@ docker run --rm -p 127.0.0.1:8787:8787 -e REDACTION_PROXY_AUTH_TOKEN redaction-p
 
 ### npx（第一次發布到 npm 之後）
 
-目前還沒上 npm，在那之前請照[快速開始](#30-秒快速開始)從 clone 下來的目錄執行。2026-10-13 以本機 tarball 驗證：`npm pack` 產生 180 kB、60 個檔案的套件，`npx --yes --package=./redaction-proxy-<version>.tgz redaction-proxy --demo` 印出示範輸出，不加 `--demo` 時代理在 127.0.0.1:8787 啟動。發布之後：
+目前還沒上 npm，在那之前請照[快速開始](#30-秒快速開始)從 clone 下來的目錄執行。2026-10-13 以本機 tarball 驗證：`npm pack` 對 0.3.0 產生 197.0 kB、60 個檔案的套件，`npx --yes --package=./redaction-proxy-<version>.tgz redaction-proxy --demo` 印出示範輸出，不加 `--demo` 時代理在 127.0.0.1:8787 啟動。發布之後：
 
 ```sh
 npx redaction-proxy --demo
@@ -123,7 +123,7 @@ curl http://127.0.0.1:8787/v1/chat/completions \
 | `debugMasked` | `false` | 在日誌中記錄遮罩後的請求本文，代理不遮的欄位（`metadata`、圖片 URL、base64 資料）照原樣記錄。只供除錯。 |
 | `sendWhenMaskFails` | `false` | 遮罩失敗時仍送出請求，不以 422 拒絕：遮罩後仍有偵測到的值時送出部分遮罩的本文，無法遮罩時送出未遮罩的本文。這會把偵測到的值送給服務商。回應會帶 `x-redaction-proxy-mask-failed: 1` 標頭，日誌列出欄位與類別或錯誤代碼，不含值。環境變數：`REDACTION_PROXY_SEND_WHEN_MASK_FAILS`（`1` 或 `0`）。 |
 | `knownOriginalsTtlSeconds` | `86400`（24 小時） | 偵測到的值為用戶端之後的請求保留的秒數，從最後一次偵測起算；`0` 表示什麼都不記。環境變數：`REDACTION_PROXY_KNOWN_ORIGINALS_TTL_SECONDS`。 |
-| `maskLocalUsername` | `true` | 把代理執行時的帳號名稱（不同時也包括家目錄的最後一段）當成 `terms` 的一項遮罩（`⟦TERM_n⟧`），所以單獨出現的使用者名稱與 `-Users-<名稱>-project` 這類專案目錄名稱不會送出。少於 3 個字元的名稱與通用帳號名稱（`root`、`node`、`runner`、`user`、`admin` 等）略過，所以 Docker 映像檔的 `node` 使用者不遮任何字。與列出的字詞不同，它從不讓請求被拒：名稱同時是 JSON 鍵、模型 id 或工具名稱的一部分時（`max_tokens` 中的 `max`、`claude`），那裡照原樣送出。環境變數：`REDACTION_PROXY_MASK_LOCAL_USERNAME`（`1` 或 `0`）。 |
+| `maskLocalUsername` | `true` | 把代理執行時的帳號名稱（不同時也包括家目錄的最後一段）當成 `terms` 的一項遮罩（`⟦TERM_n⟧`），所以單獨出現的使用者名稱與 `-Users-<名稱>-project` 這類專案目錄名稱不會送出。少於 3 個字元的名稱與通用帳號名稱（`root`、`node`、`runner`、`user`、`admin` 等）略過，所以 Docker 映像檔的 `node` 使用者不遮任何字。與列出的字詞不同，它在任何地方都不讓請求被拒：名稱同時是 JSON 鍵、模型 id 或工具名稱的一部分時（`max_tokens` 中的 `max`、`claude`），那裡照原樣送出；黏著英文字母或數字的出現處（`<名稱>2024`）不符合完整單字的比對，也照原樣送出。`redaction.terms` 列出的名稱（不分 ASCII 大小寫）仍是列出的字詞，照常會讓請求被拒。環境變數：`REDACTION_PROXY_MASK_LOCAL_USERNAME`（`1` 或 `0`）。 |
 | `toolRestore.categories` | `PATH`、`TERM`、`PROJECT` | 還原進工具呼叫參數的佔位符類別；其他類別以佔位符原樣交給工具。`"*"` 還原所有類別。環境變數：`REDACTION_PROXY_TOOL_RESTORE_CATEGORIES`（逗號分隔）。 |
 | `toolRestore.tools` | 無 | 依工具名稱（去掉前後空白、不分大小寫）指定還原進該工具參數的類別，取代該工具的 `categories`，例如 `{"git_commit": ["PATH", "EMAIL"]}`；`"*"` 還原所有類別。 |
 

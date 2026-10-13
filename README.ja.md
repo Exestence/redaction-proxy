@@ -66,7 +66,7 @@ docker run --rm -p 127.0.0.1:8787:8787 -e REDACTION_PROXY_AUTH_TOKEN redaction-p
 
 ### npx（npm への初回公開後）
 
-まだ npm には公開していません。それまでは[クイックスタート](#30-秒クイックスタート)のとおりクローンから実行してください。2026-10-13 にローカルの tarball で検証しました。`npm pack` で 180 kB・60 ファイルのパッケージができ、`npx --yes --package=./redaction-proxy-<version>.tgz redaction-proxy --demo` でデモの出力が表示され、`--demo` なしではプロキシが 127.0.0.1:8787 で起動します。公開後は次のとおりです。
+まだ npm には公開していません。それまでは[クイックスタート](#30-秒クイックスタート)のとおりクローンから実行してください。2026-10-13 にローカルの tarball で検証しました。0.3.0 の `npm pack` で 197.0 kB・60 ファイルのパッケージができ、`npx --yes --package=./redaction-proxy-<version>.tgz redaction-proxy --demo` でデモの出力が表示され、`--demo` なしではプロキシが 127.0.0.1:8787 で起動します。公開後は次のとおりです。
 
 ```sh
 npx redaction-proxy --demo
@@ -123,7 +123,7 @@ curl http://127.0.0.1:8787/v1/chat/completions \
 | `debugMasked` | `false` | マスク後のリクエスト本文をログに出します。プロキシがマスクしないフィールド（`metadata`、画像 URL、base64 データ）はそのまま記録されます。デバッグ専用です。 |
 | `sendWhenMaskFails` | `false` | マスクに失敗しても 422 で拒否せずにリクエストを送ります。マスク後も検出した値が残る場合は一部マスクした本文を、マスクできない場合はマスクしていない本文を送ります。検出した値がプロバイダーに送られます。応答には `x-redaction-proxy-mask-failed: 1` ヘッダーが付き、ログにはフィールドとカテゴリ、またはエラーコードだけを記録し、値は記録しません。環境変数：`REDACTION_PROXY_SEND_WHEN_MASK_FAILS`（`1` または `0`）。 |
 | `knownOriginalsTtlSeconds` | `86400`（24 時間） | 検出した値をクライアントの後のリクエストのために保持する秒数。最後に検出した時点から数えます。`0` なら何も保持しません。環境変数：`REDACTION_PROXY_KNOWN_ORIGINALS_TTL_SECONDS`。 |
-| `maskLocalUsername` | `true` | プロキシを実行しているアカウント名（異なる場合はホームディレクトリの最後の部分も）を `terms` の 1 項目としてマスクします（`⟦TERM_n⟧`）。単独のユーザー名や `-Users-<名前>-project` のようなプロジェクトディレクトリ名は送られません。3 文字未満の名前と汎用的なアカウント名（`root`、`node`、`runner`、`user`、`admin` など）はスキップするので、Docker イメージの `node` ユーザーでは何もマスクしません。指定した語句と違い、これが理由でリクエストを拒否することはありません。名前が JSON のキー、モデル ID、ツール名の一部でもある場合（`max_tokens` の `max`、`claude`）、そこはそのまま送られます。環境変数：`REDACTION_PROXY_MASK_LOCAL_USERNAME`（`1` または `0`）。 |
+| `maskLocalUsername` | `true` | プロキシを実行しているアカウント名（異なる場合はホームディレクトリの最後の部分も）を `terms` の 1 項目としてマスクします（`⟦TERM_n⟧`）。単独のユーザー名や `-Users-<名前>-project` のようなプロジェクトディレクトリ名は送られません。3 文字未満の名前と汎用的なアカウント名（`root`、`node`、`runner`、`user`、`admin` など）はスキップするので、Docker イメージの `node` ユーザーでは何もマスクしません。指定した語句と違い、どこに現れてもこれが理由でリクエストを拒否することはありません。名前が JSON のキー、モデル ID、ツール名の一部でもある場合（`max_tokens` の `max`、`claude`）、そこはそのまま送られます。英字や数字に続けて書かれた出現（`<名前>2024`）も単語単位の照合に合わないため、そのまま送られます。`redaction.terms` に（ASCII の大文字小文字を問わず）書いた名前は指定した語句のままで、通常どおり拒否の対象になります。環境変数：`REDACTION_PROXY_MASK_LOCAL_USERNAME`（`1` または `0`）。 |
 | `toolRestore.categories` | `PATH`、`TERM`、`PROJECT` | ツール呼び出しの引数に復元するプレースホルダーのカテゴリ。ほかのカテゴリはプレースホルダーのままツールに渡ります。`"*"` はすべてのカテゴリを復元します。環境変数：`REDACTION_PROXY_TOOL_RESTORE_CATEGORIES`（カンマ区切り）。 |
 | `toolRestore.tools` | なし | ツール名（前後の空白を除き、大文字小文字を区別しない）ごとに、そのツールの引数に復元するカテゴリ。そのツールでは `categories` を置き換えます。例：`{"git_commit": ["PATH", "EMAIL"]}`。`"*"` はすべてのカテゴリを復元します。 |
 

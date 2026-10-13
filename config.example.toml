@@ -98,7 +98,10 @@ knownOriginalsTtlSeconds = 86400
 # project-directory name such as "-Users-<name>-project" is not sent.
 # Names shorter than 3 characters and generic account names (root, node,
 # runner, user, admin, ...) are skipped. Unlike a listed term, the name never
-# gets a request refused where it also spells a JSON key or model id. Default true.
+# gets a request refused, wherever it occurs: where it also spells a JSON key,
+# a model id, or a tool name, or is glued to letters or digits ("<name>2024"),
+# which the whole-word match skips, it is sent as is. A name redaction.terms
+# lists, in any ASCII case, stays a listed term. Default true.
 maskLocalUsername = true
 
 # --- Failure handling ---

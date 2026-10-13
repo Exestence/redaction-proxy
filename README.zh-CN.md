@@ -66,7 +66,7 @@ docker run --rm -p 127.0.0.1:8787:8787 -e REDACTION_PROXY_AUTH_TOKEN redaction-p
 
 ### npx（首次发布到 npm 之后）
 
-目前还没有发布到 npm，在那之前请按[30 秒上手](#30-秒上手)从克隆目录运行。2026-10-13 用本地 tarball 验证：`npm pack` 生成 180 kB、60 个文件的包，`npx --yes --package=./redaction-proxy-<version>.tgz redaction-proxy --demo` 打印演示输出，不加 `--demo` 时代理在 127.0.0.1:8787 启动。发布之后：
+目前还没有发布到 npm，在那之前请按[30 秒上手](#30-秒上手)从克隆目录运行。2026-10-13 用本地 tarball 验证：`npm pack` 对 0.3.0 生成 197.0 kB、60 个文件的包，`npx --yes --package=./redaction-proxy-<version>.tgz redaction-proxy --demo` 打印演示输出，不加 `--demo` 时代理在 127.0.0.1:8787 启动。发布之后：
 
 ```sh
 npx redaction-proxy --demo
@@ -123,7 +123,7 @@ curl http://127.0.0.1:8787/v1/chat/completions \
 | `debugMasked` | `false` | 在日志里记录脱敏后的请求体，代理不脱敏的字段（`metadata`、图片 URL、base64 数据）原样记录。仅供调试。 |
 | `sendWhenMaskFails` | `false` | 脱敏失败时仍发出请求，不以 422 拒绝：脱敏后仍有检测到的值时发出部分脱敏的请求体，无法脱敏时发出未脱敏的请求体。这会把检测到的值发给服务商。响应会带 `x-redaction-proxy-mask-failed: 1` 头，日志列出字段与类别或错误代码，不含值。环境变量：`REDACTION_PROXY_SEND_WHEN_MASK_FAILS`（`1` 或 `0`）。 |
 | `knownOriginalsTtlSeconds` | `86400`（24 小时） | 检测到的值为客户端之后的请求保留的秒数，从最后一次检测起算；`0` 表示什么都不记。环境变量：`REDACTION_PROXY_KNOWN_ORIGINALS_TTL_SECONDS`。 |
-| `maskLocalUsername` | `true` | 把代理运行时的账户名（不同时也包括主目录的最后一段）当作 `terms` 的一项脱敏（`⟦TERM_n⟧`），所以单独出现的用户名与 `-Users-<名称>-project` 这类项目目录名不会发出。少于 3 个字符的名称与通用账户名（`root`、`node`、`runner`、`user`、`admin` 等）跳过，所以 Docker 镜像的 `node` 用户不脱敏任何词。与列出的词语不同，它从不让请求被拒：名称同时是 JSON 键、模型 id 或工具名称的一部分时（`max_tokens` 中的 `max`、`claude`），那里原样发出。环境变量：`REDACTION_PROXY_MASK_LOCAL_USERNAME`（`1` 或 `0`）。 |
+| `maskLocalUsername` | `true` | 把代理运行时的账户名（不同时也包括主目录的最后一段）当作 `terms` 的一项脱敏（`⟦TERM_n⟧`），所以单独出现的用户名与 `-Users-<名称>-project` 这类项目目录名不会发出。少于 3 个字符的名称与通用账户名（`root`、`node`、`runner`、`user`、`admin` 等）跳过，所以 Docker 镜像的 `node` 用户不脱敏任何词。与列出的词语不同，它在任何地方都不让请求被拒：名称同时是 JSON 键、模型 id 或工具名称的一部分时（`max_tokens` 中的 `max`、`claude`），那里原样发出；紧挨英文字母或数字的出现处（`<名称>2024`）不符合完整单词的匹配，也原样发出。`redaction.terms` 列出的名称（不区分 ASCII 大小写）仍是列出的词语，照常会让请求被拒。环境变量：`REDACTION_PROXY_MASK_LOCAL_USERNAME`（`1` 或 `0`）。 |
 | `toolRestore.categories` | `PATH`、`TERM`、`PROJECT` | 还原进工具调用参数的占位符类别；其他类别以占位符原样交给工具。`"*"` 还原所有类别。环境变量：`REDACTION_PROXY_TOOL_RESTORE_CATEGORIES`（逗号分隔）。 |
 | `toolRestore.tools` | 无 | 按工具名（去掉首尾空白、不区分大小写）指定还原进该工具参数的类别，替换该工具的 `categories`，例如 `{"git_commit": ["PATH", "EMAIL"]}`；`"*"` 还原所有类别。 |
 
