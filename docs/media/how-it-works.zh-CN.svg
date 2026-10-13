@@ -93,7 +93,8 @@ text{fill:#e2e7e5}
 <text x="890" y="287" class="s" text-anchor="middle">OpenAI 或</text>
 <text x="890" y="306" class="s" text-anchor="middle">Anthropic 兼容</text>
 <path d="M770 282 H828" class="out" marker-end="url(#ag)"/>
-<text x="890" y="226" class="gl" text-anchor="middle">只有占位符</text>
+<text x="890" y="207" class="gl" text-anchor="middle">只有占位符</text>
+<text x="890" y="226" class="gl" text-anchor="middle">（默认）</text>
 <path d="M890 326 V412 H652" class="out" marker-end="url(#ag)"/>
 <text x="662" y="402" class="lbl" text-anchor="start">含占位符的回复</text>
 <rect x="300" y="344" width="350" height="144" rx="8" class="act"/>
@@ -106,13 +107,13 @@ text{fill:#e2e7e5}
 <path d="M300 412 H103 V184" class="ln" marker-end="url(#a)"/>
 <text x="196" y="402" class="lbl" text-anchor="start">已还原的回复</text>
 <line x1="24" y1="532" x2="46" y2="532" class="out"/>
-<text x="54" y="536" class="lg" text-anchor="start">只有占位符离开你的电脑</text>
-<rect x="217.5" y="525" width="22" height="14" rx="3" class="gate"/>
-<text x="247.5" y="536" class="lg" text-anchor="start">检查</text>
-<rect x="298.5" y="525" width="22" height="14" rx="3" class="act"/>
-<text x="328.5" y="536" class="lg" text-anchor="start">处理</text>
-<line x1="379.5" y1="532" x2="401.5" y2="532" class="stopln"/>
-<text x="409.5" y="536" class="lg" text-anchor="start">拒绝，不转发</text>
-<line x1="510.5" y1="532" x2="532.5" y2="532" class="wall"/>
-<text x="540.5" y="536" class="lg" text-anchor="start">隐私边界</text>
+<text x="54" y="536" class="lg" text-anchor="start">默认只有占位符离开你的电脑</text>
+<rect x="242.5" y="525" width="22" height="14" rx="3" class="gate"/>
+<text x="272.5" y="536" class="lg" text-anchor="start">检查</text>
+<rect x="323.5" y="525" width="22" height="14" rx="3" class="act"/>
+<text x="353.5" y="536" class="lg" text-anchor="start">处理</text>
+<line x1="404.5" y1="532" x2="426.5" y2="532" class="stopln"/>
+<text x="434.5" y="536" class="lg" text-anchor="start">拒绝，不转发</text>
+<line x1="535.5" y1="532" x2="557.5" y2="532" class="wall"/>
+<text x="565.5" y="536" class="lg" text-anchor="start">隐私边界</text>
 </svg>

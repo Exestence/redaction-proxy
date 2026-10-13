@@ -27,7 +27,7 @@ const LABELS = {
     leak: ['Leak scan', 'detected value', 'still in the request?'],
     leakRefusal: ['422, not sent (default)', 'sendWhenMaskFails: sent anyway'],
     llm: ['Cloud LLM', 'OpenAI or', 'Anthropic API'],
-    out: ['placeholders only'],
+    out: ['placeholders only', '(default)'],
     back: ['reply with', 'placeholders'],
     restore: ['Restore the reply', 'whole JSON, or SSE as it streams'],
     rules: [
@@ -37,7 +37,7 @@ const LABELS = {
       '   (default PATH, TERM, PROJECT)',
     ],
     returned: 'restored reply',
-    legend: ['only placeholders leave your computer', 'check', 'action', 'refused, not sent', 'privacy boundary'],
+    legend: ['by default only placeholders leave your computer', 'check', 'action', 'refused, not sent', 'privacy boundary'],
   },
   'zh-TW': {
     lang: 'zh-Hant-TW',
@@ -56,7 +56,7 @@ const LABELS = {
     leak: ['外洩檢查', '偵測到的值', '還在請求裡？'],
     leakRefusal: ['422，不轉送（預設）', 'sendWhenMaskFails：照樣送出'],
     llm: ['雲端 LLM', 'OpenAI 或', 'Anthropic 相容'],
-    out: ['只有佔位符'],
+    out: ['只有佔位符', '（預設）'],
     back: ['含佔位符的回覆'],
     restore: ['還原回覆', '整份 JSON，或 SSE 邊收邊還原'],
     rules: [
@@ -66,7 +66,7 @@ const LABELS = {
       '   （預設 PATH、TERM、PROJECT）',
     ],
     returned: '已還原的回覆',
-    legend: ['只有佔位符離開你的電腦', '檢查', '處理', '拒絕，不轉送', '隱私邊界'],
+    legend: ['預設只有佔位符離開你的電腦', '檢查', '處理', '拒絕，不轉送', '隱私邊界'],
   },
   'zh-CN': {
     lang: 'zh-Hans-CN',
@@ -85,7 +85,7 @@ const LABELS = {
     leak: ['泄露检查', '检测到的值', '还在请求里？'],
     leakRefusal: ['422，不转发（默认）', 'sendWhenMaskFails：照样发送'],
     llm: ['云端 LLM', 'OpenAI 或', 'Anthropic 兼容'],
-    out: ['只有占位符'],
+    out: ['只有占位符', '（默认）'],
     back: ['含占位符的回复'],
     restore: ['还原回复', '整份 JSON，或 SSE 边收边还原'],
     rules: [
@@ -95,7 +95,7 @@ const LABELS = {
       '   （默认 PATH、TERM、PROJECT）',
     ],
     returned: '已还原的回复',
-    legend: ['只有占位符离开你的电脑', '检查', '处理', '拒绝，不转发', '隐私边界'],
+    legend: ['默认只有占位符离开你的电脑', '检查', '处理', '拒绝，不转发', '隐私边界'],
   },
   ja: {
     lang: 'ja',
@@ -114,7 +114,7 @@ const LABELS = {
     leak: ['漏えい検査', '検出した値が', 'まだ残っている？'],
     leakRefusal: ['422、転送しない（既定）', 'sendWhenMaskFails：そのまま送信'],
     llm: ['クラウド LLM', 'OpenAI または', 'Anthropic 互換'],
-    out: ['プレースホルダー', 'のみ'],
+    out: ['プレースホルダー', 'のみ（既定）'],
     back: ['プレースホルダー', '付きの応答'],
     restore: ['応答を復元', 'JSON 全体、または SSE を受信しながら'],
     rules: [
@@ -124,7 +124,7 @@ const LABELS = {
       '   （既定は PATH、TERM、PROJECT）',
     ],
     returned: '復元済みの応答',
-    legend: ['プレースホルダーだけが外に出る', 'チェック', '処理', '拒否、転送しない', 'プライバシー境界'],
+    legend: ['既定ではプレースホルダーだけが外に出る', 'チェック', '処理', '拒否、転送しない', 'プライバシー境界'],
   },
 }
 
