@@ -114,6 +114,7 @@ curl http://127.0.0.1:8787/v1/chat/completions \
 | `debugMasked` | `false` | マスク後のリクエスト本文をログに出します。プロキシがマスクしないフィールド（`metadata`、画像 URL、base64 データ）はそのまま記録されます。デバッグ専用です。 |
 | `sendWhenMaskFails` | `false` | マスクに失敗しても 422 で拒否せずにリクエストを送ります。マスク後も検出した値が残る場合は一部マスクした本文を、マスクできない場合はマスクしていない本文を送ります。検出した値がプロバイダーに送られます。応答には `x-redaction-proxy-mask-failed: 1` ヘッダーが付き、ログにはフィールドとカテゴリ、またはエラーコードだけを記録し、値は記録しません。環境変数：`REDACTION_PROXY_SEND_WHEN_MASK_FAILS`（`1` または `0`）。 |
 | `knownOriginalsTtlSeconds` | `86400`（24 時間） | 検出した値をクライアントの後のリクエストのために保持する秒数。最後に検出した時点から数えます。`0` なら何も保持しません。環境変数：`REDACTION_PROXY_KNOWN_ORIGINALS_TTL_SECONDS`。 |
+| `maskLocalUsername` | `true` | プロキシを実行しているアカウント名（異なる場合はホームディレクトリの最後の部分も）を `terms` の 1 項目としてマスクします（`⟦TERM_n⟧`）。単独のユーザー名や `-Users-<名前>-project` のようなプロジェクトディレクトリ名は送られません。3 文字未満の名前と汎用的なアカウント名（`root`、`node`、`runner`、`user`、`admin` など）はスキップするので、Docker イメージの `node` ユーザーでは何もマスクしません。環境変数：`REDACTION_PROXY_MASK_LOCAL_USERNAME`（`1` または `0`）。 |
 | `toolRestore.categories` | `PATH`、`TERM`、`PROJECT` | ツール呼び出しの引数に復元するプレースホルダーのカテゴリ。ほかのカテゴリはプレースホルダーのままツールに渡ります。`"*"` はすべてのカテゴリを復元します。環境変数：`REDACTION_PROXY_TOOL_RESTORE_CATEGORIES`（カンマ区切り）。 |
 | `toolRestore.tools` | なし | ツール名（前後の空白を除き、大文字小文字を区別しない）ごとに、そのツールの引数に復元するカテゴリ。そのツールでは `categories` を置き換えます。例：`{"git_commit": ["PATH", "EMAIL"]}`。`"*"` はすべてのカテゴリを復元します。 |
 
