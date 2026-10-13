@@ -51,8 +51,18 @@ const SKIP_MASK = new Set([
   'cache_control', 'format', 'status', 'service_tier', 'reasoning_effort', 'tool_choice',
 ])
 
-/** Keys of a resent `*_call` item that hold what the tool or server answered, not what the model wrote. */
-const TOOL_OUTPUT = new Set(['output', 'outputs', 'error'])
+/**
+ * Keys of a resent Responses `*_call` item that the model wrote: `function_call`
+ * and `mcp_call` `arguments`, `custom_tool_call` `input`, `local_shell_call`,
+ * `shell_call`, `computer_call`, and `web_search_call` `action`,
+ * `code_interpreter_call` `code`, `file_search_call` `queries`, and
+ * `apply_patch_call` `operation`. Its other keys, such as `output`, `results`,
+ * or `pending_safety_checks`, hold what a tool or the server answered.
+ */
+const MODEL_CALL_KEYS = new Set(['arguments', 'action', 'code', 'input', 'queries', 'operation'])
+
+/** A Chat Completions tool call's `function` object, or a message's legacy `function_call`, whose `arguments` the model wrote. */
+const CHAT_CALL_PATH = /^\/messages\/\d+\/(tool_calls\/\d+\/function|function_call)$/
 
 /** Request keys whose whole value is forwarded unmasked: caller metadata and exact stop strings. */
 const SKIP_SUBTREE = new Set(['metadata', 'stop'])
@@ -356,7 +366,7 @@ class Refusal extends Error {
  * @param path - JSON pointer of `value`.
  * @param out - slot sink.
  * @param tool - whether `value` is tool input or inside it.
- * @param anchor - whether `value` is model-written tool input, which anchors its placeholders; a `*_call` item's {@link TOOL_OUTPUT} is masked as tool input but never anchors.
+ * @param anchor - whether `value` is model-written tool input ({@link isModelCallInput}), which anchors its placeholders; the rest of a `*_call` item is masked as tool input but never anchors.
  */
 function collectSlots(value: unknown, path: string, out: Slot[], tool = false, anchor = tool): void {
   if (Array.isArray(value)) {
@@ -375,9 +385,9 @@ function collectSlots(value: unknown, path: string, out: Slot[], tool = false, a
     const item = record[key]
     const at = `${path}/${pointerSegment(key)}`
     const input = isToolInput(record, key)
-    const answer = !tool && input && TOOL_OUTPUT.has(key)
-    if (typeof item !== 'string') collectSlots(item, at, out, tool || input, (anchor || input) && !answer)
-    else if (tool || !SKIP_MASK.has(key) || isTextSource(record, key)) out.push({ parent: record, key, path: at, tool: (anchor || key === 'arguments' || input) && !answer })
+    const model = anchor || isModelCallInput(record, key, path)
+    if (typeof item !== 'string') collectSlots(item, at, out, tool || input, model)
+    else if (tool || !SKIP_MASK.has(key) || isTextSource(record, key)) out.push({ parent: record, key, path: at, tool: model })
   }
 }
 
@@ -408,6 +418,23 @@ function isToolInput(record: Record<string, unknown>, key: string): boolean {
 }
 
 /**
+ * Whether `record[key]` is tool input the model wrote, whose placeholders
+ * anchor: an Anthropic `*tool_use` block's `input`, a Responses `*_call`
+ * item's {@link MODEL_CALL_KEYS}, or a Chat Completions call's `arguments`
+ * ({@link CHAT_CALL_PATH}).
+ * @param record - a request object.
+ * @param key - one of its keys.
+ * @param path - JSON pointer of `record`.
+ * @returns whether the value is model-written tool input.
+ */
+function isModelCallInput(record: Record<string, unknown>, key: string, path: string): boolean {
+  const type = String(record.type)
+  if (/tool_use$/.test(type)) return key === 'input'
+  if (/_call$/.test(type)) return MODEL_CALL_KEYS.has(key)
+  return key === 'arguments' && CHAT_CALL_PATH.test(path)
+}
+
+/**
  * Whether a request string is message text of one of the given roles: a
  * message's string content or one of its text parts, or a Responses string
  * `input`, which is the user's. Tool results are not.
@@ -424,6 +451,34 @@ function isRoleText(body: Json, path: string, roles: ReadonlySet<string>): boole
   const item = (body[list as string] as Json[] | undefined)?.[Number(message)]
   if (item === undefined || !roles.has(item.role)) return false
   return part === undefined || USER_TEXT_PARTS.has((item.content as Json[])[Number(part)]?.type)
+}
+
+/**
+ * A model turn's text or reasoning: `/messages/N/content` or one of its text
+ * parts, Chat `reasoning_content`, or a Responses `reasoning` item's
+ * `summary` or `content` part text. Matches the JSON pointers {@link collectSlots} builds.
+ */
+const MODEL_TEXT_PATH = /^\/(messages|input)\/(\d+)\/(content|reasoning_content|summary)(?:\/(\d+)\/text)?$/
+
+/** Content-part types of an assistant turn's text: Chat and Messages `text`, Responses `output_text`. */
+const MODEL_TEXT_PARTS = new Set(['text', 'output_text'])
+
+/**
+ * Whether a request string is text or reasoning the model wrote in an
+ * assistant turn, as opposed to tool input, a tool result, or client text.
+ * @param body - the parsed request body.
+ * @param path - JSON pointer of the string.
+ * @returns whether the string is model text.
+ */
+function isModelText(body: Json, path: string): boolean {
+  const match = MODEL_TEXT_PATH.exec(path)
+  if (match === null) return false
+  const [, list, message, field, part] = match
+  const item = (body[list as string] as Json[])[Number(message)] as Json
+  if (item.type === 'reasoning') return field !== 'reasoning_content' && part !== undefined
+  if (item.role !== 'assistant' || field === 'summary') return false
+  if (field === 'reasoning_content') return part === undefined
+  return part === undefined || MODEL_TEXT_PARTS.has((item.content as Json[])[Number(part)]?.type)
 }
 
 /** The role whose text the name model reads. */
@@ -1299,8 +1354,10 @@ export function createProxyServer(
     try {
       const anchored = new Set(prior?.kept)
       // An id whose first occurrence is outside tool input (a file read back, a summary, the system prompt) is not anchored by a later tool call that copies it.
+      // Assistant text and reasoning, which usually announce the call they precede, neither anchor nor count as that first occurrence.
       const seen = new Set<RedactionId>()
       raw.forEach((text, at) => {
+        if (isModelText(parsed, (slots[at] as Slot).path)) return
         for (const [, id] of text.matchAll(LITERAL_PLACEHOLDER)) {
           if (!seen.has(id as RedactionId) && (slots[at] as Slot).tool) anchored.add(id as RedactionId)
           seen.add(id as RedactionId)
