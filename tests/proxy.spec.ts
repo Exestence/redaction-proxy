@@ -1527,6 +1527,25 @@ describe('placeholders kept in tool calls and resent', () => {
     expect(seen[2]!.body.input).toBe('more ⟦EMAIL_2⟧')
   })
 
+  it('passes a placeholder the proxy kept in streamed Responses arguments when the next continuation resends it', async () => {
+    const headers = fresh()
+    const args = JSON.stringify({ command: 'echo ⟦EMAIL_1⟧' })
+    const item = { id: 'fc', type: 'function_call', call_id: 'c', name: 'bash', arguments: '' }
+    reply = () => ({
+      sse: sse([
+        ['response.created', { type: 'response.created', response: { id: 'rs1', output: [] } }],
+        ['response.output_item.added', { type: 'response.output_item.added', output_index: 0, item }],
+        ...chunk(args, 3).map((part): [string, unknown] => ['response.function_call_arguments.delta', { type: 'response.function_call_arguments.delta', item_id: 'fc', output_index: 0, delta: part }]),
+        ['response.function_call_arguments.done', { type: 'response.function_call_arguments.done', item_id: 'fc', output_index: 0, arguments: args }],
+        ['response.completed', { type: 'response.completed', response: { id: 'rs1', output: [{ ...item, arguments: args }] } }],
+      ]),
+    })
+    await (await post('/v1/responses', { model: 'm', stream: true, input: `mail ${EMAIL}` }, headers)).text()
+    reply = () => ({ json: { id: 'rs2', output: [] } })
+    await post('/v1/responses', { model: 'm', previous_response_id: 'rs1', input: [{ type: 'function_call_output', call_id: 'c', output: '⟦EMAIL_1⟧ sent' }] }, headers)
+    expect(seen[1]!.body.input[0].output).toBe('⟦EMAIL_1⟧ sent')
+  })
+
   it('escapes a placeholder this proxy never issued to the client, or issued for a value the request lacks', async () => {
     const headers = fresh()
     reply = () => ({ json: { choices: [] } })
