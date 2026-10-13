@@ -4,7 +4,7 @@
 
 Documentation only; no code change.
 
-- The README and DETAILS flowcharts are SVG diagrams in four languages instead of Mermaid. They state that only detected values leave as placeholders; a value the detector misses is sent as is.
+- The README and DETAILS flowcharts are SVG diagrams in four languages instead of Mermaid. They state that detected values leave only as placeholders (default); a value the detector misses is sent as is.
 - READMEs give the status as this version.
 
 ## 0.2.0 — 2026-10-13
