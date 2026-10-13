@@ -60,24 +60,7 @@ DeepSeek Harness 透過 dsh-addons 的 redaction 套件以 git submodule（`dsh-
 
 一個請求的處理順序（`server.ts` 的 `forward`）：
 
-```mermaid
-flowchart TD
-  A["收到 POST，路由比對"] --> B["解析 JSON；失敗回 400"]
-  B --> C["collectSlots：依序收集可遮字串，略過 SKIP_MASK 鍵"]
-  C --> D{"screen 模式"}
-  D -- "replace" --> E["控制字元與 ⟦ ⟧ 換成可見替代字元"]
-  D -- "refuse" --> F{"含這類字元？"}
-  F -- "是" --> F2["回 422（預設）"]
-  F -- "否" --> G
-  E --> G["加上 previous_response_id 對應的先前輸入"]
-  G --> H["mask：偵測（含此憑證記住的值）、編號、擴散"]
-  H --> I["序列化後搜尋每個原始值"]
-  I -- "仍找得到" --> J["回 422（預設），指出欄位路徑"]
-  I -- "乾淨" --> K["轉送上游，帶用戶端自己的標頭"]
-  K --> L{"回應類型"}
-  L -- "JSON" --> M["restoreDeep 整份還原"]
-  L -- "SSE" --> N["逐事件、逐欄位串流還原"]
-```
+![流程圖：用戶端 POST 到遮罩路由；代理解析 JSON（失敗回 400）、依序收集可遮字串、篩檢控制字元（refuse 模式回 422）、接上先前輸入後偵測與遮罩；外洩檢查在序列化後仍找得到原始值時回 422 並指出欄位路徑（預設，sendWhenMaskFails 可照樣送出）；只有佔位符送往上游；回應依類型還原：JSON 整份、SSE 逐事件逐欄位，URL 內保留佔位符，工具參數只還原允許的類別。](media/details-flow.zh-TW.svg)
 
 圖中省略了路由比對之前的入口檢查（來源、`Host`、權杖、方法、大小），見[第 6 節](#6-拒絕與錯誤狀態碼)；還原的規則見[第 7 節](#7-串流還原)。
 
@@ -622,6 +605,7 @@ README 的圖片與影片都放在 `docs/media/`，可重新產生：
 | 檔案 | 來源 | 重新產生 |
 | --- | --- | --- |
 | `hero.svg` | 手繪 SVG | 直接編輯 |
+| `how-it-works.{en,zh-TW,zh-CN,ja}.svg`、`details-flow.zh-TW.svg` | `src/how-it-works.mjs` 的版面與各語言文字 | `node docs/media/src/how-it-works.mjs` |
 | `results.svg` | 評測結果 JSON | `node bench/results-chart.mjs`；預設讀 `bench/results/public-bench-held-out-v2.json` 的英文提示，畫代理預設、加人名模型與 Presidio cutoff 0.4 三個系統；`--split allLanguages`、`--systems "名稱;名稱"`、`--input`、`--out`、`--label` 可改（見腳本開頭） |
 | `src/captured.json` | 真實代理輸出：`lib/cli.js --demo`，以及另一個經代理送往本機假上游的串流請求 | `pnpm build && node docs/media/src/capture.mjs` |
 | `before-after.png`、`intro.mp4`、`intro.gif` | `src/before-after.html`、`src/intro.html` 讀 `captured.json` | `PLAYWRIGHT=… FFMPEG=… node docs/media/src/render.mjs`（Playwright 與 ffmpeg 都不是儲存庫依賴，取得方式見腳本開頭） |

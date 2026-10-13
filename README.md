@@ -18,7 +18,7 @@ It works with any OpenAI- or Anthropic-compatible client, streaming included, an
 
 If you can run a local model and want stronger privacy, install the router first; it uses this proxy's masking core through dsh-addons' redaction packages, which you install with it. Otherwise, this proxy alone adds a layer of privacy.
 
-> **Status:** 0.1.0, not yet on npm. Verified against the real DeepSeek Chat Completions API (2026-10-08, see below); OpenAI, Anthropic and real clients such as Claude Code are not verified yet.
+> **Status:** 0.2.0, not yet on npm. Verified against the real DeepSeek Chat Completions API (2026-10-08, see below); OpenAI, Anthropic and real clients such as Claude Code are not verified yet.
 
 ## Intro video
 
@@ -155,28 +155,7 @@ The same value gets the same placeholder throughout a request. If a value detect
 
 Every POST to a masked route goes through the same steps; a GET is relayed without masking. The proxy keeps no per-conversation placeholder table: it numbers placeholders again from the full history on each request, so in a conversation that only grows, the masked prefix stays the same and the provider's prompt cache keeps working, unless a later turn (or another request with the same credential) first detects a value that already appeared earlier; it is then masked there too, which changes the prefix once ([why and when it breaks](docs/DETAILS.md#4-遮罩順序與提示快取)). Two things do stay in memory per client credential, at most until a restart: the original inputs of Responses API replies, for requests that continue with `previous_response_id` instead of resending history, and the remembered values below.
 
-```mermaid
-flowchart TD
-  A["Your tool sends a request with its own API key"] --> B{"Allowed? no Origin, or a loopback or allowed origin; loopback host or auth token; a known route; at most 64 MiB"}
-  B -- "no" --> B2["403 / 401 / 404 / 413, not forwarded"]
-  B -- "GET" --> P["Not masked; reply not restored"]
-  B -- "POST to a masked route" --> C["Parse JSON; collect every text field; skip ids, names, enum values, metadata, stop strings, url and image_url, files, signed or encrypted state"]
-  C --> S["Screen: control characters, U+FFFD, lone surrogates and ⟦ ⟧ become visible stand-ins by default"]
-  S --> D["Detect: rules, your terms and projectNames, optional name model, values remembered for this client credential"]
-  D --> E["Mask: each distinct value becomes ⟦CATEGORY_n⟧, numbered in text order"]
-  E --> F{"Leak scan: is a value detected in this request still in it?"}
-  F -- "yes" --> F2["422 naming the fields, never the value; not forwarded (default)"]
-  F -- "no" --> U["Cloud LLM, OpenAI or Anthropic compatible"]
-  U --> R["Reply: whole JSON, or SSE field by field as it streams"]
-  R --> G{"Where is the placeholder?"}
-  G -- "reply text" --> G1["restored"]
-  G -- "inside a URL" --> G2["kept as the placeholder"]
-  G -- "tool-call arguments" --> G3["restored only for allowed categories, default PATH, TERM, PROJECT"]
-  G1 --> Z["Your tool receives the reply"]
-  G2 --> Z
-  G3 --> Z
-  P --> Z
-```
+![Flowchart: your tool sends a request to redaction-proxy on your computer; gate checks refuse disallowed requests (403/401/404/413) and relay GET unmasked; a POST is collected, screened, detected and masked; the leak scan refuses with 422 if a detected value remains (unless sendWhenMaskFails); only placeholders cross to the cloud LLM; the reply is restored: reply text restored, URL placeholders kept, tool-call arguments restored only for allowed categories.](docs/media/how-it-works.en.svg)
 
 | Step | What it decides | If it goes wrong |
 | --- | --- | --- |
