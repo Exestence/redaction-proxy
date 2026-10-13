@@ -18,7 +18,7 @@ It works with any OpenAI- or Anthropic-compatible client, streaming included, an
 
 If you can run a local model and want stronger privacy, install the router first; it uses this proxy's masking core through dsh-addons' redaction packages, which you install with it. Otherwise, this proxy alone adds a layer of privacy.
 
-> **Status:** 0.2.1, not yet on npm. Verified against the real DeepSeek Chat Completions API (2026-10-08, see below); OpenAI, Anthropic and real clients such as Claude Code are not verified yet.
+> **Status:** 0.3.0, not yet on npm. Verified with real services: DeepSeek Chat Completions (2026-10-08) and Anthropic Messages through Claude Code and dsh (2026-10-13); see below. The OpenAI API and Codex CLI are not verified yet.
 
 ## Intro video
 
@@ -48,7 +48,7 @@ client receives:   I will email lin.fictional@example.test about /Users/fictiona
 
 ### Docker
 
-Not yet built or tested; Docker was not available where this image was written.
+Verified on 2026-10-13 with Docker Desktop 29.6.2 on Apple Silicon (linux/arm64) against a fake local upstream: the image builds (347 MB; 864 MB with `--build-arg NAME_MODEL=1`) and runs as the non-root user `node`; it refuses to start without `REDACTION_PROXY_AUTH_TOKEN` and answers 401 to a request without the token; an email, a national ID, and a home path reached the upstream masked and were restored, in OpenAI Chat Completions JSON, streaming, and Anthropic Messages; a CORS preflight from an allowed origin got 204 without being forwarded, and other origins got 403; the config file mount below worked. Not tested: the name-model image with a real model, and linux/amd64.
 
 ```sh
 docker build -t redaction-proxy .
@@ -62,25 +62,34 @@ Clients send the token in the `x-redaction-proxy-token` header: Claude Code with
 
 A config file, `redaction.toml` (or `.json`): add `-v "$PWD/redaction.toml:/redaction.toml:ro"` and append `--config /redaction.toml`. The name model: build with `--build-arg NAME_MODEL=1` and add `-v ~/models/nym:/models:ro -e REDACTION_PROXY_NAME_MODEL_DIR=/models`.
 
+For a plain `http://` upstream that is not loopback, such as a local model server reached through `host.docker.internal`, also add `-e REDACTION_PROXY_ALLOW_INSECURE_UPSTREAM=1`. `maskLocalUsername` skips the container's user `node`, so inside the image it masks nothing.
+
 ### npx (after the first npm release)
 
-Not on npm yet; until then, run it from a clone as in the [quick start](#quick-start-30-seconds). Once it is published:
+Not on npm yet; until then, run it from a clone as in the [quick start](#quick-start-30-seconds). A local tarball was verified on 2026-10-13: `npm pack` gives a 180 kB package of 60 files, `npx --yes --package=./redaction-proxy-<version>.tgz redaction-proxy --demo` prints the demo output, and without `--demo` it starts the proxy on 127.0.0.1:8787. Once it is published:
 
 ```sh
 npx redaction-proxy --demo
 npx redaction-proxy           # the proxy, on http://127.0.0.1:8787 (loopback: no token needed)
 ```
 
+There is no health endpoint: the proxy relays GET requests to the upstream.
+
 ## Point your tool at it
 
-> **Real services: DeepSeek only so far.** On 2026-10-08 the [real-service harness](e2e/real/README.md) passed 4 of 4 scenarios against DeepSeek (Chat Completions; JSON and streaming; plain text and a forced tool call): the upstream saw only placeholders and all 5 values were restored each time. OpenAI and Anthropic were skipped (no key), and no real client has been tried.
+> **Real services: DeepSeek and Anthropic verified; OpenAI not yet.** On 2026-10-08 the [real-service harness](e2e/real/README.md) passed 4 of 4 scenarios against DeepSeek (Chat Completions; JSON and streaming; plain text and a forced tool call): the upstream saw only placeholders and all 5 values were restored each time. On 2026-10-13 two real clients ran through the proxy against Anthropic Messages (Claude Haiku 5.5):
+>
+> - **Claude Code 2.1.287**, signed in with its subscription, with `ANTHROPIC_BASE_URL=http://127.0.0.1:8787`: streaming text and tools (Bash, Read). The upstream saw only placeholders for detected values, replies were restored, and tool arguments got `PATH`, `TERM`, and `PROJECT` values back while other categories stayed placeholders (`toolRestore`). Before 0.3.0 a placeholder kept in tool arguments was renumbered on later turns, and the model retried the tool 7 times; with 0.3.0 the task took one tool call and 3 requests. Claude Code also sends the OS user name (in `safeguards…user_identity` and in project-directory names); 0.3.0 masks it by default (`maskLocalUsername`).
+> - **dsh** (DeepSeek Harness, through its pi-ai Anthropic route): text and tools. Before 0.3.0 a kept placeholder made Anthropic reject the replayed signed thinking block with HTTP 400; verified fixed in 0.3.0.
+>
+> Not verified: the OpenAI API (no key), Codex CLI (not logged in), the Anthropic SDK used directly (only through dsh's pi-ai), and this repository's `e2e:real` harness against Anthropic (not run).
 
 Your tool keeps sending its own API key; the proxy forwards it and never stores it.
 
 | Tool | Setting | Status |
 | --- | --- | --- |
-| Claude Code | `ANTHROPIC_BASE_URL=http://127.0.0.1:8787 claude` | Untested |
-| Anthropic SDK | `ANTHROPIC_BASE_URL=http://127.0.0.1:8787` (no `/v1`) | Untested |
+| Claude Code | `ANTHROPIC_BASE_URL=http://127.0.0.1:8787 claude` | Verified 2026-10-13 (subscription login; text, streaming, tools) |
+| Anthropic SDK | `ANTHROPIC_BASE_URL=http://127.0.0.1:8787` (no `/v1`) | Verified through dsh (pi-ai), not directly |
 | OpenAI SDK and most compatible tools | `OPENAI_BASE_URL=http://127.0.0.1:8787/v1` (with `/v1`) | Untested |
 | DeepSeek | Start the proxy with `REDACTION_PROXY_OPENAI_UPSTREAM=https://api.deepseek.com node lib/cli.js`, then use `OPENAI_BASE_URL=http://127.0.0.1:8787/v1` with your DeepSeek key. This replaces the OpenAI upstream. | Verified with the real-service harness (API only) |
 | Cursor | Not supported: Cursor sends custom base-URL requests from its own servers, which cannot reach your `127.0.0.1`. | — |

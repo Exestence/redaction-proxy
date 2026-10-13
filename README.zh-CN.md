@@ -18,7 +18,7 @@
 
 跑得动本地模型、想要更强的隐私，请先安装分流器；它通过 dsh-addons 的 redaction 包使用这个代理的脱敏核心，安装时一起装上。跑不动的话，单用这个代理也能多一层隐私保护。
 
-> **状态：** 0.2.1，尚未发布到 npm。已在真实的 DeepSeek Chat Completions API 上验证（2026-10-08，见下文）；OpenAI、Anthropic 以及 Claude Code 等真实客户端尚未验证。
+> **状态：** 0.3.0，尚未发布到 npm。已在真实服务上验证：DeepSeek Chat Completions（2026-10-08），以及通过 Claude Code 和 dsh 的 Anthropic Messages（2026-10-13），见下文。OpenAI API 和 Codex CLI 尚未验证。
 
 ## 介绍视频
 
@@ -48,7 +48,7 @@ client receives:   I will email lin.fictional@example.test about /Users/fictiona
 
 ### Docker
 
-尚未实际构建或测试；编写这个镜像的环境没有 Docker。
+2026-10-13 在 Apple Silicon 上用 Docker Desktop 29.6.2（linux/arm64）对本机假上游验证：镜像可以构建（347 MB；加 `--build-arg NAME_MODEL=1` 为 864 MB），以非 root 用户 `node` 运行；没设 `REDACTION_PROXY_AUTH_TOKEN` 时拒绝启动，没带令牌的请求返回 401；邮箱、身份证号和主目录路径在 OpenAI Chat Completions JSON、流式和 Anthropic Messages 中都以脱敏后的形式发往上游，并在回复中还原；允许来源的 CORS 预检得到 204 且不转发，其他来源得到 403；下方的配置文件挂载可用。未测试：用真实模型运行人名模型版镜像，以及 linux/amd64。
 
 ```sh
 docker build -t redaction-proxy .
@@ -62,25 +62,34 @@ docker run --rm -p 127.0.0.1:8787:8787 -e REDACTION_PROXY_AUTH_TOKEN redaction-p
 
 配置文件 `redaction.toml`（或 `.json`）：加上 `-v "$PWD/redaction.toml:/redaction.toml:ro"`，并在末尾加 `--config /redaction.toml`。人名模型：用 `--build-arg NAME_MODEL=1` 构建，并加上 `-v ~/models/nym:/models:ro -e REDACTION_PROXY_NAME_MODEL_DIR=/models`。
 
+上游是非本机的明文 `http://`（例如经由 `host.docker.internal` 访问的本机模型服务器）时，再加 `-e REDACTION_PROXY_ALLOW_INSECURE_UPSTREAM=1`。`maskLocalUsername` 跳过容器的用户 `node`，所以在镜像中不脱敏任何词。
+
 ### npx（首次发布到 npm 之后）
 
-目前还没有发布到 npm，在那之前请按[30 秒上手](#30-秒上手)从克隆目录运行。发布之后：
+目前还没有发布到 npm，在那之前请按[30 秒上手](#30-秒上手)从克隆目录运行。2026-10-13 用本地 tarball 验证：`npm pack` 生成 180 kB、60 个文件的包，`npx --yes --package=./redaction-proxy-<version>.tgz redaction-proxy --demo` 打印演示输出，不加 `--demo` 时代理在 127.0.0.1:8787 启动。发布之后：
 
 ```sh
 npx redaction-proxy --demo
 npx redaction-proxy           # 启动代理，地址 http://127.0.0.1:8787（本机不需要令牌）
 ```
 
+代理没有健康检查端点：GET 请求会转发到上游。
+
 ## 接入你的工具
 
-> **真实服务目前只验证了 DeepSeek。** 2026-10-08 用[真实服务验证工具](e2e/real/README.md)对 DeepSeek 跑了 4 个场景（Chat Completions；非流式 JSON 与流式；纯文本与强制工具调用），全部通过：上游只看到占位符，每次 5 个值都还原。OpenAI、Anthropic 因没有密钥而跳过，也还没试过真实客户端。
+> **真实服务：已验证 DeepSeek 和 Anthropic，OpenAI 尚未验证。** 2026-10-08 用[真实服务验证工具](e2e/real/README.md)对 DeepSeek 跑了 4 个场景（Chat Completions；非流式 JSON 与流式；纯文本与强制工具调用），全部通过：上游只看到占位符，每次 5 个值都还原。2026-10-13 有两个真实客户端经由代理使用 Anthropic Messages（Claude Haiku 5.5）：
+>
+> - **Claude Code 2.1.287**，以订阅登录，设置 `ANTHROPIC_BASE_URL=http://127.0.0.1:8787`：流式文本与工具（Bash、Read）。检测到的值上游只看到占位符，回复已还原，工具参数按 `toolRestore` 还原 `PATH`、`TERM`、`PROJECT`，其他类别保留为占位符。0.3.0 之前，工具参数中保留的占位符在后续轮次会被重新编号，模型把同一个工具重试了 7 次；0.3.0 中同一个任务只用 1 次工具调用、3 个请求。Claude Code 还会发送操作系统的用户名（在 `safeguards…user_identity` 和项目目录名中），0.3.0 默认会脱敏（`maskLocalUsername`）。
+> - **dsh**（DeepSeek Harness，经由它的 pi-ai Anthropic 路径）：文本与工具。0.3.0 之前，保留的占位符让 Anthropic 以 HTTP 400 拒绝重发的签名 thinking 块；已验证 0.3.0 修复了这个问题。
+>
+> 未验证：OpenAI API（没有密钥）、Codex CLI（未登录）、直接使用 Anthropic SDK（只经由 dsh 的 pi-ai 用过）、用本仓库的 `e2e:real` 验证工具对 Anthropic 运行（未运行）。
 
 工具照常发送自己的 API 密钥；代理原样转发，从不保存。
 
 | 工具 | 配置 | 状态 |
 | --- | --- | --- |
-| Claude Code | `ANTHROPIC_BASE_URL=http://127.0.0.1:8787 claude` | 未测试 |
-| Anthropic SDK | `ANTHROPIC_BASE_URL=http://127.0.0.1:8787`（不带 `/v1`） | 未测试 |
+| Claude Code | `ANTHROPIC_BASE_URL=http://127.0.0.1:8787 claude` | 2026-10-13 已验证（订阅登录；文本、流式、工具） |
+| Anthropic SDK | `ANTHROPIC_BASE_URL=http://127.0.0.1:8787`（不带 `/v1`） | 经由 dsh（pi-ai）验证，未直接验证 |
 | OpenAI SDK 及大多数兼容工具 | `OPENAI_BASE_URL=http://127.0.0.1:8787/v1`（要带 `/v1`） | 未测试 |
 | DeepSeek | 用 `REDACTION_PROXY_OPENAI_UPSTREAM=https://api.deepseek.com node lib/cli.js` 启动代理，再配 `OPENAI_BASE_URL=http://127.0.0.1:8787/v1` 和你的 DeepSeek 密钥。这会替换掉 OpenAI 上游。 | 已用真实服务验证工具验证（仅 API） |
 | Cursor | 不支持：Cursor 的自定义 base URL 请求从 Cursor 自己的服务器发出，访问不到你的 `127.0.0.1`。 | — |

@@ -443,7 +443,7 @@ POST /v1/messages tool arguments: kept by the tool restore policy KEY_1 in bash 
 
 ## 13. 測試
 
-`pnpm test`（vitest）執行 32 個檔案、2,006 個測試：1,998 個通過；需要真模型的 1 個檔案（8 個測試）未設定模型目錄時略過。
+`pnpm test`（vitest）執行 32 個檔案、2,020 個測試：2,012 個通過；需要真模型的 1 個檔案（8 個測試）未設定模型目錄時略過。
 
 | 檔案 | 內容 |
 | --- | --- |
@@ -452,7 +452,7 @@ POST /v1/messages tool arguments: kept by the tool restore policy KEY_1 in bash 
 | `rules-international` | 國際規則：每條規則的合成正例、檢查碼錯誤與結構不符的反例、程式碼與日誌形狀的反例（時間戳、雜湊、訂單號、版本字串、UUID）、與卡號重疊時的類別、全形與百分比編碼、預設政策摘要不變、代理預設規則、diff 新增行與 `+` 後的日期不被當成電話；國內電話格式的正例，與時間戳、ISBN、SSN、IPv4、表格列、十六進位傾印、UUID、CSV 列等反例。`rules-synthetic-corpus` 另有國際規則在隨機日誌 id 與數字列上的誤遮上限，`adversarial` 另有 52 種國際規則的 200 KB 病態輸入。 |
 | `rules-extended` | 延伸規則：每條規則的正例與反例（程式碼、套件名、檔名、命名空間、環境變數、資源路徑、成員鏈、版本範圍、純數字 UUID）、預設 `card`、`entropy` 的結果不變、偵測器版本與摘要，以及 32 種 200 KB 病態輸入。 |
 | `engine` | 遮罩引擎：編號、保留 id、索引重用、嚴格還原。 |
-| `adversarial` | 洩漏與往返、失敗即關閉的篩檢、54 種 200 KB 病態輸入與 3 種 1 MB 的 `password=` 行各須在 2 秒 CPU 時間內（量測 worker 行程的 CPU 時間而非經過時間，平行執行的其他測試不計入）、串流回覆的所有 2 段與 3 段切法、100 KB 串流以 4 字元為單位。 |
+| `adversarial` | 洩漏與往返、失敗即關閉的篩檢、54 種 200 KB 病態輸入與 3 種 1 MB 的 `password=` 行各須在 5 秒 CPU 時間內（量測 worker 行程的 CPU 時間而非經過時間，平行執行的其他測試不計入）、串流回覆的所有 2 段與 3 段切法、100 KB 串流以 4 字元為單位。 |
 | `proxy` | 對本機假上游的端對端測試：Chat Completions、Responses、Anthropic Messages 的 JSON 與 SSE，佔位符跨越分塊邊界並出現在工具呼叫 JSON 中；413、未知接續的 422、鍵中原始值寫成 `<key>`；上游重新導向回 502、巢狀過深的本文回 400、未結束或格式錯誤的串流仍送出殘留與其餘事件、用戶端中途斷線也記一行日誌。 |
 | `proxy-host`、`restore-urls` | 綁定位址、權杖、`allowedOrigins` 與設定錯誤即拒絕啟動；403（`Host`、`Origin`）與 401；工具呼叫參數中 URL 內的佔位符不還原，其他還原的佔位符回報 JSON 指標而不含原始值。 |
 | `config-file` | 設定檔：TOML 與 JSON 內容相同時結果相同、`config.example.toml` 即預設值、副檔名判斷（沒有副檔名讀成 JSON、`.toml`／`.json` 點檔、其他副檔名拒絕）、開頭的 BOM、語法錯誤只寫路徑與行列而不引用內容、表與布林值的型別檢查、錯誤訊息只引用像名稱的字（`printable` 對權杖形狀的值與非本機 `host` 寫成佔位文字）、`sendWhenMaskFails`、`debugMasked`、`allowInsecureUpstream` 的環境變數雙向覆寫與只接受 `1`／`0`。 |
@@ -461,7 +461,11 @@ POST /v1/messages tool arguments: kept by the tool restore policy KEY_1 in bash 
 | `name-model-config`、`name-model-detector`、`name-model-spans`、`proxy-name-model`、`name-model-real` | 人名模型：設定驗證、以假模型（`name-model-fake.ts`）測哪些文字送進模型、規則優先、敬稱切除、整個請求中的擴散、推論失敗時只用規則或在 `nameModel.required` 時回 503；`name-model-real` 載入真模型，只在設定模型目錄時執行。 |
 | `public-bench`、`real-e2e-harness` | 公開評測：開發集的產生與檢查碼、計分方式（完全、部分遮罩與未遮罩，macro 平均，精確率）、保留集的載入與 `MANIFEST` 雜湊檢查；真實服務驗證工具對本機假上游的完整流程（沒有金鑰時略過、上游錯誤訊息引用的金鑰被替換、佔位符還原的判定）。 |
 
-`pnpm typecheck` 做型別檢查。CI（`.github/workflows/ci.yml`）在 ubuntu 與 macOS、Node 22 與 24 上跑型別檢查、測試、建置、`--demo` 與 `npm pack --dry-run`，不安裝人名模型的選用依賴；真實服務的驗證（`e2e-real.yml`）只能手動觸發，金鑰來自 repository secrets。`pnpm test` 的端對端測試與 `pnpm demo` 都只用本機假上游。真實服務只驗證過 DeepSeek：2026-10-08 只設 `DEEPSEEK_API_KEY` 執行 `pnpm run e2e:real`，DeepSeek Chat Completions 的 4 個情境全部通過，OpenAI 與 Anthropic 因沒有金鑰而略過（[e2e/real](../e2e/real/README.md)）。尚未對真實用戶端驗證。
+`pnpm typecheck` 做型別檢查。CI（`.github/workflows/ci.yml`）在 ubuntu 與 macOS、Node 22 與 24 上跑型別檢查、測試、建置、`--demo` 與 `npm pack --dry-run`，不安裝人名模型的選用依賴；真實服務的驗證（`e2e-real.yml`）只能手動觸發，金鑰來自 repository secrets。`pnpm test` 的端對端測試與 `pnpm demo` 都只用本機假上游。真實服務：2026-10-08 只設 `DEEPSEEK_API_KEY` 執行 `pnpm run e2e:real`，DeepSeek Chat Completions 的 4 個情境全部通過，OpenAI 與 Anthropic 因沒有金鑰而略過（[e2e/real](../e2e/real/README.md)）。2026-10-13 以兩個真實用戶端經由代理使用 Anthropic Messages（Claude Haiku 5.5）：Claude Code 2.1.287 以訂閱登入、設定 `ANTHROPIC_BASE_URL=http://127.0.0.1:8787`，串流文字與工具（Bash、Read）都可用，偵測到的值上游只看到佔位符，回覆已還原，工具參數依 `toolRestore` 還原 `PATH`、`TERM`、`PROJECT`，其他類別保留為佔位符；0.3.0 之前保留的佔位符在後續回合被重新編號，模型把同一個工具重試了 7 次，0.3.0 中只用 1 次工具呼叫、3 個請求。Claude Code 也送出作業系統的使用者名稱（`safeguards…user_identity` 與專案目錄名稱），0.3.0 以 `maskLocalUsername` 預設遮掉。dsh（DeepSeek Harness，pi-ai 的 Anthropic 路徑）的文字與工具也可用；0.3.0 之前保留的佔位符讓 Anthropic 以 HTTP 400 拒絕重送的簽章 thinking 區塊，已驗證 0.3.0 修正。未驗證：OpenAI API（沒有金鑰）、Codex CLI（未登入）、直接使用 Anthropic SDK（只經由 dsh 的 pi-ai）、以 `e2e:real` 對 Anthropic 執行（未執行）。
+
+Docker 映像：2026-10-13 在 Apple Silicon 上以 Docker Desktop 29.6.2（linux/arm64）對本機假上游驗證：可以建置（347 MB；加 `--build-arg NAME_MODEL=1` 為 864 MB），以非 root 使用者 `node` 執行；綁定 `0.0.0.0` 時沒設 `REDACTION_PROXY_AUTH_TOKEN` 就拒絕啟動，沒帶權杖的請求回 401；email、身分證字號與家目錄路徑在 OpenAI Chat Completions JSON、串流與 Anthropic Messages 中都遮罩後送上游並還原；以 `--config /redaction.toml` 掛載設定檔可用；允許來源的 CORS 預檢回 204 且不轉送，其他來源回 403。未測試：以真模型執行人名模型版映像、linux/amd64。上游是非本機的明文 `http://`（例如經由 `host.docker.internal` 連到的本機模型伺服器）時，要加 `-e REDACTION_PROXY_ALLOW_INSECURE_UPSTREAM=1`。
+
+npx：尚未發布到 npm。2026-10-13 以本機 tarball 驗證（`npm pack`，180 kB、60 個檔案）：`npx --yes --package=./redaction-proxy-<version>.tgz redaction-proxy --demo` 印出示範輸出，不加 `--demo` 時代理在 127.0.0.1:8787 啟動。代理沒有健康檢查端點：GET 請求會轉送到上游。
 
 ## 14. 誤遮率量測方法
 
@@ -491,10 +495,10 @@ POST /v1/messages tool arguments: kept by the tool restore policy KEY_1 in bash 
 
 ## 15. 尚待完成
 
-- 對真實 OpenAI、Anthropic API 與真實用戶端（Claude Code、OpenAI SDK）做端對端驗證。
+- 對真實 OpenAI API、Codex CLI 與直接使用的 Anthropic SDK 做端對端驗證，並以 `e2e:real` 對 Anthropic 執行（Claude Code 與 dsh 經由 Anthropic Messages 已於 2026-10-13 驗證，見[第 13 節](#13-測試)）。
 - 量測中文散文語料的誤遮率。
 - 發布到 npm。套件已可發布（`bin` 入口 `redaction-proxy`，`npm pack` 只含 `lib/`、README、LICENSE、NOTICE、`config.example.toml`），但 `package.json` 仍是 `"private": true`；決定發布時刪掉這一行即可（若改用 scoped 名稱，另加 `"publishConfig": { "access": "public" }`）。`prepublishOnly` 會先跑型別檢查與測試。授權條款已定為 Apache-2.0（[LICENSE](../LICENSE)）。
-- 實際建置並執行 Docker 映像（`Dockerfile` 已寫好，尚未在有 Docker 的環境建置）。映像綁定 `0.0.0.0`，所以必須以 `-e REDACTION_PROXY_AUTH_TOKEN` 傳入權杖，並以 `-p 127.0.0.1:8787:8787` 只發布到本機。
+- 在 linux/amd64 上建置並執行 Docker 映像，並以真模型執行人名模型版映像（linux/arm64 的映像已於 2026-10-13 驗證，見[第 13 節](#13-測試)）。
 - 將 dsh-privacy-router 的串流還原器統一到這份核心。
 
 ## 16. 人名模型（實驗性）
@@ -572,13 +576,13 @@ node scripts/fetch-name-model.mjs ~/models/nym       # 從 Hugging Face 下載�
 | 工具參數只還原允許的類別 | 回應中 URL 內的佔位符保持原樣（合法的 `https://host/⟦PATH_1⟧` 也一樣）。工具參數只還原 `toolRestore` 允許的類別（預設 `PATH`、`TERM`、`PROJECT`），需要其他值的工具拿到佔位符，可能失敗，直到使用者為它開放。允許的類別照常還原並記入日誌，所以 shell 指令等仍可能把它們送出。 |
 | 請求大小 | 本文超過 64 MiB 以 413 拒絕。 |
 | 沒有上游逾時 | 代理不限制等待上游的時間；上游不回應時，請求一直等到用戶端自己的逾時或斷線，代理隨即中止上游請求。 |
-| 真實服務只驗證過 DeepSeek | 2026-10-08 以[真實服務驗證工具](../e2e/real/README.md)對 DeepSeek Chat Completions 驗證，4 個情境全部通過。OpenAI、Anthropic 與真實用戶端尚未驗證；其餘測試與示範都用本機假上游。 |
+| 真實服務只驗證過 DeepSeek 與 Anthropic | 2026-10-08 以[真實服務驗證工具](../e2e/real/README.md)對 DeepSeek Chat Completions 驗證，4 個情境全部通過。2026-10-13 經由 Claude Code 與 dsh 驗證 Anthropic Messages（見[第 13 節](#13-測試)）。OpenAI API、Codex CLI 與直接使用的 Anthropic SDK 尚未驗證；其餘測試與示範都用本機假上游。 |
 
 ## 18. 實測數字
 
 | 項目 | 結果 | 代表什麼 |
 | --- | --- | --- |
-| 測試 | 1,998 個通過、8 個需要真模型而略過（32 個檔案、共 2,006 個） | 規則、引擎、對抗輸入、對假上游的三種 API 串流與非串流、Host／Origin／權杖檢查。 |
+| 測試 | 2,012 個通過、8 個需要真模型而略過（32 個檔案、共 2,020 個） | 規則、引擎、對抗輸入、對假上游的三種 API 串流與非串流、Host／Origin／權杖檢查。 |
 | 憑證誤遮 | 每千行程式碼 **0.85** 處 | 在不含真實金鑰的 DeepSeek Harness 原始碼上量測（69.8 萬行程式碼），平均約 1,180 行有一處被誤當成金鑰而遮掉。 |
 | 還原失敗 | 0 | 遮罩成功的檔案全部都能逐位元組還原。 |
 | 速度 | 約 85 萬行 / 約 5–8 秒 | 依機器而定；Apple M5 Max 約 5 秒。 |

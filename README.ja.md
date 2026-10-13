@@ -18,7 +18,7 @@ OpenAI 互換・Anthropic 互換のクライアントならストリーミング
 
 ローカルモデルを動かせて、より強いプライバシーが必要なら、先にルーターを入れてください。ルーターは dsh-addons の redaction パッケージを通じてこのプロキシのマスク処理の中核を使います（一緒にインストールします）。動かせない場合は、このプロキシ単体でもプライバシーを一段高められます。
 
-> **ステータス：** バージョン 0.2.1 で、npm にはまだ公開していません。実サービスでは DeepSeek の Chat Completions API で検証済みです（2026-10-08、下記参照）。OpenAI・Anthropic と Claude Code などの実クライアントは未検証です。
+> **ステータス：** バージョン 0.3.0 で、npm にはまだ公開していません。実サービスでは DeepSeek の Chat Completions（2026-10-08）と、Claude Code と dsh を通した Anthropic Messages（2026-10-13）で検証済みです（下記参照）。OpenAI API と Codex CLI は未検証です。
 
 ## 紹介動画
 
@@ -48,7 +48,7 @@ client receives:   I will email lin.fictional@example.test about /Users/fictiona
 
 ### Docker
 
-まだビルドもテストもしていません。このイメージを書いた環境に Docker がありませんでした。
+2026-10-13 に Apple Silicon の Docker Desktop 29.6.2（linux/arm64）で、ローカルのダミー上流に対して検証しました。イメージはビルドでき（347 MB、`--build-arg NAME_MODEL=1` では 864 MB）、root ではないユーザー `node` で動きます。`REDACTION_PROXY_AUTH_TOKEN` がないと起動せず、トークンのないリクエストには 401 を返します。メールアドレス、身分証番号、ホームディレクトリのパスは、OpenAI Chat Completions の JSON、ストリーミング、Anthropic Messages のいずれでもマスクされて上流に届き、応答で復元されました。許可されたオリジンからの CORS プリフライトは転送されずに 204、ほかのオリジンは 403 でした。下記の設定ファイルのマウントも動きました。未テスト：人名モデル版イメージを実際のモデルで動かすこと、linux/amd64。
 
 ```sh
 docker build -t redaction-proxy .
@@ -62,25 +62,34 @@ docker run --rm -p 127.0.0.1:8787:8787 -e REDACTION_PROXY_AUTH_TOKEN redaction-p
 
 設定ファイル `redaction.toml`（または `.json`）：`-v "$PWD/redaction.toml:/redaction.toml:ro"` を加え、末尾に `--config /redaction.toml` を付けます。人名モデル：`--build-arg NAME_MODEL=1` でビルドし、`-v ~/models/nym:/models:ro -e REDACTION_PROXY_NAME_MODEL_DIR=/models` を加えます。
 
+上流がループバック以外の平文 `http://`（`host.docker.internal` 経由のローカルモデルサーバーなど）の場合は、`-e REDACTION_PROXY_ALLOW_INSECURE_UPSTREAM=1` も加えます。`maskLocalUsername` はコンテナのユーザー `node` をスキップするので、イメージ内では何もマスクしません。
+
 ### npx（npm への初回公開後）
 
-まだ npm には公開していません。それまでは[クイックスタート](#30-秒クイックスタート)のとおりクローンから実行してください。公開後は次のとおりです。
+まだ npm には公開していません。それまでは[クイックスタート](#30-秒クイックスタート)のとおりクローンから実行してください。2026-10-13 にローカルの tarball で検証しました。`npm pack` で 180 kB・60 ファイルのパッケージができ、`npx --yes --package=./redaction-proxy-<version>.tgz redaction-proxy --demo` でデモの出力が表示され、`--demo` なしではプロキシが 127.0.0.1:8787 で起動します。公開後は次のとおりです。
 
 ```sh
 npx redaction-proxy --demo
 npx redaction-proxy           # プロキシを http://127.0.0.1:8787 で起動（ループバックではトークン不要）
 ```
 
+ヘルスチェック用のエンドポイントはありません。GET リクエストは上流に中継されます。
+
 ## ツールの接続先を変える
 
-> **実サービスは今のところ DeepSeek のみ検証済みです。** 2026-10-08 に[実サービス検証ツール](e2e/real/README.md)で DeepSeek に対して 4 つのシナリオ（Chat Completions、JSON とストリーミング、テキストと強制ツール呼び出し）を実行し、すべて合格しました。上流が見たのはプレースホルダーだけで、毎回 5 つの値が復元されました。OpenAI と Anthropic はキーがないためスキップし、実クライアントはまだ試していません。
+> **実サービス：DeepSeek と Anthropic は検証済み、OpenAI は未検証です。** 2026-10-08 に[実サービス検証ツール](e2e/real/README.md)で DeepSeek に対して 4 つのシナリオ（Chat Completions、JSON とストリーミング、テキストと強制ツール呼び出し）を実行し、すべて合格しました。上流が見たのはプレースホルダーだけで、毎回 5 つの値が復元されました。2026-10-13 には 2 つの実クライアントがプロキシを通して Anthropic Messages（Claude Haiku 5.5）を使いました。
+>
+> - **Claude Code 2.1.287**（サブスクリプションでログイン、`ANTHROPIC_BASE_URL=http://127.0.0.1:8787`）：ストリーミングのテキストとツール（Bash、Read）。検出した値については上流が見たのはプレースホルダーだけで、応答は復元されました。ツール引数は `toolRestore` に従って `PATH`、`TERM`、`PROJECT` が復元され、ほかのカテゴリはプレースホルダーのままでした。0.3.0 より前は、ツール引数に残したプレースホルダーが後のターンで番号を振り直され、モデルが同じツールを 7 回やり直しました。0.3.0 では同じ作業がツール呼び出し 1 回、リクエスト 3 回で済みました。Claude Code は OS のユーザー名も送ります（`safeguards…user_identity` とプロジェクトディレクトリ名）。0.3.0 は既定でこれをマスクします（`maskLocalUsername`）。
+> - **dsh**（DeepSeek Harness、pi-ai の Anthropic ルート経由）：テキストとツール。0.3.0 より前は、残したプレースホルダーのせいで、再送した署名付き thinking ブロックを Anthropic が HTTP 400 で拒否しました。0.3.0 で直ったことを確認済みです。
+>
+> 未検証：OpenAI API（キーなし）、Codex CLI（未ログイン）、Anthropic SDK の直接利用（dsh の pi-ai 経由でのみ使用）、このリポジトリの `e2e:real` 検証ツールでの Anthropic（未実行）。
 
 API キーはこれまでどおりツールから送ってください。プロキシはそのまま転送し、保存しません。
 
 | ツール | 設定 | 状態 |
 | --- | --- | --- |
-| Claude Code | `ANTHROPIC_BASE_URL=http://127.0.0.1:8787 claude` | 未検証 |
-| Anthropic SDK | `ANTHROPIC_BASE_URL=http://127.0.0.1:8787`（`/v1` なし） | 未検証 |
+| Claude Code | `ANTHROPIC_BASE_URL=http://127.0.0.1:8787 claude` | 2026-10-13 検証済み（サブスクリプションでログイン、テキスト・ストリーミング・ツール） |
+| Anthropic SDK | `ANTHROPIC_BASE_URL=http://127.0.0.1:8787`（`/v1` なし） | dsh（pi-ai）経由で検証済み、直接は未検証 |
 | OpenAI SDK と多くの互換ツール | `OPENAI_BASE_URL=http://127.0.0.1:8787/v1`（`/v1` あり） | 未検証 |
 | DeepSeek | `REDACTION_PROXY_OPENAI_UPSTREAM=https://api.deepseek.com node lib/cli.js` でプロキシを起動し、DeepSeek のキーと `OPENAI_BASE_URL=http://127.0.0.1:8787/v1` を使います。OpenAI の上流はこれで置き換わります。 | 実サービス検証ツールで検証済み（API のみ） |
 | Cursor | 非対応：Cursor はカスタム base URL へのリクエストを Cursor 自身のサーバーから送るため、手元の `127.0.0.1` に届きません。 | — |
