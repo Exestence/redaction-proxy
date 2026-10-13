@@ -178,6 +178,7 @@ function fileBoolean(value: unknown, label: string): boolean {
  */
 function upstream(value: unknown, label: string, allowInsecure: boolean): string {
   if (typeof value !== 'string' || !/^https?:\/\/[^/]/.test(value)) throw new Error(`${label} must be an http(s) URL`)
+  if (!URL.canParse(value)) throw new Error(`${label} must be an http(s) URL`)
   if (value.startsWith('http:') && !allowInsecure && !isLoopbackHost(new URL(value).hostname)) {
     throw new Error(`${label} is plain http:// to a host that is not loopback, which would send API keys in cleartext; use https:// or set allowInsecureUpstream (REDACTION_PROXY_ALLOW_INSECURE_UPSTREAM=1)`)
   }

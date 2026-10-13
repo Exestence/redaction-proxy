@@ -233,7 +233,7 @@ flowchart TD
 
 外洩檢查會在以下情況觸發：偵測到的值也出現在不遮的欄位（第 5 節），或該值出現在較長的詞中間而未被遮。只出現在不遮欄位或物件鍵中、別處沒有出現的值，不會被偵測，照原樣送出。拒絕訊息只指出欄位，絕不含值：陣列索引照寫（`/messages/1/content`）；本身含有偵測值的鍵，以及不是小寫識別字（`[a-z][a-z0-9_]*`，最多 40 字元）的鍵，都寫成 `<key>`。拒絕時請求不會送出。
 
-**`sendWhenMaskFails`。** 預設 `false`，上面兩種 422（外洩檢查、`RedactionError`）照常拒絕。設為 `true` 時，外洩檢查找到的請求改送出部分遮罩的本文（遮得到的地方照常是佔位符，殘留的值照原樣），`mask` 拋出 `RedactionError` 的請求改送出原始本文。這會把偵測到的值送給服務商。兩種情況都在回應加上 `x-redaction-proxy-mask-failed: 1` 標頭（請求送出後代理自己回的錯誤也帶，例如上游重新導向時的 502），並在日誌記一行警告，寫出欄位路徑與類別（與拒絕訊息相同），或 `RedactionError` 的錯誤代碼，絕不含值；這類請求即使開了 `debugMasked` 也不記錄本文。回覆照常以這個請求的綁定還原；`RedactionError` 時沒有綁定，佔位符照原樣回給用戶端。這個開關不影響其他拒絕：`screen: "refuse"`、未知的 `previous_response_id`、來源、權杖、`Host`、大小檢查與上游重新導向照常拒絕；`nameModel.required` 維持原意（為 `true` 時回 503，否則只以規則遮罩後送出）。
+**`sendWhenMaskFails`。** 預設 `false`，上面兩種 422（外洩檢查、`RedactionError`）照常拒絕。設為 `true` 時，外洩檢查找到的請求改送出部分遮罩的本文（遮得到的地方照常是佔位符，殘留的值照原樣），`mask` 拋出 `RedactionError` 的請求改送出原始本文。這會把偵測到的值送給服務商。兩種情況都在回應加上 `x-redaction-proxy-mask-failed: 1` 標頭（遮罩失敗後代理自己回的錯誤也帶，例如上游重新導向或連線被拒時的 502），並在日誌記一行警告，寫出欄位路徑與類別（與拒絕訊息相同），或 `RedactionError` 的錯誤代碼，絕不含值；這類請求即使開了 `debugMasked` 也不記錄本文。回覆照常以這個請求的綁定還原；`RedactionError` 時沒有綁定，佔位符照原樣回給用戶端。這個開關不影響其他拒絕：`screen: "refuse"`、未知的 `previous_response_id`、來源、權杖、`Host`、大小檢查與上游重新導向照常拒絕；`nameModel.required` 維持原意（為 `true` 時回 503，否則只以規則遮罩後送出）。
 
 錯誤回應本文的格式：`{"error":{"type":"redaction_proxy_error","message":"..."}}`。
 
@@ -470,7 +470,7 @@ POST /v1/messages tool arguments: kept by the tool restore policy KEY_1 in bash 
 | `proxy` | 對本機假上游的端對端測試：Chat Completions、Responses、Anthropic Messages 的 JSON 與 SSE，佔位符跨越分塊邊界並出現在工具呼叫 JSON 中；413、未知接續的 422、鍵中原始值寫成 `<key>`；上游重新導向回 502、巢狀過深的本文回 400、未結束或格式錯誤的串流仍送出殘留與其餘事件、用戶端中途斷線也記一行日誌。 |
 | `proxy-host`、`restore-urls` | 綁定位址、權杖、`allowedOrigins` 與設定錯誤即拒絕啟動；403（`Host`、`Origin`）與 401；工具呼叫參數中 URL 內的佔位符不還原，其他還原的佔位符回報 JSON 指標而不含原始值。 |
 | `config-file` | 設定檔：TOML 與 JSON 內容相同時結果相同、`config.example.toml` 即預設值、副檔名判斷（沒有副檔名讀成 JSON、`.toml`／`.json` 點檔、其他副檔名拒絕）、開頭的 BOM、語法錯誤只寫路徑與行列而不引用內容、表與布林值的型別檢查、錯誤訊息只引用像名稱的字（`printable` 對權杖形狀的值與非本機 `host` 寫成佔位文字）、`sendWhenMaskFails`、`debugMasked`、`allowInsecureUpstream` 的環境變數雙向覆寫與只接受 `1`／`0`。 |
-| `proxy-mask-fails` | `sendWhenMaskFails`：外洩檢查找到殘留值或 `mask` 拋出時改為送出、回應帶 `x-redaction-proxy-mask-failed: 1`（含送出後代理回的 502）、上游送來的同名標頭被去掉、警告行不含值、不記錄本文，以及其他拒絕（`screen: "refuse"` 等）不受影響。 |
+| `proxy-mask-fails` | `sendWhenMaskFails`：外洩檢查找到殘留值或 `mask` 拋出時改為送出、回應帶 `x-redaction-proxy-mask-failed: 1`（含遮罩失敗後代理回的 502）、上游送來的同名標頭被去掉、警告行不含值、不記錄本文，以及其他拒絕（`screen: "refuse"` 等）不受影響。 |
 | `cli` | 未知選項、多餘的位置參數與埠已被占用時，只印一行 `redaction-proxy: …` 並以代碼 1 結束。 |
 | `name-model-config`、`name-model-detector`、`name-model-spans`、`proxy-name-model`、`name-model-real` | 人名模型：設定驗證、以假模型（`name-model-fake.ts`）測哪些文字送進模型、規則優先、敬稱切除、整個請求中的擴散、推論失敗時只用規則或在 `nameModel.required` 時回 503；`name-model-real` 載入真模型，只在設定模型目錄時執行。 |
 | `public-bench`、`real-e2e-harness` | 公開評測：開發集的產生與檢查碼、計分方式（完全、部分遮罩與未遮罩，macro 平均，精確率）、保留集的載入與 `MANIFEST` 雜湊檢查；真實服務驗證工具對本機假上游的完整流程（沒有金鑰時略過、上游錯誤訊息引用的金鑰被替換、佔位符還原的判定）。 |

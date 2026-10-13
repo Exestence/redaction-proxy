@@ -94,7 +94,7 @@ curl http://127.0.0.1:8787/v1/chat/completions \
   -d '{"model":"gpt-4o-mini","messages":[{"role":"user","content":"给 lin@example.test 发封邮件"}]}'
 ```
 
-用 `node lib/cli.js --config redaction.toml` 指定 TOML 或 JSON 配置文件（`.toml` 读作 TOML；`.json` 或没有扩展名（比如 `/dev/stdin`）读作 JSON；其他扩展名会让启动失败；两者的键相同），环境变量可以覆盖它。每个选项及默认值见 [config.example.toml](config.example.toml)。上游 API 密钥永远不写进文件。出现不认识的键或类型不对的值（用 `"true"` 代替 `true`）时启动失败；错误信息只在键或值是简短、像名称的词（英文字母，最多两个数字，不以 `sk-`、`ghp_` 等已知令牌前缀开头）时才引用它；其他内容，包括令牌形状的文本，都打印成 `<key>` 之类的占位文本。
+用 `node lib/cli.js --config redaction.toml` 指定 TOML 或 JSON 配置文件（`.toml` 读作 TOML；`.json` 或没有扩展名（比如 `/dev/stdin`）读作 JSON；其他扩展名会让启动失败；两者的键相同），环境变量可以覆盖它。每个选项及默认值见 [config.example.toml](config.example.toml)。上游 API 密钥永远不写进文件。出现不认识的键或类型不对的值（用 `"true"` 代替 `true`）时启动失败；错误信息只在键或值是简短、像名称的词（英文字母、`_` 或 `-`，最多 24 个字符、两个数字，不以 `sk-`、`ghp_` 等已知令牌前缀开头）时才引用它；其他内容，包括令牌形状的文本，都打印成 `<key>` 之类的占位文本。
 
 | 键 | 默认值 | 说明 |
 | --- | --- | --- |
