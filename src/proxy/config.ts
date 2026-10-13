@@ -1,5 +1,5 @@
 /**
- * Proxy configuration: a JSON file plus environment overrides. Keys never
+ * Proxy configuration: a TOML or JSON file plus environment overrides. Keys never
  * come from the file; an upstream key may come from the environment as a
  * fallback for clients that send no credentials, and stays in memory.
  *
@@ -7,6 +7,8 @@
  */
 
 import { readFileSync } from 'node:fs'
+import { extname } from 'node:path'
+import { TomlError, parse as parseToml } from 'smol-toml'
 import { RULE_CATEGORIES, RULE_NAMES, resolveRulesConfig } from '../core/index.ts'
 import type { RulesRedactionConfig } from '../core/index.ts'
 import { NAME_MODEL_CATEGORIES, resolveNameModelConfig } from '../core/model/config.ts'
@@ -220,14 +222,37 @@ function nameModel(value: unknown, dir: string | undefined): ResolvedNameModelCo
 }
 
 /**
+ * Read a config file, as TOML or JSON by its extension. A failure message
+ * names the path and, for TOML, the line and column, never the file's text.
+ * @param path - a `.toml` or `.json` file.
+ * @returns the file's top-level table.
+ * @throws {Error} on another extension, an unreadable file, or a syntax error.
+ */
+function readConfigFile(path: string): Record<string, unknown> {
+  const format = extname(path).toLowerCase()
+  if (format !== '.toml' && format !== '.json') throw new Error(`config ${path}: unsupported file extension; use .toml or .json`)
+  const text = readFileSync(path, 'utf8')
+  let file: unknown
+  try {
+    file = format === '.toml' ? parseToml(text) : JSON.parse(text)
+  } catch (error) {
+    // Both parsers quote the file's text in their messages, which may hold a token.
+    if (error instanceof TomlError) throw new Error(`config ${path}:${error.line}:${error.column}: invalid TOML: ${error.message.split('\n')[0]?.replace(/^Invalid TOML document: /, '')}`)
+    throw new Error(`config ${path}: invalid JSON`)
+  }
+  if (file === null || typeof file !== 'object' || Array.isArray(file)) throw new Error(`config ${path}: must hold an object`)
+  return file as Record<string, unknown>
+}
+
+/**
  * Load the configuration.
- * @param path - JSON config file, or `undefined` for none.
+ * @param path - TOML or JSON config file, or `undefined` for none.
  * @param env - environment; `REDACTION_PROXY_*` variables override the file.
  * @returns the validated configuration.
  * @throws {Error} on an unreadable file, an unknown key, or an invalid value.
  */
 export function loadConfig(path: string | undefined, env: NodeJS.ProcessEnv): ProxyConfig {
-  const file: Record<string, unknown> = path === undefined ? {} : JSON.parse(readFileSync(path, 'utf8')) as Record<string, unknown>
+  const file = path === undefined ? {} : readConfigFile(path)
   for (const key of Object.keys(file)) {
     if (!FILE_KEYS.has(key)) throw new Error(`config: unknown key "${key}"${/key|secret/i.test(key) ? ' (upstream API keys belong in the environment, not the file)' : ''}`)
   }

@@ -1,7 +1,8 @@
 #!/usr/bin/env node
 /**
  * Command line: `redaction-proxy [--config path]`, or `redaction-proxy --demo`
- * to run the keyless demo and exit. The config path may also
+ * to run the keyless demo and exit. The config file is TOML or JSON by its
+ * extension (`.toml`, `.json`); its path may also
  * come from `REDACTION_PROXY_CONFIG`; `REDACTION_PROXY_*` variables override it.
  * A configured name model is loaded before the port opens, so a missing file
  * stops startup instead of failing the first request. A startup failure (an
