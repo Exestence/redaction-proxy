@@ -13,10 +13,10 @@ OpenAI 互換・Anthropic 互換のクライアントならストリーミング
 | | このプロキシ | [dsh-privacy-router](https://github.com/PersonalAssistanceHsin/dsh-privacy-router) |
 | --- | --- | --- |
 | ローカルモデル | 不要 | 必要（非公開のターンに答える） |
-| クラウドに届くもの | すべてのリクエスト（マスク済み） | 公開と判定したターンだけ（マスク済み）。非公開のターンは手元に残る |
+| クラウドに届くもの | すべてのリクエスト（マスク済み） | 公開と判定したターンだけ（マスク済み）。非公開と判定したターンは手元に残る |
 | 対応 | OpenAI 互換・Anthropic 互換の任意のクライアント | DeepSeek Harness（dsh）のみ |
 
-ローカルモデルを動かせて、より強いプライバシーが必要なら、先にルーターを入れてください。ルーターにはこのプロキシのマスク処理の中核がすでに含まれています。動かせない場合は、このプロキシ単体でもプライバシーを一段高められます。
+ローカルモデルを動かせて、より強いプライバシーが必要なら、先にルーターを入れてください。ルーターは dsh-addons の redaction パッケージを通じてこのプロキシのマスク処理の中核を使います（一緒にインストールします）。動かせない場合は、このプロキシ単体でもプライバシーを一段高められます。
 
 > **ステータス：** バージョン 0.1.0 で、npm にはまだ公開していません。実サービスでは DeepSeek の Chat Completions API で検証済みです（2026-10-08、下記参照）。OpenAI・Anthropic と Claude Code などの実クライアントは未検証です。
 
@@ -60,7 +60,7 @@ docker run --rm -p 127.0.0.1:8787:8787 -e REDACTION_PROXY_AUTH_TOKEN redaction-p
 
 クライアントはトークンを `x-redaction-proxy-token` ヘッダーで送ります。Claude Code は `ANTHROPIC_CUSTOM_HEADERS="x-redaction-proxy-token: $REDACTION_PROXY_AUTH_TOKEN"`、OpenAI と Anthropic の SDK は既定ヘッダーのオプション（Python は `default_headers`、TypeScript は `defaultHeaders`）を使います。
 
-設定ファイル：`-v "$PWD/redaction.json:/redaction.json:ro"` を加え、末尾に `--config /redaction.json` を付けます。人名モデル：`--build-arg NAME_MODEL=1` でビルドし、`-v ~/models/nym:/models:ro -e REDACTION_PROXY_NAME_MODEL_DIR=/models` を加えます。
+設定ファイル `redaction.toml`（または `.json`）：`-v "$PWD/redaction.toml:/redaction.toml:ro"` を加え、末尾に `--config /redaction.toml` を付けます。人名モデル：`--build-arg NAME_MODEL=1` でビルドし、`-v ~/models/nym:/models:ro -e REDACTION_PROXY_NAME_MODEL_DIR=/models` を加えます。
 
 ### npx（npm への初回公開後）
 
@@ -94,7 +94,7 @@ curl http://127.0.0.1:8787/v1/chat/completions \
   -d '{"model":"gpt-4o-mini","messages":[{"role":"user","content":"lin@example.test にメールして"}]}'
 ```
 
-`node lib/cli.js --config redaction.toml` で TOML または JSON の設定ファイルを指定します（形式は拡張子で決まり、項目名はどちらも同じです）。全項目と既定値は [config.example.toml](config.example.toml) にあります。環境変数はファイルより優先されます。上流の API キーはファイルに書きません。知らない項目があると起動に失敗します。
+`node lib/cli.js --config redaction.toml` で TOML または JSON の設定ファイルを指定します（`.toml` は TOML、`.json` または拡張子なし（`/dev/stdin` など）は JSON として読み、それ以外の拡張子では起動に失敗します。項目名はどちらも同じです）。全項目と既定値は [config.example.toml](config.example.toml) にあります。環境変数はファイルより優先されます。上流の API キーはファイルに書きません。知らない項目や型の違う値（`true` の代わりの `"true"`）があると起動に失敗します。エラーメッセージは短い識別子の形をした項目名や値だけを引用するので、ファイルに誤って貼ったトークンは表示されません。
 
 | 項目 | 既定値 | 説明 |
 | --- | --- | --- |
@@ -105,14 +105,14 @@ curl http://127.0.0.1:8787/v1/chat/completions \
 | `openaiUpstream` | `https://api.openai.com` | Chat Completions と Responses の上流。 |
 | `anthropicUpstream` | `https://api.anthropic.com` | Anthropic Messages の上流。 |
 | `allowInsecureUpstream` | `false` | ループバック以外の上流への平文の `http://` を許可します。API キーが平文で流れます。 |
-| `redaction.terms` | なし | マスクしたい人名などの語句。大文字小文字は区別しません。先頭または末尾が英字か数字の語句は単語全体でのみ一致し（`Lin` は `Linux` に一致しません）、CJK の語句は文中でも一致します。ツールや参加者の `name` の中に単語として現れる語句（`nimbus_deploy` の `nimbus`）は、`name` がマスクされないため、それに触れるリクエストがすべて拒否されます（422）。 |
+| `redaction.terms` | なし | マスクしたい人名などの語句。大文字小文字は区別しません。先頭または末尾が英字か数字の語句は単語全体でのみ一致し（`Lin` は `Linux` に一致しません）、CJK の語句は文中でも一致します。ツールや参加者の `name` の中に単語として現れる語句（`nimbus_deploy` の `nimbus`）は、`name` がマスクされないため、それに触れるリクエストは既定では 422 で拒否されます。 |
 | `redaction.projectNames` | なし | マスクしたいプロジェクトのコードネーム。 |
 | `redaction.allowlist` | `git@github.com`、`noreply@github.com` | 決してマスクしない値。 |
 | `redaction.rules` | `card`、`entropy` 以外すべて | 有効にする組み込みルール。`card`、`entropy` の代わりに `card-strict`、`entropy-strict` を使います。数字列を途中で切らず、ファイル名をキーにしたハッシュはマスクしません。 |
 | `nameModel` | なし | [実験的な人名モデル](#オプションの人名モデル実験的)を有効にします。既定では失敗しても通します。あるリクエストでモデルが失敗すると、そのリクエストはルールだけでマスクして送り、ログの行に `nameModel failed` と出ます。`nameModel.required` が `true` なら 503 を返し、何も送りません。 |
 | `screen` | `replace` | 制御文字を見える文字に置き換える（`replace`）か、リクエストを拒否する（`refuse`）か。 |
 | `debugMasked` | `false` | マスク後のリクエスト本文をログに出します。プロキシがマスクしないフィールド（`metadata`、画像 URL、base64 データ）はそのまま記録されます。デバッグ専用です。 |
-| `sendWhenMaskFails` | `false` | マスクに失敗しても 422 で拒否せずにリクエストを送ります。マスク後も検出した値が残る場合は一部マスクした本文を、マスクできない場合はマスクしていない本文を送ります。検出した値がプロバイダーに送られます。応答には `x-redaction-proxy-mask-failed: 1` ヘッダーが付き、ログにはフィールドとカテゴリだけを記録し、値は記録しません。環境変数：`REDACTION_PROXY_SEND_WHEN_MASK_FAILS`（`1` または `0`）。 |
+| `sendWhenMaskFails` | `false` | マスクに失敗しても 422 で拒否せずにリクエストを送ります。マスク後も検出した値が残る場合は一部マスクした本文を、マスクできない場合はマスクしていない本文を送ります。検出した値がプロバイダーに送られます。応答には `x-redaction-proxy-mask-failed: 1` ヘッダーが付き、ログにはフィールドとカテゴリ、またはエラーコードだけを記録し、値は記録しません。環境変数：`REDACTION_PROXY_SEND_WHEN_MASK_FAILS`（`1` または `0`）。 |
 | `knownOriginalsTtlSeconds` | `86400`（24 時間） | 検出した値をクライアントの後のリクエストのために保持する秒数。最後に検出した時点から数えます。`0` なら何も保持しません。環境変数：`REDACTION_PROXY_KNOWN_ORIGINALS_TTL_SECONDS`。 |
 | `toolRestore.categories` | `PATH`、`TERM`、`PROJECT` | ツール呼び出しの引数に復元するプレースホルダーのカテゴリ。ほかのカテゴリはプレースホルダーのままツールに渡ります。`"*"` はすべてのカテゴリを復元します。環境変数：`REDACTION_PROXY_TOOL_RESTORE_CATEGORIES`（カンマ区切り）。 |
 | `toolRestore.tools` | なし | ツール名（前後の空白を除き、大文字小文字を区別しない）ごとに、そのツールの引数に復元するカテゴリ。そのツールでは `categories` を置き換えます。例：`{"git_commit": ["PATH", "EMAIL"]}`。`"*"` はすべてのカテゴリを復元します。 |
@@ -260,7 +260,7 @@ REDACTION_PROXY_NAME_MODEL_DIR=$HOME/models/nym node lib/cli.js
 
 ## 保護範囲
 
-- **守るもの：** プロキシが検出した値はクラウドの事業者に届きません。届くのはプレースホルダーだけです。
+- **守るもの：** 既定では、プロキシが検出した値はクラウドの事業者に届きません。届くのはプレースホルダーだけです（`sendWhenMaskFails` をオンにすると、マスクに失敗したリクエストは値ごと送られます）。
 - **守らないもの：** 手元で値を復元した後、ツールがその値をどう使うかはプロキシの範囲外です。検出漏れはそのまま送られます。[守れないもの](#守れないもの)と[制限の全一覧](docs/DETAILS.md#17-完整限制清單)を参照してください。
 - **2 段階：** リクエスト内で検出した値はそのリクエスト全体でマスクし、マスク後もまだ残っていれば既定ではリクエストを拒否します（422）。`sendWhenMaskFails` でこの拒否をオフにすると、その値ごと送ります。リクエストをまたぐ記憶はベストエフォートの追加マスクで、リクエストを拒否することはありません。保持した値が他の文字にくっついて現れたり、別の書き方で現れたりすると、そのまま送られることがあります。
 - **できないこと：** マスクした値の中身が必要なタスク。たとえばメールアドレスのドメインを取り出す、キーを変換する、など。モデルには `⟦EMAIL_1⟧` しか見えません。
@@ -270,7 +270,7 @@ REDACTION_PROXY_NAME_MODEL_DIR=$HOME/models/nym node lib/cli.js
 
 - **意味。** プレースホルダーの周りはすべてクラウドに読まれます。`⟦PATH_1⟧/clients/acme-layoffs.md` でも多くが伝わります。
 - **人名・住所・病状・給与**。`terms` に入れるか、人名モデルが見つけない限りそのまま送られます。住所は決まった形式もキーワードもない自由な文章なので、住所のルールはありません。
-- **画像、PDF などの base64 ファイル（プレーンテキスト文書の本文はマスクします）、音声、`url` フィールド、`metadata`、`stop` シーケンス、`name` フィールド（ツール名と参加者名）、署名付きの thinking。** これらはそのまま転送され、検査もしません。JSON オブジェクトのキーも同じです。マスク対象のテキストで検出した値がこの中にもあればリクエスト全体を 422 で拒否しますが、ここにしかない値はそのまま送られます。API の列挙値しか取らないフィールド（`role`、`type`、`status`、`tool_choice` など）は、`assistant` のような列挙値らしい値のあいだは検査しませんが、`metadata` の下では検査します。再送されたツール呼び出しの入力はキー名にかかわらずマスクするので、`type`、`name`、`data` という名前のツール引数に復元された値も拒否されず、再びマスクされます。
+- **画像、PDF などの base64 ファイル（プレーンテキスト文書の本文はマスクします）、音声、`url` フィールド、`metadata`、`stop` シーケンス、`name` フィールド（ツール名と参加者名）、署名付きの thinking。** これらはそのまま転送され、検査もしません。JSON オブジェクトのキーも同じです。マスク対象のテキストで検出した値がこの中にもあればリクエスト全体を既定では 422 で拒否しますが、ここにしかない値はそのまま送られます。API の列挙値しか取らないフィールド（`role`、`type`、`status`、`tool_choice` など）は、`assistant` のような列挙値らしい値のあいだは検査しませんが、`metadata` の下では検査します。再送されたツール呼び出しの入力はキー名にかかわらずマスクするので、`type`、`name`、`data` という名前のツール引数に復元された値も拒否されず、再びマスクされます。
 - **変則的な書き方。** 空白を挟んだ `name @ domain`、`name at domain`、小文字の IBAN、二重にパーセントエンコードした値など、分割やエンコードされた形の一部は検出できません。API のフィールド名（`metadata`、`input`、`model`、`temperature` など）とまったく同じパスワードはマスクされません。
 - **Cursor**、および自社サーバーからリクエストを送るツール。
 - **同じマシン上の他のプログラム。** 既定では `127.0.0.1` だけで待ち受けます。`authToken` がなければ、同じマシン上のどのプログラムも使えます。Web ページからのリクエストは、Origin がループバックの `http(s)` ページか `allowedOrigins` にある場合を除き 403 で拒否します。別のホスト名を指定したリクエスト（DNS リバインディング）も 403 で拒否します。

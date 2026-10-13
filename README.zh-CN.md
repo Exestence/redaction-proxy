@@ -13,10 +13,10 @@
 | | 这个代理 | [dsh-privacy-router](https://github.com/PersonalAssistanceHsin/dsh-privacy-router) |
 | --- | --- | --- |
 | 需要本地模型 | 不需要 | 需要（由它回答私密的轮次） |
-| 什么会发到云端 | 每个请求，脱敏后发出 | 只有判为公开的轮次，脱敏后发出；私密的轮次留在你的电脑 |
+| 什么会发到云端 | 每个请求，脱敏后发出 | 只有判为公开的轮次，脱敏后发出；判为私密的轮次留在你的电脑 |
 | 适用 | 任何 OpenAI 或 Anthropic 兼容的客户端 | 仅限 DeepSeek Harness（dsh） |
 
-跑得动本地模型、想要更强的隐私，请先安装分流器；它已经内含这个代理的脱敏核心。跑不动的话，单用这个代理也能多一层隐私保护。
+跑得动本地模型、想要更强的隐私，请先安装分流器；它通过 dsh-addons 的 redaction 包使用这个代理的脱敏核心，安装时一起装上。跑不动的话，单用这个代理也能多一层隐私保护。
 
 > **状态：** 0.1.0，尚未发布到 npm。已在真实的 DeepSeek Chat Completions API 上验证（2026-10-08，见下文）；OpenAI、Anthropic 以及 Claude Code 等真实客户端尚未验证。
 
@@ -60,7 +60,7 @@ docker run --rm -p 127.0.0.1:8787:8787 -e REDACTION_PROXY_AUTH_TOKEN redaction-p
 
 客户端在 `x-redaction-proxy-token` 请求头中带上令牌：Claude Code 用 `ANTHROPIC_CUSTOM_HEADERS="x-redaction-proxy-token: $REDACTION_PROXY_AUTH_TOKEN"`；OpenAI 和 Anthropic SDK 用默认请求头选项（Python 的 `default_headers`、TypeScript 的 `defaultHeaders`）。
 
-配置文件：加上 `-v "$PWD/redaction.json:/redaction.json:ro"`，并在末尾加 `--config /redaction.json`。人名模型：用 `--build-arg NAME_MODEL=1` 构建，并加上 `-v ~/models/nym:/models:ro -e REDACTION_PROXY_NAME_MODEL_DIR=/models`。
+配置文件 `redaction.toml`（或 `.json`）：加上 `-v "$PWD/redaction.toml:/redaction.toml:ro"`，并在末尾加 `--config /redaction.toml`。人名模型：用 `--build-arg NAME_MODEL=1` 构建，并加上 `-v ~/models/nym:/models:ro -e REDACTION_PROXY_NAME_MODEL_DIR=/models`。
 
 ### npx（首次发布到 npm 之后）
 
@@ -94,7 +94,7 @@ curl http://127.0.0.1:8787/v1/chat/completions \
   -d '{"model":"gpt-4o-mini","messages":[{"role":"user","content":"给 lin@example.test 发封邮件"}]}'
 ```
 
-用 `node lib/cli.js --config redaction.toml` 指定 TOML 或 JSON 配置文件（按扩展名判断格式，两者的键相同），环境变量可以覆盖它。每个选项及默认值见 [config.example.toml](config.example.toml)。上游 API 密钥永远不写进文件；出现不认识的键时启动失败。
+用 `node lib/cli.js --config redaction.toml` 指定 TOML 或 JSON 配置文件（`.toml` 读作 TOML；`.json` 或没有扩展名（比如 `/dev/stdin`）读作 JSON；其他扩展名会让启动失败；两者的键相同），环境变量可以覆盖它。每个选项及默认值见 [config.example.toml](config.example.toml)。上游 API 密钥永远不写进文件。出现不认识的键或类型不对的值（用 `"true"` 代替 `true`）时启动失败；错误信息只在键或值是简短标识符时才引用它，所以误贴进文件的 token 不会被打印出来。
 
 | 键 | 默认值 | 说明 |
 | --- | --- | --- |
@@ -105,14 +105,14 @@ curl http://127.0.0.1:8787/v1/chat/completions \
 | `openaiUpstream` | `https://api.openai.com` | Chat Completions 和 Responses 的上游。 |
 | `anthropicUpstream` | `https://api.anthropic.com` | Anthropic Messages 的上游。 |
 | `allowInsecureUpstream` | `false` | 允许以明文 `http://` 连接非本机的上游；API 密钥会以明文传输。 |
-| `redaction.terms` | 无 | 需要脱敏的人名等词语，不区分大小写；首尾是英文字母或数字的词语只匹配完整的词（`Lin` 不匹配 `Linux`），中日韩词语在文本中照常匹配。词语若也是工具或参与者 `name` 中的完整单词（`nimbus_deploy`），提到它的请求都会被拒绝（422），因为 `name` 字段不脱敏。 |
+| `redaction.terms` | 无 | 需要脱敏的人名等词语，不区分大小写；首尾是英文字母或数字的词语只匹配完整的词（`Lin` 不匹配 `Linux`），中日韩词语在文本中照常匹配。词语若也是工具或参与者 `name` 中的完整单词（`nimbus_deploy`），提到它的请求默认以 422 拒绝，因为 `name` 字段不脱敏。 |
 | `redaction.projectNames` | 无 | 需要脱敏的项目代号。 |
 | `redaction.allowlist` | `git@github.com`、`noreply@github.com` | 永不脱敏的值。 |
 | `redaction.rules` | 除 `card`、`entropy` 外全部 | 启用的内置规则。以 `card-strict`、`entropy-strict` 取代 `card`、`entropy`：不会把一串数字切成两半，也放过以文件名为键的哈希。 |
 | `nameModel` | 无 | 开启[实验性的人名模型](#可选的人名模型实验性)。默认失败时放行：模型在某个请求上失败时，该请求只用规则脱敏后发出，日志那一行注明 `nameModel failed`；除非 `nameModel.required` 设为 `true`（此时返回 503，不发出）。 |
 | `screen` | `replace` | 遇到控制字符时替换成可见字符（`replace`）或拒绝请求（`refuse`）。 |
 | `debugMasked` | `false` | 在日志里记录脱敏后的请求体，代理不脱敏的字段（`metadata`、图片 URL、base64 数据）原样记录。仅供调试。 |
-| `sendWhenMaskFails` | `false` | 脱敏失败时仍发出请求，不以 422 拒绝：脱敏后仍有检测到的值时发出部分脱敏的请求体，无法脱敏时发出未脱敏的请求体。这会把检测到的值发给服务商。响应会带 `x-redaction-proxy-mask-failed: 1` 头，日志列出字段与类别，不含值。环境变量：`REDACTION_PROXY_SEND_WHEN_MASK_FAILS`（`1` 或 `0`）。 |
+| `sendWhenMaskFails` | `false` | 脱敏失败时仍发出请求，不以 422 拒绝：脱敏后仍有检测到的值时发出部分脱敏的请求体，无法脱敏时发出未脱敏的请求体。这会把检测到的值发给服务商。响应会带 `x-redaction-proxy-mask-failed: 1` 头，日志列出字段与类别或错误代码，不含值。环境变量：`REDACTION_PROXY_SEND_WHEN_MASK_FAILS`（`1` 或 `0`）。 |
 | `knownOriginalsTtlSeconds` | `86400`（24 小时） | 检测到的值为客户端之后的请求保留的秒数，从最后一次检测起算；`0` 表示什么都不记。环境变量：`REDACTION_PROXY_KNOWN_ORIGINALS_TTL_SECONDS`。 |
 | `toolRestore.categories` | `PATH`、`TERM`、`PROJECT` | 还原进工具调用参数的占位符类别；其他类别以占位符原样交给工具。`"*"` 还原所有类别。环境变量：`REDACTION_PROXY_TOOL_RESTORE_CATEGORIES`（逗号分隔）。 |
 | `toolRestore.tools` | 无 | 按工具名（去掉首尾空白、不区分大小写）指定还原进该工具参数的类别，替换该工具的 `categories`，例如 `{"git_commit": ["PATH", "EMAIL"]}`；`"*"` 还原所有类别。 |
@@ -260,17 +260,17 @@ REDACTION_PROXY_NAME_MODEL_DIR=$HOME/models/nym node lib/cli.js
 
 ## 保护范围
 
-- **保护什么：** 代理检测到的值，云端服务商一律收不到，只看到占位符。
+- **保护什么：** 默认下，代理检测到的值云端服务商收不到，只看到占位符（开启 `sendWhenMaskFails` 时，脱敏失败的请求会连同该值发出）。
 - **不保护什么：** 值在你的电脑上还原之后，工具怎么使用它不在代理的范围内。检测器漏掉的内容原样发出，见[它防不了什么](#它防不了什么)和[完整限制清单](docs/DETAILS.md#17-完整限制清單)。
 - **两层：** 请求中检测到的值在整个请求中脱敏，脱敏后若仍在请求里，请求默认以 422 拒绝；`sendWhenMaskFails` 可关闭这项拒绝，连同该值发出请求。跨请求的记忆只是尽力而为的额外脱敏：从不拒绝请求，记住的值粘在其他文字中或换了写法时，可能原样发出。
 - **做不到什么：** 需要用到被脱敏的值本身的任务，比如取出 email 的域名或转换一把密钥：模型只看到 `⟦EMAIL_1⟧`。
-- **绝不能离开电脑的内容**应改由本地模型回答，比如通过把这类对话轮次留在本地的路由器（[dsh-privacy-router](https://github.com/PersonalAssistanceHsin/dsh-privacy-router)）。
+- **绝不能离开电脑的内容**应改由本地模型回答，比如通过把这类对话轮次留在本地的分流器（[dsh-privacy-router](https://github.com/PersonalAssistanceHsin/dsh-privacy-router)）。
 
 ## 它防不了什么
 
 - **语义。** 云端仍能读到占位符周围的全部内容：`⟦PATH_1⟧/clients/acme-layoffs.md` 照样透露很多。
 - **人名、地址、病情、薪资**，除非你写进 `terms` 或人名模型识别出来。地址是自由文本，没有固定格式或关键词，所以没有地址规则。
-- **图片、PDF 等 base64 文件（纯文本文档的内容照常脱敏）、音频、`url` 字段、`metadata`、`stop` 序列、`name` 字段（工具名与参与者名）、带签名的 thinking。** 这些原样转发且不扫描，JSON 对象的键也一样：在被脱敏的文本中检测到的值如果也出现在其中，整个请求以 422 拒绝；只出现在这些地方的值则原样发出。只接受 API 枚举值的字段（`role`、`type`、`status`、`tool_choice` 等）在值像枚举值（例如 `assistant`）时不检查，但 `metadata` 下照常检查。回传的工具调用输入不论键名都照常脱敏，所以还原进名为 `type`、`name`、`data` 的工具参数的值会再被脱敏，不会被拒绝。
+- **图片、PDF 等 base64 文件（纯文本文档的内容照常脱敏）、音频、`url` 字段、`metadata`、`stop` 序列、`name` 字段（工具名与参与者名）、带签名的 thinking。** 这些原样转发且不扫描，JSON 对象的键也一样：在被脱敏的文本中检测到的值如果也出现在其中，整个请求默认以 422 拒绝；只出现在这些地方的值则原样发出。只接受 API 枚举值的字段（`role`、`type`、`status`、`tool_choice` 等）在值像枚举值（例如 `assistant`）时不检查，但 `metadata` 下照常检查。回传的工具调用输入不论键名都照常脱敏，所以还原进名为 `type`、`name`、`data` 的工具参数的值会再被脱敏，不会被拒绝。
 - **少见的写法。** 有些拆开或编码过的写法识别不了，比如带空格的 `name @ domain`、`name at domain`、小写的 IBAN、两次百分号编码的值。与 API 字段名完全相同的密码（`metadata`、`input`、`model`、`temperature` 等）永远不会被脱敏。
 - **Cursor**，以及任何从自家服务器发请求的工具。
 - **本机上的其他程序。** 代理默认只监听 `127.0.0.1`；没设 `authToken` 时，本机上的任何程序都能使用它。网页的请求以 403 拒绝，除非来源（Origin）是本机 `http(s)` 网页或列在 `allowedOrigins` 中；指定其他主机名的请求（DNS rebinding）也以 403 拒绝。

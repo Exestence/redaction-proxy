@@ -13,10 +13,10 @@
 | | 這個代理 | [dsh-privacy-router](https://github.com/PersonalAssistanceHsin/dsh-privacy-router) |
 | --- | --- | --- |
 | 需要本機模型 | 不需要 | 需要（由它回答私密的輪次） |
-| 什麼會送到雲端 | 每個請求，遮罩後送出 | 只有判為公開的輪次，遮罩後送出；私密的輪次留在你的電腦 |
+| 什麼會送到雲端 | 每個請求，遮罩後送出 | 只有判為公開的輪次，遮罩後送出；判為私密的輪次留在你的電腦 |
 | 適用 | 任何 OpenAI 或 Anthropic 相容的用戶端 | 只限 DeepSeek Harness（dsh） |
 
-跑得動本機模型、想要更強的隱私，請先安裝分流器；它已經內含這個代理的遮罩核心。跑不動的話，單用這個代理也能多一層隱私保護。
+跑得動本機模型、想要更強的隱私，請先安裝分流器；它透過 dsh-addons 的 redaction 套件使用這個代理的遮罩核心，安裝時一起裝上。跑不動的話，單用這個代理也能多一層隱私保護。
 
 > **狀態：** 0.1.0，尚未發布到 npm。已對真實的 DeepSeek Chat Completions API 驗證（2026-10-08，見下方）；OpenAI、Anthropic 與 Claude Code 等真實用戶端尚未驗證。
 
@@ -60,7 +60,7 @@ docker run --rm -p 127.0.0.1:8787:8787 -e REDACTION_PROXY_AUTH_TOKEN redaction-p
 
 用戶端在 `x-redaction-proxy-token` 標頭帶上權杖：Claude Code 用 `ANTHROPIC_CUSTOM_HEADERS="x-redaction-proxy-token: $REDACTION_PROXY_AUTH_TOKEN"`；OpenAI 與 Anthropic SDK 用預設標頭選項（Python 的 `default_headers`、TypeScript 的 `defaultHeaders`）。
 
-設定檔：加上 `-v "$PWD/redaction.json:/redaction.json:ro"`，並在最後加 `--config /redaction.json`。人名模型：以 `--build-arg NAME_MODEL=1` 建置，並加上 `-v ~/models/nym:/models:ro -e REDACTION_PROXY_NAME_MODEL_DIR=/models`。
+設定檔 `redaction.toml`（或 `.json`）：加上 `-v "$PWD/redaction.toml:/redaction.toml:ro"`，並在最後加 `--config /redaction.toml`。人名模型：以 `--build-arg NAME_MODEL=1` 建置，並加上 `-v ~/models/nym:/models:ro -e REDACTION_PROXY_NAME_MODEL_DIR=/models`。
 
 ### npx（第一次發布到 npm 之後）
 
@@ -94,7 +94,7 @@ curl http://127.0.0.1:8787/v1/chat/completions \
   -d '{"model":"gpt-4o-mini","messages":[{"role":"user","content":"寄信給 lin@example.test"}]}'
 ```
 
-用 `node lib/cli.js --config redaction.toml` 指定 TOML 或 JSON 設定檔（依副檔名判斷格式，兩者的鍵相同），環境變數可覆寫。每個選項與預設值見 [config.example.toml](config.example.toml)。上游 API 金鑰永遠不放在檔案裡；不認得的鍵會讓啟動失敗。
+用 `node lib/cli.js --config redaction.toml` 指定 TOML 或 JSON 設定檔（`.toml` 讀成 TOML；`.json` 或沒有副檔名（例如 `/dev/stdin`）讀成 JSON；其他副檔名會讓啟動失敗；兩者的鍵相同），環境變數可覆寫。每個選項與預設值見 [config.example.toml](config.example.toml)。上游 API 金鑰永遠不放在檔案裡。不認得的鍵或型別不對的值（以 `"true"` 代替 `true`）會讓啟動失敗；錯誤訊息只在鍵或值是簡短識別字時才引用它，所以誤貼進檔案的 token 不會被印出。
 
 | 鍵 | 預設 | 說明 |
 | --- | --- | --- |
@@ -105,14 +105,14 @@ curl http://127.0.0.1:8787/v1/chat/completions \
 | `openaiUpstream` | `https://api.openai.com` | Chat Completions 與 Responses 的上游。 |
 | `anthropicUpstream` | `https://api.anthropic.com` | Anthropic Messages 的上游。 |
 | `allowInsecureUpstream` | `false` | 允許以明文 `http://` 連到非本機的上游；API 金鑰會以明文傳送。 |
-| `redaction.terms` | 無 | 要遮的人名等字詞，不分大小寫；首尾是英文字母或數字的字詞只比對完整的詞（`Lin` 不遮 `Linux`），中日韓字詞在文字中照常比對。字詞若也是工具或參與者 `name` 中的完整單字（`nimbus_deploy`），提到它的請求都會被拒絕（422），因為 `name` 欄位不遮罩。 |
+| `redaction.terms` | 無 | 要遮的人名等字詞，不分大小寫；首尾是英文字母或數字的字詞只比對完整的詞（`Lin` 不遮 `Linux`），中日韓字詞在文字中照常比對。字詞若也是工具或參與者 `name` 中的完整單字（`nimbus_deploy`），提到它的請求預設以 422 拒絕，因為 `name` 欄位不遮罩。 |
 | `redaction.projectNames` | 無 | 要遮的專案代號。 |
 | `redaction.allowlist` | `git@github.com`、`noreply@github.com` | 永遠不遮的值。 |
 | `redaction.rules` | `card`、`entropy` 以外全部 | 要啟用的內建規則。以 `card-strict`、`entropy-strict` 取代 `card`、`entropy`：不會把一串數字切成兩半，也放過以檔名為鍵的雜湊。 |
 | `nameModel` | 無 | 開啟[實驗性的人名模型](#選用的人名模型實驗性)。預設失敗時放行：模型在某個請求上失敗時，該請求只以規則遮罩送出，日誌那一行註明 `nameModel failed`；除非 `nameModel.required` 設為 `true`（此時回 503，不送出）。 |
 | `screen` | `replace` | 遇到控制字元時改成可見字元（`replace`）或拒絕請求（`refuse`）。 |
 | `debugMasked` | `false` | 在日誌中記錄遮罩後的請求本文，代理不遮的欄位（`metadata`、圖片 URL、base64 資料）照原樣記錄。只供除錯。 |
-| `sendWhenMaskFails` | `false` | 遮罩失敗時仍送出請求，不以 422 拒絕：遮罩後仍有偵測到的值時送出部分遮罩的本文，無法遮罩時送出未遮罩的本文。這會把偵測到的值送給服務商。回應會帶 `x-redaction-proxy-mask-failed: 1` 標頭，日誌列出欄位與類別，不含值。環境變數：`REDACTION_PROXY_SEND_WHEN_MASK_FAILS`（`1` 或 `0`）。 |
+| `sendWhenMaskFails` | `false` | 遮罩失敗時仍送出請求，不以 422 拒絕：遮罩後仍有偵測到的值時送出部分遮罩的本文，無法遮罩時送出未遮罩的本文。這會把偵測到的值送給服務商。回應會帶 `x-redaction-proxy-mask-failed: 1` 標頭，日誌列出欄位與類別或錯誤代碼，不含值。環境變數：`REDACTION_PROXY_SEND_WHEN_MASK_FAILS`（`1` 或 `0`）。 |
 | `knownOriginalsTtlSeconds` | `86400`（24 小時） | 偵測到的值為用戶端之後的請求保留的秒數，從最後一次偵測起算；`0` 表示什麼都不記。環境變數：`REDACTION_PROXY_KNOWN_ORIGINALS_TTL_SECONDS`。 |
 | `toolRestore.categories` | `PATH`、`TERM`、`PROJECT` | 還原進工具呼叫參數的佔位符類別；其他類別以佔位符原樣交給工具。`"*"` 還原所有類別。環境變數：`REDACTION_PROXY_TOOL_RESTORE_CATEGORIES`（逗號分隔）。 |
 | `toolRestore.tools` | 無 | 依工具名稱（去掉前後空白、不分大小寫）指定還原進該工具參數的類別，取代該工具的 `categories`，例如 `{"git_commit": ["PATH", "EMAIL"]}`；`"*"` 還原所有類別。 |
@@ -260,17 +260,17 @@ REDACTION_PROXY_NAME_MODEL_DIR=$HOME/models/nym node lib/cli.js
 
 ## 保護範圍
 
-- **保護什麼：** 代理偵測到的值，雲端供應商一律收不到，只看到佔位符。
+- **保護什麼：** 預設下，代理偵測到的值雲端供應商收不到，只看到佔位符（開啟 `sendWhenMaskFails` 時，遮罩失敗的請求會連同該值送出）。
 - **不保護什麼：** 值在你的電腦上還原之後，工具怎麼使用它不在代理的範圍內。偵測器漏掉的內容照原樣送出，見[它不保護什麼](#它不保護什麼)與[完整限制清單](docs/DETAILS.md#17-完整限制清單)。
 - **兩層：** 請求中偵測到的值在整個請求中遮罩，遮罩後若仍在請求中，請求預設以 422 拒絕；`sendWhenMaskFails` 可關閉這項拒絕，連同該值送出請求。跨請求的記憶只是盡力而為的額外遮罩：從不拒絕請求，記住的值黏在其他文字中或換了寫法時，可能照原樣送出。
 - **做不到什麼：** 需要被遮值內容的任務，例如取出 email 的網域或轉換一把金鑰：模型只看到 `⟦EMAIL_1⟧`。
-- **絕不能離開電腦的內容**應改由本機模型回答，例如透過把這類對話輪次留在本機的路由器（[dsh-privacy-router](https://github.com/PersonalAssistanceHsin/dsh-privacy-router)）。
+- **絕不能離開電腦的內容**應改由本機模型回答，例如透過把這類對話輪次留在本機的分流器（[dsh-privacy-router](https://github.com/PersonalAssistanceHsin/dsh-privacy-router)）。
 
 ## 它不保護什麼
 
 - **語意。** 雲端仍讀得到佔位符周圍的一切：`⟦PATH_1⟧/clients/acme-layoffs.md` 依然透露很多。
 - **人名、地址、病況、薪資**，除非你列進 `terms` 或人名模型找到。地址是自由文字，沒有固定格式或關鍵詞，所以沒有地址規則。
-- **圖片、PDF 等 base64 檔案（純文字文件的內容照常遮罩）、音訊、`url` 欄位、`metadata`、`stop` 序列、`name` 欄位（工具與參與者名稱）、帶簽章的 thinking。** 這些原樣轉送且不掃描，JSON 物件的鍵也是：在被遮的文字中偵測到的值若也出現在其中，整個請求以 422 拒絕；只出現在這些地方的值則照原樣送出。只接受 API 列舉值的欄位（`role`、`type`、`status`、`tool_choice` 等）在值像列舉值（例如 `assistant`）時不檢查，但 `metadata` 底下照常檢查。回送的工具呼叫輸入不論鍵名都照常遮罩，所以還原進名為 `type`、`name`、`data` 的工具參數的值會再被遮罩，不會被拒絕。
+- **圖片、PDF 等 base64 檔案（純文字文件的內容照常遮罩）、音訊、`url` 欄位、`metadata`、`stop` 序列、`name` 欄位（工具與參與者名稱）、帶簽章的 thinking。** 這些原樣轉送且不掃描，JSON 物件的鍵也是：在被遮的文字中偵測到的值若也出現在其中，整個請求預設以 422 拒絕；只出現在這些地方的值則照原樣送出。只接受 API 列舉值的欄位（`role`、`type`、`status`、`tool_choice` 等）在值像列舉值（例如 `assistant`）時不檢查，但 `metadata` 底下照常檢查。回送的工具呼叫輸入不論鍵名都照常遮罩，所以還原進名為 `type`、`name`、`data` 的工具參數的值會再被遮罩，不會被拒絕。
 - **少見的寫法。** 有些拆開或編碼過的寫法抓不到，例如有空白的 `name @ domain`、`name at domain`、小寫的 IBAN、經兩次百分比編碼的值。與 API 欄位名稱完全相同的密碼（`metadata`、`input`、`model`、`temperature` 等）一律不遮。
 - **Cursor**，以及任何從自家伺服器發出請求的工具。
 - **你電腦上的其他程式。** 代理預設只綁定 `127.0.0.1`；沒設 `authToken` 時，你電腦上的任何程式都能使用它。網頁的請求以 403 拒絕，除非來源（Origin）是本機 `http(s)` 網頁或列在 `allowedOrigins`；指名其他主機名稱的請求（DNS rebinding）也以 403 拒絕。
