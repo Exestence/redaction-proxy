@@ -224,14 +224,16 @@ flowchart TD
 | 413 | 請求本文超過 64 MiB。 | 上限 |
 | 404 | POST 到代理不遮罩的路由（例如 `/v1/embeddings`），或 GET、POST 與 OPTIONS 預檢以外的方法。 | 方法與路徑 |
 | 422 | `screen: "refuse"` 且某段文字含控制字元、U+FFFD、孤立 surrogate 或 `⟦`/`⟧`。 | JSON 路徑與字元類別 |
-| 422 | **送出前外洩檢查**：遮罩後請求的任一字串或鍵中，仍找得到這個請求偵測到的某個原始值（原樣或 JSON 跳脫形式）。規則值在任何位置、不分 ASCII 大小寫都算（`LIN@EXAMPLE.TEST` 算 `lin@example.test`）。只由先前請求記住的值（第 8 節）不檢查。名稱模型的值與 `terms`、`projectNames` 的字面值：以空格分詞的文字只算完整單字（`Leeds` 裡的 `Lee`、`Hsinchu` 裡的 `Hsin` 不算），中日韓文字在任何位置都算；字面值不分 ASCII 大小寫，只有一個字的模型值不檢查。列舉欄位（`role`、`type` 等）的值像列舉值時不檢查，`metadata`、`stop` 底下與工具呼叫輸入中照常檢查，見第 8 節。 | 最多 5 個欄位路徑，各附所含值的類別 |
+| 422 | **送出前外洩檢查**：遮罩後請求的任一字串或鍵中，仍找得到這個請求偵測到的某個原始值（原樣或 JSON 跳脫形式）。規則值在任何位置、不分 ASCII 大小寫都算（`LIN@EXAMPLE.TEST` 算 `lin@example.test`）。只由先前請求記住的值（第 8 節）不檢查。名稱模型的值與 `terms`、`projectNames` 的字面值：以空格分詞的文字只算完整單字（`Leeds` 裡的 `Lee`、`Hsinchu` 裡的 `Hsin` 不算），中日韓文字在任何位置都算；字面值不分 ASCII 大小寫，只有一個字的模型值不檢查。列舉欄位（`role`、`type` 等）的值像列舉值時不檢查，`metadata`、`stop` 底下與工具呼叫輸入中照常檢查，見第 8 節。設定 `sendWhenMaskFails` 時不拒絕，改送出部分遮罩的本文，見下方。 | 最多 5 個欄位路徑，各附所含值的類別 |
 | 422 | 帶 `previous_response_id`，但代理沒有這個用戶端憑證的先前輸入（重啟、被擠出、從未經過代理，或屬於另一個用戶端）。 | 固定訊息 |
-| 422 | 與 `previous_response_id` 先前輸入合併後 `mask` 拋出 `RedactionError`。 | 錯誤代碼 |
+| 422 | 與 `previous_response_id` 先前輸入合併後 `mask` 拋出 `RedactionError`。設定 `sendWhenMaskFails` 時不拒絕，改送出原始本文，見下方。 | 錯誤代碼 |
 | 503 | 開啟人名模型且 `nameModel.required` 為 `true`，而模型在這個請求上推論失敗。不轉送。 | 固定訊息 |
 | 502 | 連不上上游。 | 網路錯誤代碼 |
 | 502 | 上游回 3xx 並帶 `Location`（重新導向）。代理不跟隨，不把請求送往別處；不帶 `Location` 的 `304` 照常轉回。 | 狀態碼 |
 
 外洩檢查會在以下情況觸發：偵測到的值也出現在不遮的欄位（第 5 節），或該值出現在較長的詞中間而未被遮。只出現在不遮欄位或物件鍵中、別處沒有出現的值，不會被偵測，照原樣送出。拒絕訊息只指出欄位，絕不含值：陣列索引照寫（`/messages/1/content`）；本身含有偵測值的鍵，以及不是小寫識別字（`[a-z][a-z0-9_]*`，最多 40 字元）的鍵，都寫成 `<key>`。拒絕時請求不會送出。
+
+**`sendWhenMaskFails`。** 預設 `false`，上面兩種 422（外洩檢查、`RedactionError`）照常拒絕。設為 `true` 時，外洩檢查找到的請求改送出部分遮罩的本文（遮得到的地方照常是佔位符，殘留的值照原樣），`mask` 拋出 `RedactionError` 的請求改送出原始本文。這會把偵測到的值送給服務商。兩種情況都在回應加上 `x-redaction-proxy-mask-failed: 1` 標頭，並在日誌記一行警告，寫出欄位路徑與類別（與拒絕訊息相同），或 `RedactionError` 的錯誤代碼，絕不含值；這類請求即使開了 `debugMasked` 也不記錄本文。回覆照常以這個請求的綁定還原；`RedactionError` 時沒有綁定，佔位符照原樣回給用戶端。這個開關不影響其他拒絕：`screen: "refuse"`、未知的 `previous_response_id`、來源、權杖、`Host`、大小檢查與上游重新導向照常拒絕；`nameModel.required` 維持原意（為 `true` 時回 503，否則只以規則遮罩後送出）。
 
 錯誤回應本文的格式：`{"error":{"type":"redaction_proxy_error","message":"..."}}`。
 
@@ -375,7 +377,9 @@ POST /v1/messages tool arguments: restored PATH_1 in read at /path
 POST /v1/messages tool arguments: kept by the tool restore policy KEY_1 in bash at /command
 ```
 
-`debugMasked`（或 `REDACTION_PROXY_DEBUG_MASKED=1`）會額外記錄每個遮罩後的請求本文。內容只有遮罩後的文字，但仍包含所有未被偵測到的內容，預設關閉。
+開啟 `sendWhenMaskFails` 時，遮罩失敗仍送出的請求另記一行 `warning: masking failed and the request was sent anyway (sendWhenMaskFails): …`，寫出欄位路徑與類別或錯誤代碼，不含值。
+
+`debugMasked`（或 `REDACTION_PROXY_DEBUG_MASKED=1`）會額外記錄每個遮罩後的請求本文（遮罩失敗仍送出的請求除外）。內容只有遮罩後的文字，但仍包含所有未被偵測到的內容，預設關閉。
 
 ## 11. 威脅模型
 
@@ -399,7 +403,7 @@ POST /v1/messages tool arguments: kept by the tool restore policy KEY_1 in bash 
 
 ## 12. 完整設定
 
-以 `--config 路徑`（`-c`）或 `REDACTION_PROXY_CONFIG` 指定 JSON 檔，環境變數覆寫檔案。不認得的鍵會讓啟動失敗；鍵名含 key 或 secret 時，錯誤訊息會提醒上游 API 金鑰應放環境變數。
+以 `--config 路徑`（`-c`）或 `REDACTION_PROXY_CONFIG` 指定設定檔，環境變數覆寫檔案。設定檔可以是 TOML（`.toml`）或 JSON（`.json`），依副檔名判斷，其他副檔名會讓啟動失敗；兩種格式的鍵名與巢狀結構相同（TOML 的 `[toolRestore]` 表或 `toolRestore.categories` 點號鍵，對應 JSON 的 `"toolRestore": {…}`），驗證也相同。語法錯誤會讓啟動失敗，訊息只寫檔案路徑（TOML 另寫行號與欄號）與錯誤種類，不引用檔案內容。不認得的鍵會讓啟動失敗；鍵名含 key 或 secret 時，錯誤訊息會提醒上游 API 金鑰應放環境變數。[config.example.toml](../config.example.toml) 列出每個選項、說明與預設值。
 
 ```json
 {
@@ -433,6 +437,7 @@ POST /v1/messages tool arguments: kept by the tool restore policy KEY_1 in bash 
 | `allowInsecureUpstream` | `REDACTION_PROXY_ALLOW_INSECURE_UPSTREAM=1` | `false` | 允許以明文 `http://` 連到非本機的上游。未設定時這種上游會讓啟動失敗，因為 API 金鑰會以明文傳送。 |
 | `screen` | `REDACTION_PROXY_SCREEN` | `replace` | `replace` 或 `refuse`，見第 9 節。 |
 | `debugMasked` | `REDACTION_PROXY_DEBUG_MASKED=1` | `false` | 記錄遮罩後的請求本文。 |
+| `sendWhenMaskFails` | `REDACTION_PROXY_SEND_WHEN_MASK_FAILS`（`1` 或 `0`） | `false` | 遮罩失敗時仍送出請求，不以 422 拒絕：外洩檢查找到殘留值時送出部分遮罩的本文，`mask` 拋出 `RedactionError` 時送出原始本文。這會把偵測到的值送給服務商。回應帶 `x-redaction-proxy-mask-failed: 1` 標頭，日誌記一行不含值的警告。檔案中只接受布林值，環境變數只接受 `1` 或 `0`，環境變數覆寫檔案。見[第 6 節](#6-拒絕與錯誤狀態碼)。 |
 | `knownOriginalsTtlSeconds` | `REDACTION_PROXY_KNOWN_ORIGINALS_TTL_SECONDS` | `86400` | 偵測到的值為之後的請求保留的秒數，從最後一次偵測起算；`0` 表示不記住。見[第 8 節](#已知原始值)。 |
 | `toolRestore.categories` | `REDACTION_PROXY_TOOL_RESTORE_CATEGORIES`（逗號分隔） | `PATH`、`TERM`、`PROJECT` | 還原進工具呼叫參數的類別，或 `"*"`（全部）；空字串代表都不還原。見[第 7 節](#工具參數的還原政策)。 |
 | `toolRestore.tools` | — | 無 | 依工具名稱（去掉前後空白、不分大小寫）比對的類別清單或 `"*"`，取代該工具的 `categories`。 |

@@ -84,7 +84,7 @@ curl http://127.0.0.1:8787/v1/chat/completions \
   -d '{"model":"gpt-4o-mini","messages":[{"role":"user","content":"email lin@example.test"}]}'
 ```
 
-Pass a JSON file with `node lib/cli.js --config redaction.json`; environment variables override it. Upstream API keys never go in the file, and an unknown key stops startup.
+Pass a TOML or JSON file with `node lib/cli.js --config redaction.toml` (the extension picks the format; both use the same keys); environment variables override it. [config.example.toml](config.example.toml) lists every option with its default. Upstream API keys never go in the file, and an unknown key stops startup.
 
 | Key | Default | Meaning |
 | --- | --- | --- |
@@ -102,6 +102,7 @@ Pass a JSON file with `node lib/cli.js --config redaction.json`; environment var
 | `nameModel` | none | Turns on the [experimental name model](#optional-name-model-experimental). It fails open: when the model fails on a request, the request goes out with rules-only masking and its log line says `nameModel failed`, unless `nameModel.required` is `true` (then 503, nothing sent). |
 | `screen` | `replace` | On control characters: replace them with visible stand-ins (`replace`) or refuse the request (`refuse`). |
 | `debugMasked` | `false` | Log each masked request body, including the fields the proxy does not mask (`metadata`, image URLs, base64 data) verbatim. For debugging only. |
+| `sendWhenMaskFails` | `false` | When masking fails, send the request anyway instead of refusing it with 422: partly masked when a detected value is still in it after masking, unmasked when masking cannot run. This sends detected values to the provider. The reply carries the header `x-redaction-proxy-mask-failed: 1`, and the log names the fields and categories, never the values. Environment: `REDACTION_PROXY_SEND_WHEN_MASK_FAILS` (`1` or `0`). |
 | `knownOriginalsTtlSeconds` | `86400` (24 hours) | Seconds a detected value stays remembered for the client's later requests, counted from its last detection; `0` remembers nothing. Environment: `REDACTION_PROXY_KNOWN_ORIGINALS_TTL_SECONDS`. |
 | `toolRestore.categories` | `PATH`, `TERM`, `PROJECT` | Placeholder categories restored into tool-call arguments; any other category reaches the tool as the placeholder. `"*"` restores every category. Environment: `REDACTION_PROXY_TOOL_RESTORE_CATEGORIES` (comma-separated). |
 | `toolRestore.tools` | none | Categories restored into one tool's arguments, by tool name (trimmed, in any case), replacing `categories` for that tool, such as `{"git_commit": ["PATH", "EMAIL"]}`; `"*"` restores every category. |
@@ -138,7 +139,7 @@ For clients that send no API key, the proxy adds one from two environment-only v
 | Long random strings | hex or base64, 32+ characters | `⟦ENTROPY_1⟧` |
 | Words you list | `terms`, `projectNames` | `⟦TERM_1⟧`, `⟦PROJECT_1⟧` |
 
-The same value gets the same placeholder throughout a request. If a value detected in a request is still in it after masking, the proxy refuses to send it (422) rather than leak it. Values a client's requests have detected, if at least 6 ASCII characters or 2 other characters long, are also remembered in memory per client credential for 24 hours after their last detection (`knownOriginalsTtlSeconds`) and masked where they stand alone in its later requests (a credential in any ASCII case), even once the context that detected them (`password: …`) is gone from the history. This memory is best-effort extra masking and never refuses a request: a remembered value glued to other characters (`xTr0ub4dor&3xy`), in a new spelling, or in a field the proxy does not rewrite is sent as is. Values found in your own messages or system prompt are kept apart from those found in tool output, so a large tool result cannot push out a password written there. The memory is bounded, so a local process that can reach the proxy can push values out by sending many requests; the proxy listens only on loopback by default and requires the auth token elsewhere. A snake_case value built only from API field words (`web_server`, `data_store`) is masked only in the request that bound it, so later requests can still name that field. Full-width digits, `＠`, and zero-width characters (U+200B–U+200D, U+2060, U+FEFF, soft hyphen) are folded first; other invisible characters (bidi marks, variation selectors) inside a value are not. Every rule: [technical details §3](docs/DETAILS.md#3-偵測規則).
+The same value gets the same placeholder throughout a request. If a value detected in a request is still in it after masking, the proxy refuses to send it (422) rather than leak it, unless `sendWhenMaskFails` is on. Values a client's requests have detected, if at least 6 ASCII characters or 2 other characters long, are also remembered in memory per client credential for 24 hours after their last detection (`knownOriginalsTtlSeconds`) and masked where they stand alone in its later requests (a credential in any ASCII case), even once the context that detected them (`password: …`) is gone from the history. This memory is best-effort extra masking and never refuses a request: a remembered value glued to other characters (`xTr0ub4dor&3xy`), in a new spelling, or in a field the proxy does not rewrite is sent as is. Values found in your own messages or system prompt are kept apart from those found in tool output, so a large tool result cannot push out a password written there. The memory is bounded, so a local process that can reach the proxy can push values out by sending many requests; the proxy listens only on loopback by default and requires the auth token elsewhere. A snake_case value built only from API field words (`web_server`, `data_store`) is masked only in the request that bound it, so later requests can still name that field. Full-width digits, `＠`, and zero-width characters (U+200B–U+200D, U+2060, U+FEFF, soft hyphen) are folded first; other invisible characters (bidi marks, variation selectors) inside a value are not. Every rule: [technical details §3](docs/DETAILS.md#3-偵測規則).
 
 ## How it works
 
@@ -154,7 +155,7 @@ flowchart TD
   S --> D["Detect: rules, your terms and projectNames, optional name model, values remembered for this client credential"]
   D --> E["Mask: each distinct value becomes ⟦CATEGORY_n⟧, numbered in text order"]
   E --> F{"Leak scan: is a value detected in this request still in it?"}
-  F -- "yes" --> F2["422 naming the fields, never the value; not forwarded"]
+  F -- "yes" --> F2["422 naming the fields, never the value; not forwarded (default)"]
   F -- "no" --> U["Cloud LLM, OpenAI or Anthropic compatible"]
   U --> R["Reply: whole JSON, or SSE field by field as it streams"]
   R --> G{"Where is the placeholder?"}
@@ -172,7 +173,7 @@ flowchart TD
 | Gate | Web pages are refused unless their origin is a loopback `http(s)` page or in `allowedOrigins`; without `authToken`, requests for other host names are refused too. It also requires a known route, and the token when `authToken` is set. | 403, 401, 404 or 413; nothing is forwarded. |
 | Detection | Format rules (emails, keys, IDs, phones, cards, IPs, hosts, home paths, long random strings), keyword context (`password: …`), the words you list, and the optional name model. | A value the detector misses is sent as is. |
 | Masking | The same value gets the same placeholder throughout the request. | A body that is not JSON or is nested too deep gets 400. A continuation whose `previous_response_id` the proxy does not hold gets 422. |
-| Leak scan | A value detected in this request that is still in it after masking blocks the request. API enum fields holding an enum value are not scanned; names and listed terms in space-separated scripts count only as whole words; CJK ones count anywhere. | 422; the request is not sent. |
+| Leak scan | A value detected in this request that is still in it after masking blocks the request. API enum fields holding an enum value are not scanned; names and listed terms in space-separated scripts count only as whole words; CJK ones count anywhere. | 422; the request is not sent. This refusal is the default; `sendWhenMaskFails` sends the request anyway and marks the reply. |
 | Memory | Values detected in earlier requests with the same client credential are masked where they stand alone, for 24 hours by default. Best effort: never refuses a request. | A remembered value glued to other text is sent as is. |
 | Restore | Placeholders in reply text are restored, except in Anthropic signed `thinking` blocks; inside a URL they stay; in tool-call arguments only the categories `toolRestore` allows are restored. A placeholder the model made up stays as written. | A tool may receive a placeholder instead of a value it needs; allow that category for that tool. A placeholder inside a URL stays whatever the category. |
 
@@ -251,7 +252,7 @@ Full tables: [held-out v2 results](bench/results/public-bench-held-out-v2.md). T
 
 - **Protected:** the cloud provider never receives a value the proxy detected; it sees only the placeholder.
 - **Not protected:** once a value is restored on your machine, what your tools do with it is outside the proxy. Anything the detector misses is sent as is; see [What it does not protect](#what-it-does-not-protect) and the [full list of limits](docs/DETAILS.md#17-完整限制清單).
-- **Two tiers.** A value detected in a request is masked throughout that request, and the request is refused (422) if the value is still in it after masking. Memory across requests is best-effort extra masking: it never refuses a request, and a remembered value glued into other text or in a new spelling may be sent as is.
+- **Two tiers.** A value detected in a request is masked throughout that request, and by default the request is refused (422) if the value is still in it after masking; `sendWhenMaskFails` switches that refusal off and sends the request with the value. Memory across requests is best-effort extra masking: it never refuses a request, and a remembered value glued into other text or in a new spelling may be sent as is.
 - **Does not work:** tasks that need the content of a masked value, such as the domain of an email or transforming a key: the model sees only `⟦EMAIL_1⟧`.
 - **Content that must never leave your machine** should be answered by a local model instead, for example through a router that keeps such turns local ([dsh-privacy-router](https://github.com/PersonalAssistanceHsin/dsh-privacy-router)).
 

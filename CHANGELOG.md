@@ -1,5 +1,10 @@
 # Changelog
 
+## Unreleased
+
+- Config files can be TOML (`.toml`) as well as JSON (`.json`), chosen by extension, with the same keys and validation; any other extension stops startup. A syntax error names the file and, for TOML, the line and column, without quoting the file. `config.example.toml` lists every option with its default. Adds the runtime dependency `smol-toml` (BSD-3-Clause).
+- `sendWhenMaskFails` (default `false`; environment `REDACTION_PROXY_SEND_WHEN_MASK_FAILS=1|0`): when on, a request whose masking fails is sent instead of refused with 422, partly masked when the leak scan finds a detected value still in it, unmasked when masking throws. This sends detected values to the provider. The reply carries `x-redaction-proxy-mask-failed: 1`, and one warning line names the fields and categories, never the values. Other refusals are unchanged.
+
 ## 0.1.0 — 2026-10-09
 
 First release.
