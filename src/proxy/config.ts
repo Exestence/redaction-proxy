@@ -101,6 +101,13 @@ export interface ProxyConfig {
    */
   maskLocalUsername: boolean
   /**
+   * The names `loadConfig` added to `redaction.terms` that the file did not list.
+   * They are masked like terms but never refuse a request: a user name such as
+   * `max` or `claude` also spells JSON keys (`max_tokens`) and model ids, which
+   * the proxy does not rewrite.
+   */
+  localUsernames: string[]
+  /**
    * When masking fails, send the request anyway instead of refusing it with
    * 422: the partly masked body when the leak scan finds a detected value
    * still present, the original body when masking throws. Off by default.
@@ -372,8 +379,8 @@ export function loadConfig(path: string | undefined, env: NodeJS.ProcessEnv, use
   const maskLocalUsername = envFlag(env, 'REDACTION_PROXY_MASK_LOCAL_USERNAME', fileBoolean(file.maskLocalUsername ?? true, 'maskLocalUsername'))
   const redaction = { rules: [...PROXY_DEFAULT_RULES], ...table(file.redaction, 'redaction') } as RulesRedactionConfig
   resolveRulesConfig(redaction)
-  const names = maskLocalUsername && user !== undefined ? localUsernames(user) : []
-  if (names.length > 0) redaction.terms = [...new Set([...redaction.terms ?? [], ...names])]
+  const names = (maskLocalUsername && user !== undefined ? localUsernames(user) : []).filter(name => !(redaction.terms ?? []).includes(name))
+  if (names.length > 0) redaction.terms = [...redaction.terms ?? [], ...names]
   const config: ProxyConfig = {
     port,
     host,
@@ -387,6 +394,7 @@ export function loadConfig(path: string | undefined, env: NodeJS.ProcessEnv, use
     knownOriginalsTtlSeconds,
     sendWhenMaskFails,
     maskLocalUsername,
+    localUsernames: names,
   }
   const model = nameModel(file.nameModel, env.REDACTION_PROXY_NAME_MODEL_DIR)
   if (model !== undefined) config.nameModel = model

@@ -1579,10 +1579,10 @@ describe('placeholders kept in tool calls and resent', () => {
 
 describe('the local user name', () => {
   // Synthetic accounts; the tests never read the real one.
-  const withUser = (username: string): Promise<void> => start({
-    redaction: loadConfig(undefined, {}, { username, homedir: `/Users/${username}` }).redaction,
-    toolRestore: { categories: DEFAULT_TOOL_RESTORE_CATEGORIES, tools: new Map() },
-  })
+  const withUser = (username: string): Promise<void> => {
+    const { redaction, localUsernames } = loadConfig(undefined, {}, { username, homedir: `/Users/${username}` })
+    return start({ redaction, localUsernames, toolRestore: { categories: DEFAULT_TOOL_RESTORE_CATEGORIES, tools: new Map() } })
+  }
   afterAll(() => start())
 
   it('is masked bare and inside project-directory names, and restored into tool arguments', async () => {
@@ -1596,11 +1596,28 @@ describe('the local user name', () => {
       const term = placeholders(entry.raw).find(found => found.startsWith('⟦TERM_'))!
       return { json: { id: 'm', type: 'message', role: 'assistant', content: [{ type: 'text', text: `Hi ${term}` }, { type: 'tool_use', id: 't', name: 'Bash', input: { command: `ls /tmp/-Users-${term}-project` } }] } }
     }
-    const body = await (await post('/v1/messages', { model: 'c', max_tokens: 1, system: JSON.stringify(context), messages: [{ role: 'user', content: 'Where am I?' }] }, { 'x-api-key': 'k' })).json() as any
+    const body = await (await post('/v1/messages', { model: 'c', max_tokens: 1, safeguards: [{ classifier_context: context }], messages: [{ role: 'user', content: 'Where am I?' }] }, { 'x-api-key': 'k' })).json() as any
     expect(seen[0]!.raw).not.toMatch(/fictionaluser/i)
-    expect(seen[0]!.body.system).toContain('-Users-⟦TERM_1⟧-project')
+    expect(seen[0]!.body.safeguards[0].classifier_context).toEqual({
+      user_identity: '⟦TERM_1⟧',
+      live_cwd: '/private/tmp/claude-501/-Users-⟦TERM_1⟧-project/abc/scratchpad',
+      trusted_directories: [expect.stringMatching(/^⟦(PATH|TERM)_1⟧/)],
+    })
     expect(body.content[0].text).toBe('Hi fictionaluser')
     expect(body.content[1].input.command).toBe('ls /tmp/-Users-fictionaluser-project')
+  })
+
+  it('never refuses a request over a user name that also spells a key, a model id, or a tool name', async () => {
+    reply = () => ({ json: { content: [] } })
+    for (const username of ['max', 'claude', 'bash']) {
+      await withUser(username)
+      const res = await post('/v1/messages', {
+        model: 'claude-haiku-5-5', max_tokens: 1, tools: [{ name: 'bash', input_schema: { type: 'object' } }],
+        messages: [{ role: 'user', content: `ask ${username} about it` }],
+      }, { 'x-api-key': 'k' })
+      expect(res.status, username).toBe(200)
+      expect(seen.at(-1)!.body.messages[0].content, username).toBe('ask ⟦TERM_1⟧ about it')
+    }
   })
 
   it('leaves the word node alone when the proxy runs as the container user node', async () => {

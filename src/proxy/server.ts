@@ -1269,7 +1269,8 @@ export function createProxyServer(
       ;(slot.parent as Record<string | number, string>)[slot.key] = masked
     })
     const clientTexts = new Set(all.filter((_, at) => isClient(at)))
-    // A spelling only memory supplied (as written, JSON-escaped, or a credential in another case) is masked but never refused.
+    // A spelling only memory supplied (as written, JSON-escaped, or a credential in another case) is masked but never refused, nor is the local user name.
+    const usernames = new Set(config.localUsernames.map(foldAsciiCase))
     const rememberedKeys = new Set([...known ?? []].filter(([, category]) => category === 'KEY').map(([original]) => foldAsciiCase(original)))
     const onlyRemembered = (original: string): boolean => {
       const plain = escaped.get(original) ?? original
@@ -1306,7 +1307,7 @@ export function createProxyServer(
       const original = text.slice(span.start, span.end)
       if (clientTexts.has(text)) clientBound.add(span.id)
       if (span.seq >= priorTexts.length) stats.masked[category] = (stats.masked[category] ?? 0) + 1
-      if (onlyRemembered(original) || isPart(text, span.start, span.end)) continue
+      if (onlyRemembered(original) || isPart(text, span.start, span.end) || (category === 'TERM' && usernames.has(foldAsciiCase(escaped.get(original) ?? original)))) continue
       bound.set(original, category)
       if (MODEL_CATEGORIES.has(category)) modelValues.add(original)
     }
