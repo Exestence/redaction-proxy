@@ -67,7 +67,12 @@ describe('config file formats', () => {
   })
 
   it('refuses a file that is neither .toml nor .json', () => {
-    expect(() => loadConfig(file('config.yaml', 'port: 1'), {})).toThrow(/config .*config\.yaml: unsupported file extension; use \.toml or \.json/)
+    expect(() => loadConfig(file('config.yaml', 'port: 1'), {})).toThrow(/config .*config\.yaml: unsupported file extension; use \.toml, \.json, or none for JSON/)
+  })
+
+  it('reads a path without an extension as JSON', () => {
+    expect(loadConfig(file('config', '{"port": 9002}'), {}).port).toBe(9002)
+    expect(() => loadConfig(file('bare-toml', 'port = 9002'), {})).toThrow(/bare-toml: invalid JSON$/)
   })
 
   it('reports a TOML syntax error by path, line, and column without quoting the file', () => {
@@ -88,6 +93,62 @@ describe('config file formats', () => {
 
   it('refuses a file whose top level is not a table', () => {
     expect(() => loadConfig(file('array.json', '[]'), {})).toThrow('must hold an object')
+  })
+})
+
+describe('tables', () => {
+  it.each(['redaction', 'toolRestore', 'nameModel'])('refuses a TOML date or a JSON number as %s', key => {
+    expect(() => loadConfig(file(`${key}-date.toml`, `${key} = 1979-05-27`), {})).toThrow(`${key} must be a table (a JSON object), not <date>`)
+    expect(() => loadConfig(file(`${key}-number.json`, `{"${key}": 7}`), {})).toThrow(`${key} must be a table (a JSON object), not <number>`)
+    expect(() => loadConfig(file(`${key}-array.json`, `{"${key}": []}`), {})).toThrow(`${key} must be a table (a JSON object), not <array>`)
+    expect(() => loadConfig(file(`${key}-string.json`, `{"${key}": "a b"}`), {})).toThrow(`${key} must be a table (a JSON object), not <value>`)
+  })
+
+  it('refuses a TOML date as toolRestore.tools, and as nameModel when the environment sets its directory', () => {
+    expect(() => loadConfig(file('tools-date.toml', '[toolRestore]\ntools = 1979-05-27'), {})).toThrow('toolRestore.tools must be a table')
+    expect(() => loadConfig(file('model-date.toml', 'nameModel = 1979-05-27'), { REDACTION_PROXY_NAME_MODEL_DIR: '/models/nym' })).toThrow('nameModel must be a table')
+  })
+})
+
+describe('error messages', () => {
+  const SECRET = 'sk-fictional0123456789abcdefABCDEF'
+
+  it('name a key that is not a short identifier as <key>', () => {
+    const messages = [
+      { [SECRET]: 1 },
+      { redaction: { [SECRET]: 1 } },
+      { toolRestore: { [SECRET]: 1 } },
+      { toolRestore: { tools: { [SECRET]: ['NOPE'] } } },
+      { nameModel: { dir: '/models/nym', [SECRET]: 1 } },
+    ].map(content => {
+      try {
+        loadConfig(file('secret-key.json', JSON.stringify(content)), {})
+      } catch (error) {
+        return (error as Error).message
+      }
+      return 'loaded'
+    })
+    for (const message of messages) {
+      expect(message).toMatch(/<key>|<tool>/)
+      expect(message).not.toContain('fictional')
+    }
+    expect(() => loadConfig(file('short-secret-key.json', '{"sk-short": 1}'), {})).toThrow('config: unknown key <key>')
+  })
+
+  it('name a rejected value by its type unless it is a short identifier', () => {
+    expect(() => loadConfig(file('rule.json', JSON.stringify({ redaction: { rules: [SECRET] } })), {})).toThrow('RulesRedactionConfig: unknown rule <value>')
+    expect(() => loadConfig(file('rule-num.json', '{"redaction": {"rules": [5]}}'), {})).toThrow('RulesRedactionConfig: unknown rule <number>')
+    expect(() => loadConfig(file('category.json', JSON.stringify({ toolRestore: { categories: [SECRET] } })), {})).toThrow('toolRestore.categories: unknown category <value>;')
+    expect(() => loadConfig(file('category-obj.json', '{"toolRestore": {"categories": [{"a": 1}]}}'), {})).toThrow('toolRestore.categories: unknown category <object>;')
+    expect(() => loadConfig(file('model-category.json', JSON.stringify({ nameModel: { dir: '/models/nym', categories: [SECRET] } })), {})).toThrow('nameModel: unknown category <value>')
+  })
+})
+
+describe('booleans', () => {
+  it.each(['debugMasked', 'allowInsecureUpstream'])('accept only true or false for %s', key => {
+    expect(() => loadConfig(file(`${key}.toml`, `${key} = "true"`), {})).toThrow(`${key} must be true or false`)
+    expect(() => loadConfig(file(`${key}.json`, `{"${key}": 1}`), {})).toThrow(`${key} must be true or false`)
+    expect(() => loadConfig(file(`${key}-ok.toml`, `${key} = true`), {})).not.toThrow()
   })
 })
 

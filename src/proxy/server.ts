@@ -191,7 +191,7 @@ const EMPTY_REGISTRY: RedactionRegistry = {
   subset: () => EMPTY_REGISTRY,
 }
 
-/** Response header set to `1` on a reply to a request sent although its masking failed. */
+/** Response header set to `1` on every reply, relayed or written by the proxy, to a request sent although its masking failed. */
 const MASK_FAILED_HEADER = 'x-redaction-proxy-mask-failed'
 
 /**
@@ -1224,7 +1224,11 @@ export function createProxyServer(
     const maskFailed = masked?.maskFailed
     // A body sent although masking failed holds originals, which the log never receives.
     if (outgoing !== undefined && config.debugMasked && maskFailed === undefined) log(`masked ${path}: ${outgoing}`)
-    if (maskFailed !== undefined) log(`${req.method} ${path} warning: masking failed and the request was sent anyway (sendWhenMaskFails): ${maskFailed}`)
+    if (maskFailed !== undefined) {
+      log(`${req.method} ${path} warning: masking failed and the request is being sent anyway (sendWhenMaskFails): ${maskFailed}`)
+      // Set on the response itself, so a reply the proxy writes after the send, such as a 502, carries it too.
+      res.setHeader(MASK_FAILED_HEADER, '1')
+    }
 
     const abort = new AbortController()
     res.on('close', () => abort.abort())
@@ -1244,9 +1248,9 @@ export function createProxyServer(
     // The proxy, not the upstream, decides which browser origins may read the reply.
     const out: Record<string, string> = { ...cors }
     upstream.headers.forEach((value, name) => {
-      if (!HOP.has(name) && !name.startsWith('access-control-')) out[name] = value
+      // Only the proxy reports a failed mask, so an upstream's copy of its header is dropped.
+      if (!HOP.has(name) && !name.startsWith('access-control-') && name !== MASK_FAILED_HEADER) out[name] = value
     })
-    if (maskFailed !== undefined) out[MASK_FAILED_HEADER] = '1'
     const remember = (id: string): void => {
       if (masked === undefined) return
       setNewest(continuations, `${client}:${id}`, { texts: masked.texts, userTexts: masked.userTexts }, CONTINUATIONS_MAX)
@@ -1320,7 +1324,7 @@ export function createProxyServer(
     const path = (req.url ?? '/').split('?')[0] ?? '/'
     const api = ROUTES[path]
     const origin = req.headers.origin
-    const cors: Record<string, string> = origin === undefined ? {} : { 'access-control-allow-origin': origin, 'access-control-expose-headers': 'x-redaction-proxy-mask-failed', vary: 'origin' }
+    const cors: Record<string, string> = origin === undefined ? {} : { 'access-control-allow-origin': origin, 'access-control-expose-headers': MASK_FAILED_HEADER, vary: 'origin' }
     const fail = (status: number, message: string, headers: Record<string, string> = {}): void => {
       log(`${req.method} ${path} -> ${status} refused: ${message}`)
       if (res.headersSent) {

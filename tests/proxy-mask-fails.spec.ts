@@ -19,6 +19,8 @@ const HEADER = 'x-redaction-proxy-mask-failed'
 let upstream: Server
 let upstreamPort = 0
 let received: Array<{ headers: IncomingHttpHeaders, raw: string }> = []
+// What the upstream answers next: the default completion, a redirect, or a reply carrying the proxy's own header.
+let reply: 'ok' | 'redirect' | 'spoof' = 'ok'
 
 beforeAll(async () => {
   upstream = createServer((req, res) => {
@@ -27,7 +29,8 @@ beforeAll(async () => {
     req.on('data', (part: string) => { raw += part })
     req.on('end', () => {
       received.push({ headers: req.headers, raw })
-      res.writeHead(200, { 'content-type': 'application/json' })
+      if (reply === 'redirect') return void res.writeHead(302, { location: 'https://elsewhere.example.test/' }).end()
+      res.writeHead(200, { 'content-type': 'application/json', ...reply === 'spoof' ? { [HEADER]: '1' } : {} })
       res.end(JSON.stringify({ choices: [{ index: 0, message: { role: 'assistant', content: 'Wrote to ⟦EMAIL_1⟧.' } }] }))
     })
   })
@@ -39,6 +42,7 @@ afterAll(() => new Promise(resolve => upstream.close(resolve)))
 
 beforeEach(() => {
   received = []
+  reply = 'ok'
 })
 
 async function withProxy(env: Record<string, string>, run: (base: string, logs: string[]) => Promise<void>): Promise<void> {
@@ -82,6 +86,25 @@ describe('a detected value still present after masking', () => {
       expect(warnings).toHaveLength(1)
       expect(warnings[0]).toContain('/metadata/owner (EMAIL)')
       for (const line of logs) expect(line).not.toContain(EMAIL)
+    })
+  })
+
+  it('keeps the header on the 502 the proxy writes when the upstream redirects', async () => {
+    await withProxy({ REDACTION_PROXY_SEND_WHEN_MASK_FAILS: '1' }, async base => {
+      reply = 'redirect'
+      const res = await post(base, LEAKY)
+      expect(res.status).toBe(502)
+      expect(res.headers.get(HEADER)).toBe('1')
+      expect(received).toHaveLength(1)
+    })
+  })
+
+  it('drops the header from an upstream reply to a request masked cleanly', async () => {
+    await withProxy({ REDACTION_PROXY_SEND_WHEN_MASK_FAILS: '1' }, async base => {
+      reply = 'spoof'
+      const res = await post(base, { model: 'm', messages: [{ role: 'user', content: `mail ${EMAIL}` }] })
+      expect(res.status).toBe(200)
+      expect(res.headers.has(HEADER)).toBe(false)
     })
   })
 
