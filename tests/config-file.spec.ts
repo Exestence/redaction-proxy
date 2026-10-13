@@ -4,6 +4,7 @@ import { mkdtempSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
+import { printable } from '../src/core/printable.ts'
 import { loadConfig } from '../src/proxy/config.ts'
 
 const dir = mkdtempSync(join(tmpdir(), 'config-file-'))
@@ -91,6 +92,16 @@ describe('config file formats', () => {
     expect(() => loadConfig(file('broken.json', '{"authToken": fictional-secret-0123456789}'), {})).toThrow(/^config .*broken\.json: invalid JSON$/)
   })
 
+  it('skips a leading UTF-8 BOM in JSON as in TOML', () => {
+    expect(loadConfig(file('bom.json', '\uFEFF{"port": 9003}'), {}).port).toBe(9003)
+    expect(loadConfig(file('bom.toml', '\uFEFFport = 9003'), {}).port).toBe(9003)
+  })
+
+  it('reads a dotfile named .toml or .json in that format', () => {
+    expect(loadConfig(file('.toml', 'port = 9004'), {}).port).toBe(9004)
+    expect(loadConfig(file('.json', '{"port": 9005}'), {}).port).toBe(9005)
+  })
+
   it('refuses a file whose top level is not a table', () => {
     expect(() => loadConfig(file('array.json', '[]'), {})).toThrow('must hold an object')
   })
@@ -144,11 +155,51 @@ describe('error messages', () => {
   })
 })
 
+describe('printable', () => {
+  it.each(['AKIAIOSFODNN7EXAMPLE', 'a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6', 'eyJhbGciOiJIUzI1NiJ9', 'xoxb-1234-5678', 'sk-anything', 'ghp_abc', 'glpat-abc', 'abcdefghijklmnopqrstuvwxy', 'a b'])('does not quote %s', value => {
+    expect(printable(value)).toBe('<value>')
+  })
+
+  it.each(['extra', 'sms', 'card-strict', 'git_commit', 'br-cpf', 'knownOriginalsTtlSeconds', 'ipv4', 'rules12'])('quotes %s', value => {
+    expect(printable(value)).toBe(JSON.stringify(value))
+  })
+
+  it('does not print a token used as a rule name, a tool name, or a non-loopback host', () => {
+    const token = 'AKIAIOSFODNN7EXAMPLE'
+    expect(() => loadConfig(file('akia-rule.toml', `[redaction]\nrules = ["${token}"]`), {})).toThrow('unknown rule <value>')
+    expect(() => loadConfig(file('akia-tool.toml', `[toolRestore.tools]\n${token} = ["NOPE"]`), {})).toThrow(/^toolRestore\.tools\.<tool>/)
+    expect(() => loadConfig(undefined, { REDACTION_PROXY_HOST: token })).toThrow('host <host> is not loopback')
+  })
+})
+
 describe('booleans', () => {
   it.each(['debugMasked', 'allowInsecureUpstream'])('accept only true or false for %s', key => {
     expect(() => loadConfig(file(`${key}.toml`, `${key} = "true"`), {})).toThrow(`${key} must be true or false`)
     expect(() => loadConfig(file(`${key}.json`, `{"${key}": 1}`), {})).toThrow(`${key} must be true or false`)
     expect(() => loadConfig(file(`${key}-ok.toml`, `${key} = true`), {})).not.toThrow()
+  })
+})
+
+describe('environment flags', () => {
+  it('REDACTION_PROXY_DEBUG_MASKED overrides the file both ways', () => {
+    const on = file('debug-on.toml', 'debugMasked = true')
+    const off = file('debug-off.toml', 'debugMasked = false')
+    expect(loadConfig(on, {}).debugMasked).toBe(true)
+    expect(loadConfig(on, { REDACTION_PROXY_DEBUG_MASKED: '0' }).debugMasked).toBe(false)
+    expect(loadConfig(off, { REDACTION_PROXY_DEBUG_MASKED: '1' }).debugMasked).toBe(true)
+  })
+
+  it('REDACTION_PROXY_ALLOW_INSECURE_UPSTREAM overrides the file both ways', () => {
+    const insecure = { REDACTION_PROXY_OPENAI_UPSTREAM: 'http://api.example.test' }
+    const on = file('insecure-on.toml', 'allowInsecureUpstream = true')
+    const off = file('insecure-off.toml', 'allowInsecureUpstream = false')
+    expect(loadConfig(on, insecure).openaiUpstream).toBe('http://api.example.test')
+    expect(() => loadConfig(on, { ...insecure, REDACTION_PROXY_ALLOW_INSECURE_UPSTREAM: '0' })).toThrow('openaiUpstream is plain http://')
+    expect(loadConfig(off, { ...insecure, REDACTION_PROXY_ALLOW_INSECURE_UPSTREAM: '1' }).openaiUpstream).toBe('http://api.example.test')
+  })
+
+  it.each(['REDACTION_PROXY_DEBUG_MASKED', 'REDACTION_PROXY_ALLOW_INSECURE_UPSTREAM'])('%s accepts only 1 or 0', name => {
+    expect(() => loadConfig(undefined, { [name]: 'true' })).toThrow(`${name} must be 1 or 0`)
   })
 })
 

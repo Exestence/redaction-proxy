@@ -94,7 +94,7 @@ curl http://127.0.0.1:8787/v1/chat/completions \
   -d '{"model":"gpt-4o-mini","messages":[{"role":"user","content":"email lin@example.test"}]}'
 ```
 
-Pass a TOML or JSON file with `node lib/cli.js --config redaction.toml` (`.toml` is read as TOML; `.json` or no extension, such as `/dev/stdin`, as JSON; any other extension stops startup; both use the same keys); environment variables override it. [config.example.toml](config.example.toml) lists every option with its default. Upstream API keys never go in the file. An unknown key or a value of the wrong type (`"true"` for `true`) stops startup; the error quotes a key or value only when it is a short identifier, so a token pasted into the file is not printed.
+Pass a TOML or JSON file with `node lib/cli.js --config redaction.toml` (`.toml` is read as TOML; `.json` or no extension, such as `/dev/stdin`, as JSON; any other extension stops startup; both use the same keys); environment variables override it. [config.example.toml](config.example.toml) lists every option with its default. Upstream API keys never go in the file. An unknown key or a value of the wrong type (`"true"` for `true`) stops startup; the error quotes a key or value only when it is a short name-like word (letters, at most two digits, no known token prefix such as `sk-` or `ghp_`); anything else, including token-shaped text, prints as a placeholder such as `<key>`.
 
 | Key | Default | Meaning |
 | --- | --- | --- |

@@ -94,7 +94,7 @@ curl http://127.0.0.1:8787/v1/chat/completions \
   -d '{"model":"gpt-4o-mini","messages":[{"role":"user","content":"寄信給 lin@example.test"}]}'
 ```
 
-用 `node lib/cli.js --config redaction.toml` 指定 TOML 或 JSON 設定檔（`.toml` 讀成 TOML；`.json` 或沒有副檔名（例如 `/dev/stdin`）讀成 JSON；其他副檔名會讓啟動失敗；兩者的鍵相同），環境變數可覆寫。每個選項與預設值見 [config.example.toml](config.example.toml)。上游 API 金鑰永遠不放在檔案裡。不認得的鍵或型別不對的值（以 `"true"` 代替 `true`）會讓啟動失敗；錯誤訊息只在鍵或值是簡短識別字時才引用它，所以誤貼進檔案的 token 不會被印出。
+用 `node lib/cli.js --config redaction.toml` 指定 TOML 或 JSON 設定檔（`.toml` 讀成 TOML；`.json` 或沒有副檔名（例如 `/dev/stdin`）讀成 JSON；其他副檔名會讓啟動失敗；兩者的鍵相同），環境變數可覆寫。每個選項與預設值見 [config.example.toml](config.example.toml)。上游 API 金鑰永遠不放在檔案裡。不認得的鍵或型別不對的值（以 `"true"` 代替 `true`）會讓啟動失敗；錯誤訊息只在鍵或值是簡短、像名稱的字（英文字母，最多兩個數字，不以 `sk-`、`ghp_` 等已知權杖前綴開頭）時才引用它；其他內容，包括權杖形狀的文字，都印成 `<key>` 之類的佔位文字。
 
 | 鍵 | 預設 | 說明 |
 | --- | --- | --- |

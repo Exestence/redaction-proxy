@@ -405,7 +405,7 @@ POST /v1/messages tool arguments: kept by the tool restore policy KEY_1 in bash 
 
 ## 12. 完整設定
 
-以 `--config 路徑`（`-c`）或 `REDACTION_PROXY_CONFIG` 指定設定檔，環境變數覆寫檔案。設定檔可以是 TOML（`.toml`）或 JSON（`.json`），依副檔名判斷；沒有副檔名的路徑（例如 `/dev/stdin`）讀成 JSON，其他副檔名會讓啟動失敗；兩種格式的鍵名與巢狀結構相同（TOML 的 `[toolRestore]` 表或 `toolRestore.categories` 點號鍵，對應 JSON 的 `"toolRestore": {…}`），驗證也相同。語法錯誤會讓啟動失敗，訊息只寫檔案路徑（TOML 另寫行號與欄號）與錯誤種類，不引用檔案內容。不認得的鍵、型別不對的值（布林設定寫成 `"true"`；`redaction`、`toolRestore`、`nameModel` 不是表，例如 TOML 日期或數字）會讓啟動失敗；鍵名含 key 或 secret 時，錯誤訊息會提醒上游 API 金鑰應放環境變數。錯誤訊息只在鍵或值是簡短識別字（英文字母開頭、最多 32 個英數字、`_`、`-`，且不以 `sk-` 開頭）時才引用它，否則寫成 `<key>`、`<value>` 或型別（`<number>`），所以誤貼進檔案的權杖不會被印出。[config.example.toml](../config.example.toml) 列出每個選項、說明與預設值。
+以 `--config 路徑`（`-c`）或 `REDACTION_PROXY_CONFIG` 指定設定檔，環境變數覆寫檔案。設定檔可以是 TOML（`.toml`）或 JSON（`.json`），依副檔名判斷；沒有副檔名的路徑（例如 `/dev/stdin`）讀成 JSON，檔名正好是 `.toml` 或 `.json` 的檔案依該格式讀，其他副檔名會讓啟動失敗；開頭的 UTF-8 BOM 在兩種格式都略過；兩種格式的鍵名與巢狀結構相同（TOML 的 `[toolRestore]` 表或 `toolRestore.categories` 點號鍵，對應 JSON 的 `"toolRestore": {…}`），驗證也相同。語法錯誤會讓啟動失敗，訊息只寫檔案路徑（TOML 另寫行號與欄號）與錯誤種類，不引用檔案內容。不認得的鍵、型別不對的值（布林設定寫成 `"true"`；`redaction`、`toolRestore`、`nameModel` 不是表，例如 TOML 日期或數字）會讓啟動失敗；鍵名含 key 或 secret 時，錯誤訊息會提醒上游 API 金鑰應放環境變數。錯誤訊息只在鍵或值是簡短、像名稱的字（英文字母開頭，其餘為英數字、`_`、`-`，最多 24 個字元、最多兩個數字，且不以 `sk-`、`ghp_`、`gho_`、`github_pat_`、`xox`、`AKIA`、`ASIA`、`eyJ`、`glpat-` 開頭，不分大小寫）時才引用它；其他內容，包括權杖形狀的文字，都寫成 `<key>`、`<value>`、`<host>` 或型別（`<number>`）。[config.example.toml](../config.example.toml) 列出每個選項、說明與預設值。
 
 ```json
 {
@@ -436,9 +436,9 @@ POST /v1/messages tool arguments: kept by the tool restore policy KEY_1 in bash 
 | `allowedOrigins` | `REDACTION_PROXY_ALLOWED_ORIGINS`（逗號分隔） | 無 | 本機 `http(s)` 來源之外允許的瀏覽器來源，與 `Origin` 標頭逐字比較（不分大小寫，去掉結尾斜線），例如 `app://my-client`。拒絕 `null` 與 `*`。 |
 | `openaiUpstream` | `REDACTION_PROXY_OPENAI_UPSTREAM` | `https://api.openai.com` | Chat Completions、Responses 與 OpenAI 型 GET 的上游 base，必須是 http(s)。 |
 | `anthropicUpstream` | `REDACTION_PROXY_ANTHROPIC_UPSTREAM` | `https://api.anthropic.com` | Messages 與 Anthropic 型 GET 的上游 base。 |
-| `allowInsecureUpstream` | `REDACTION_PROXY_ALLOW_INSECURE_UPSTREAM=1` | `false` | 允許以明文 `http://` 連到非本機的上游。未設定時這種上游會讓啟動失敗，因為 API 金鑰會以明文傳送。檔案中只接受布林值。 |
+| `allowInsecureUpstream` | `REDACTION_PROXY_ALLOW_INSECURE_UPSTREAM`（`1` 或 `0`） | `false` | 允許以明文 `http://` 連到非本機的上游。未設定時這種上游會讓啟動失敗，因為 API 金鑰會以明文傳送。檔案中只接受布林值，環境變數只接受 `1` 或 `0`，環境變數覆寫檔案。 |
 | `screen` | `REDACTION_PROXY_SCREEN` | `replace` | `replace` 或 `refuse`，見第 9 節。 |
-| `debugMasked` | `REDACTION_PROXY_DEBUG_MASKED=1` | `false` | 記錄遮罩後的請求本文。檔案中只接受布林值。 |
+| `debugMasked` | `REDACTION_PROXY_DEBUG_MASKED`（`1` 或 `0`） | `false` | 記錄遮罩後的請求本文。檔案中只接受布林值，環境變數只接受 `1` 或 `0`，環境變數覆寫檔案。 |
 | `sendWhenMaskFails` | `REDACTION_PROXY_SEND_WHEN_MASK_FAILS`（`1` 或 `0`） | `false` | 遮罩失敗時仍送出請求，不以 422 拒絕：外洩檢查找到殘留值時送出部分遮罩的本文，`mask` 拋出 `RedactionError` 時送出原始本文。這會把偵測到的值送給服務商。回應帶 `x-redaction-proxy-mask-failed: 1` 標頭，日誌記一行不含值的警告。檔案中只接受布林值，環境變數只接受 `1` 或 `0`，環境變數覆寫檔案。見[第 6 節](#6-拒絕與錯誤狀態碼)。 |
 | `knownOriginalsTtlSeconds` | `REDACTION_PROXY_KNOWN_ORIGINALS_TTL_SECONDS` | `86400` | 偵測到的值為之後的請求保留的秒數，從最後一次偵測起算；`0` 表示不記住。見[第 8 節](#已知原始值)。 |
 | `toolRestore.categories` | `REDACTION_PROXY_TOOL_RESTORE_CATEGORIES`（逗號分隔） | `PATH`、`TERM`、`PROJECT` | 還原進工具呼叫參數的類別，或 `"*"`（全部）；空字串代表都不還原。見[第 7 節](#工具參數的還原政策)。 |
@@ -457,7 +457,7 @@ POST /v1/messages tool arguments: kept by the tool restore policy KEY_1 in bash 
 
 ## 13. 測試
 
-`pnpm test`（vitest）執行 30 個檔案、1,956 個測試：1,948 個通過；需要真模型的 1 個檔案（8 個測試）未設定模型目錄時略過。
+`pnpm test`（vitest）執行 32 個檔案、2,006 個測試：1,998 個通過；需要真模型的 1 個檔案（8 個測試）未設定模型目錄時略過。
 
 | 檔案 | 內容 |
 | --- | --- |
@@ -469,6 +469,8 @@ POST /v1/messages tool arguments: kept by the tool restore policy KEY_1 in bash 
 | `adversarial` | 洩漏與往返、失敗即關閉的篩檢、54 種 200 KB 病態輸入與 3 種 1 MB 的 `password=` 行各須在 2 秒 CPU 時間內（量測 worker 行程的 CPU 時間而非經過時間，平行執行的其他測試不計入）、串流回覆的所有 2 段與 3 段切法、100 KB 串流以 4 字元為單位。 |
 | `proxy` | 對本機假上游的端對端測試：Chat Completions、Responses、Anthropic Messages 的 JSON 與 SSE，佔位符跨越分塊邊界並出現在工具呼叫 JSON 中；413、未知接續的 422、鍵中原始值寫成 `<key>`；上游重新導向回 502、巢狀過深的本文回 400、未結束或格式錯誤的串流仍送出殘留與其餘事件、用戶端中途斷線也記一行日誌。 |
 | `proxy-host`、`restore-urls` | 綁定位址、權杖、`allowedOrigins` 與設定錯誤即拒絕啟動；403（`Host`、`Origin`）與 401；工具呼叫參數中 URL 內的佔位符不還原，其他還原的佔位符回報 JSON 指標而不含原始值。 |
+| `config-file` | 設定檔：TOML 與 JSON 內容相同時結果相同、`config.example.toml` 即預設值、副檔名判斷（沒有副檔名讀成 JSON、`.toml`／`.json` 點檔、其他副檔名拒絕）、開頭的 BOM、語法錯誤只寫路徑與行列而不引用內容、表與布林值的型別檢查、錯誤訊息只引用像名稱的字（`printable` 對權杖形狀的值與非本機 `host` 寫成佔位文字）、`sendWhenMaskFails`、`debugMasked`、`allowInsecureUpstream` 的環境變數雙向覆寫與只接受 `1`／`0`。 |
+| `proxy-mask-fails` | `sendWhenMaskFails`：外洩檢查找到殘留值或 `mask` 拋出時改為送出、回應帶 `x-redaction-proxy-mask-failed: 1`（含送出後代理回的 502）、上游送來的同名標頭被去掉、警告行不含值、不記錄本文，以及其他拒絕（`screen: "refuse"` 等）不受影響。 |
 | `cli` | 未知選項、多餘的位置參數與埠已被占用時，只印一行 `redaction-proxy: …` 並以代碼 1 結束。 |
 | `name-model-config`、`name-model-detector`、`name-model-spans`、`proxy-name-model`、`name-model-real` | 人名模型：設定驗證、以假模型（`name-model-fake.ts`）測哪些文字送進模型、規則優先、敬稱切除、整個請求中的擴散、推論失敗時只用規則或在 `nameModel.required` 時回 503；`name-model-real` 載入真模型，只在設定模型目錄時執行。 |
 | `public-bench`、`real-e2e-harness` | 公開評測：開發集的產生與檢查碼、計分方式（完全、部分遮罩與未遮罩，macro 平均，精確率）、保留集的載入與 `MANIFEST` 雜湊檢查；真實服務驗證工具對本機假上游的完整流程（沒有金鑰時略過、上游錯誤訊息引用的金鑰被替換、佔位符還原的判定）。 |
@@ -590,7 +592,7 @@ node scripts/fetch-name-model.mjs ~/models/nym       # 從 Hugging Face 下載�
 
 | 項目 | 結果 | 代表什麼 |
 | --- | --- | --- |
-| 測試 | 1,948 個通過、8 個需要真模型而略過（30 個檔案、共 1,956 個） | 規則、引擎、對抗輸入、對假上游的三種 API 串流與非串流、Host／Origin／權杖檢查。 |
+| 測試 | 1,998 個通過、8 個需要真模型而略過（32 個檔案、共 2,006 個） | 規則、引擎、對抗輸入、對假上游的三種 API 串流與非串流、Host／Origin／權杖檢查。 |
 | 憑證誤遮 | 每千行程式碼 **0.85** 處 | 在不含真實金鑰的 DeepSeek Harness 原始碼上量測（69.8 萬行程式碼），平均約 1,180 行有一處被誤當成金鑰而遮掉。 |
 | 還原失敗 | 0 | 遮罩成功的檔案全部都能逐位元組還原。 |
 | 速度 | 約 85 萬行 / 約 5–8 秒 | 依機器而定；Apple M5 Max 約 5 秒。 |

@@ -7,7 +7,7 @@
  */
 
 import { readFileSync } from 'node:fs'
-import { extname } from 'node:path'
+import { basename, extname } from 'node:path'
 import { TomlError, parse as parseToml } from 'smol-toml'
 import { RULE_CATEGORIES, RULE_NAMES, resolveRulesConfig } from '../core/index.ts'
 import type { RulesRedactionConfig } from '../core/index.ts'
@@ -265,9 +265,11 @@ function nameModel(value: unknown, dir: string | undefined): ResolvedNameModelCo
  * @throws {Error} on another extension, an unreadable file, or a syntax error.
  */
 function readConfigFile(path: string): Record<string, unknown> {
-  const format = extname(path).toLowerCase() || '.json'
+  const base = basename(path).toLowerCase()
+  const format = base === '.toml' || base === '.json' ? base : extname(base) || '.json'
   if (format !== '.toml' && format !== '.json') throw new Error(`config ${path}: unsupported file extension; use .toml, .json, or none for JSON`)
-  const text = readFileSync(path, 'utf8')
+  // TOML parsers skip a leading BOM; JSON.parse does not.
+  const text = readFileSync(path, 'utf8').replace(/^\uFEFF/, '')
   let file: unknown
   try {
     file = format === '.toml' ? parseToml(text) : JSON.parse(text)
@@ -278,6 +280,20 @@ function readConfigFile(path: string): Record<string, unknown> {
   }
   if (file === null || typeof file !== 'object' || Array.isArray(file)) throw new Error(`config ${path}: must hold an object`)
   return file as Record<string, unknown>
+}
+
+/**
+ * Read an on/off environment variable, which overrides the file when set.
+ * @param env - environment.
+ * @param name - the variable.
+ * @param fileValue - the file's validated value.
+ * @returns `true` for `1`, `false` for `0`, `fileValue` when unset.
+ * @throws {Error} on any other value.
+ */
+function envFlag(env: NodeJS.ProcessEnv, name: string, fileValue: boolean): boolean {
+  const value = env[name]
+  if (value !== undefined && value !== '1' && value !== '0') throw new Error(`${name} must be 1 or 0`)
+  return value === undefined ? fileValue : value === '1'
 }
 
 /**
@@ -304,9 +320,9 @@ export function loadConfig(path: string | undefined, env: NodeJS.ProcessEnv): Pr
     throw new Error(`authToken must be a string of at least ${AUTH_TOKEN_MIN} characters, such as the output of \`openssl rand -hex 32\``)
   }
   if (authToken === undefined && !isLoopbackHost(host)) {
-    throw new Error(`host ${host} is not loopback, so an auth token is required: set REDACTION_PROXY_AUTH_TOKEN (or authToken) and have clients send it in x-redaction-proxy-token`)
+    throw new Error(`host ${printable(host, 'host')} is not loopback, so an auth token is required: set REDACTION_PROXY_AUTH_TOKEN (or authToken) and have clients send it in x-redaction-proxy-token`)
   }
-  const allowInsecure = fileBoolean(file.allowInsecureUpstream, 'allowInsecureUpstream') || env.REDACTION_PROXY_ALLOW_INSECURE_UPSTREAM === '1'
+  const allowInsecure = envFlag(env, 'REDACTION_PROXY_ALLOW_INSECURE_UPSTREAM', fileBoolean(file.allowInsecureUpstream, 'allowInsecureUpstream'))
   const screen = env.REDACTION_PROXY_SCREEN ?? file.screen ?? 'replace'
   if (screen !== 'replace' && screen !== 'refuse') throw new Error('screen must be "replace" or "refuse"')
   const envTtl = env.REDACTION_PROXY_KNOWN_ORIGINALS_TTL_SECONDS
@@ -315,11 +331,8 @@ export function loadConfig(path: string | undefined, env: NodeJS.ProcessEnv): Pr
   if ((file.knownOriginalsTtlSeconds !== undefined && typeof file.knownOriginalsTtlSeconds !== 'number') || !Number.isSafeInteger(knownOriginalsTtlSeconds) || knownOriginalsTtlSeconds < 0) {
     throw new Error('knownOriginalsTtlSeconds must be a whole number of seconds, 0 or more')
   }
-  const envSend = env.REDACTION_PROXY_SEND_WHEN_MASK_FAILS
-  if (envSend !== undefined && envSend !== '1' && envSend !== '0') throw new Error('REDACTION_PROXY_SEND_WHEN_MASK_FAILS must be 1 or 0')
-  const fileSend = fileBoolean(file.sendWhenMaskFails, 'sendWhenMaskFails')
-  const sendWhenMaskFails = envSend === undefined ? fileSend : envSend === '1'
-  const debugMasked = fileBoolean(file.debugMasked, 'debugMasked') || env.REDACTION_PROXY_DEBUG_MASKED === '1'
+  const sendWhenMaskFails = envFlag(env, 'REDACTION_PROXY_SEND_WHEN_MASK_FAILS', fileBoolean(file.sendWhenMaskFails, 'sendWhenMaskFails'))
+  const debugMasked = envFlag(env, 'REDACTION_PROXY_DEBUG_MASKED', fileBoolean(file.debugMasked, 'debugMasked'))
   const redaction = { rules: [...PROXY_DEFAULT_RULES], ...table(file.redaction, 'redaction') } as RulesRedactionConfig
   resolveRulesConfig(redaction)
   const config: ProxyConfig = {
