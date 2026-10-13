@@ -232,6 +232,12 @@ describe('maskLocalUsername', () => {
     expect(loadConfig(undefined, {}).redaction.terms).toBeUndefined()
   })
 
+  it('leaves a name the file lists as a term in any ASCII case a listed term, not a user name', () => {
+    const listed = loadConfig(file('terms-case.toml', 'redaction.terms = ["Fictionaluser"]'), {}, user)
+    expect(listed.redaction.terms).toEqual(['Fictionaluser'])
+    expect(listed.localUsernames).toEqual([])
+  })
+
   it('is turned off by the file or the environment, which overrides the file', () => {
     const off = file('user-off.toml', 'maskLocalUsername = false')
     expect(loadConfig(off, {}, user).redaction.terms).toBeUndefined()

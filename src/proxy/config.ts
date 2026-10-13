@@ -101,7 +101,7 @@ export interface ProxyConfig {
    */
   maskLocalUsername: boolean
   /**
-   * The names `loadConfig` added to `redaction.terms` that the file did not list.
+   * The names `loadConfig` added to `redaction.terms` that the file did not list in any ASCII case.
    * They are masked like terms but never refuse a request: a user name such as
    * `max` or `claude` also spells JSON keys (`max_tokens`) and model ids, which
    * the proxy does not rewrite.
@@ -379,7 +379,10 @@ export function loadConfig(path: string | undefined, env: NodeJS.ProcessEnv, use
   const maskLocalUsername = envFlag(env, 'REDACTION_PROXY_MASK_LOCAL_USERNAME', fileBoolean(file.maskLocalUsername ?? true, 'maskLocalUsername'))
   const redaction = { rules: [...PROXY_DEFAULT_RULES], ...table(file.redaction, 'redaction') } as RulesRedactionConfig
   resolveRulesConfig(redaction)
-  const names = (maskLocalUsername && user !== undefined ? localUsernames(user) : []).filter(name => !(redaction.terms ?? []).includes(name))
+  // A name listed as a term in any ASCII case stays a listed term, which the leak check refuses.
+  const fold = (text: string): string => text.replace(/[A-Z]+/g, run => run.toLowerCase())
+  const listed = new Set((redaction.terms ?? []).map(fold))
+  const names = (maskLocalUsername && user !== undefined ? localUsernames(user) : []).filter(name => !listed.has(fold(name)))
   if (names.length > 0) redaction.terms = [...redaction.terms ?? [], ...names]
   const config: ProxyConfig = {
     port,

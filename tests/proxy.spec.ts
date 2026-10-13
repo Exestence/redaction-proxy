@@ -1,12 +1,15 @@
 // End to end: a client talks to the proxy, the proxy talks to a fake upstream
 // on 127.0.0.1 that answers with the placeholders it received, split into
 // 3-character SSE chunks so every placeholder straddles chunk boundaries.
+import { mkdtempSync, writeFileSync } from 'node:fs'
 import { createServer, request } from 'node:http'
 import type { IncomingHttpHeaders, Server } from 'node:http'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 import { DEFAULT_TOOL_RESTORE_CATEGORIES, loadConfig } from '../src/proxy/config.ts'
 import type { ProxyConfig, RestoredCategories } from '../src/proxy/config.ts'
-import { createProxyServer, listen } from '../src/proxy/server.ts'
+import { createProxyServer, listen, unusedPrivateUse } from '../src/proxy/server.ts'
 
 // Every value is fictional: example.test addresses, a checksum-valid invented
 // national ID, a made-up key, and a made-up home path.
@@ -1547,6 +1550,53 @@ describe('placeholders kept in tool calls and resent', () => {
     expect(seen[1]!.body.messages[0].content).toBe('⟦EMAIL_2⟧ then ⟪EMAIL_1⟫ ⟪TWID_1⟫ for ⟦EMAIL_3⟧ ⟦TWID_2⟧')
   })
 
+  it('escapes a resent placeholder whose number this client also gave another value, even when only that other value is present', async () => {
+    const headers = fresh()
+    reply = () => ({ json: { choices: [] } })
+    // Two conversations of one client: EMAIL is EMAIL_1 in the first, OTHER is EMAIL_1 in the second.
+    await post('/v1/chat/completions', { model: 'm', messages: [{ role: 'user', content: `mail ${EMAIL}` }] }, headers)
+    await post('/v1/chat/completions', { model: 'm', messages: [{ role: 'user', content: `mail ${OTHER}` }] }, headers)
+    expect(seen.map(entry => entry.body.messages[0].content)).toEqual(['mail ⟦EMAIL_1⟧', 'mail ⟦EMAIL_1⟧'])
+    // The first conversation, compacted: its summary keeps ⟦EMAIL_1⟧ (EMAIL), EMAIL is gone, and the user pastes OTHER.
+    await post('/v1/chat/completions', { model: 'm', messages: [
+      { role: 'user', content: 'Summary of earlier turns: the customer is ⟦EMAIL_1⟧.' },
+      { role: 'user', content: `Also cc ${OTHER}` },
+    ] }, headers)
+    expect(seen[2]!.body.messages.map((message: any) => message.content)).toEqual(['Summary of earlier turns: the customer is ⟪EMAIL_1⟫.', 'Also cc ⟦EMAIL_2⟧'])
+  })
+
+  it('keeps a Responses chain\'s numbering after another conversation gives a passed number a second value', async () => {
+    const headers = fresh()
+    const THIRD = 'third.fictional@example.test'
+    reply = () => ({ json: { id: 'r1', output: [{ type: 'function_call', call_id: 'c', name: 'bash', arguments: JSON.stringify({ command: 'echo ⟦EMAIL_1⟧' }) }] } })
+    await post('/v1/responses', { model: 'm', input: `mail ${EMAIL}` }, headers)
+    reply = () => ({ json: { id: 'r2', output: [] } })
+    await post('/v1/responses', { model: 'm', previous_response_id: 'r1', input: [{ type: 'function_call_output', call_id: 'c', output: `⟦EMAIL_1⟧ ok, also ${OTHER}` }] }, headers)
+    const otherId = (seen[1]!.body.input[0].output as string).match(/⟦EMAIL_\d+⟧/g)!.at(-1)!
+    // Another conversation of the client binds THIRD to EMAIL_1.
+    reply = () => ({ json: { choices: [] } })
+    await post('/v1/chat/completions', { model: 'm', messages: [{ role: 'user', content: `mail ${THIRD}` }] }, headers)
+    expect(seen[2]!.body.messages[0].content).toBe('mail ⟦EMAIL_1⟧')
+    // The chain goes on: the upstream still holds the numbers r2 sent, so its reply must restore by them.
+    reply = () => ({ json: { id: 'r3', output: [{ type: 'message', content: [{ type: 'output_text', text: `first ⟦EMAIL_1⟧, other ${otherId}` }] }] } })
+    const third = await (await post('/v1/responses', { model: 'm', previous_response_id: 'r2', input: `and ${THIRD}, resend ⟦EMAIL_1⟧` }, headers)).json() as any
+    expect(third.output[0].content[0].text).toBe(`first ${EMAIL}, other ${OTHER}`)
+    // ⟦EMAIL_1⟧ already names EMAIL upstream in this chain, so the new text passes it too.
+    expect(seen[3]!.body.input).toMatch(/^and ⟦EMAIL_\d+⟧, resend ⟦EMAIL_1⟧$/)
+    expect(seen[3]!.body.input).not.toContain(otherId)
+  })
+
+  it('finds a free holding character in one pass over the texts, even when they use nearly every private-use character', () => {
+    let pua = ''
+    for (let code = 0xe000; code < 0xf8ff; code += 1) pua += String.fromCharCode(code)
+    const texts = [...Array.from({ length: 50_000 }, () => '中'.repeat(100)), pua]
+    const started = performance.now()
+    expect(unusedPrivateUse(texts)).toBe('\uf8ff')
+    // Scanning every text once per private-use character took several seconds here.
+    expect(performance.now() - started).toBeLessThan(500)
+    expect(unusedPrivateUse([pua, '\uf8ff'])).toBeUndefined()
+  })
+
   it('escapes as before when memory is off', async () => {
     await start({ toolRestore: { categories: DEFAULT_TOOL_RESTORE_CATEGORIES, tools: new Map() }, knownOriginalsTtlSeconds: 0 })
     try {
@@ -1618,6 +1668,33 @@ describe('the local user name', () => {
       expect(res.status, username).toBe(200)
       expect(seen.at(-1)!.body.messages[0].content, username).toBe('ask ⟦TERM_1⟧ about it')
     }
+  })
+
+  it('still refuses over a listed term that spells the user name in another case', async () => {
+    const path = join(mkdtempSync(join(tmpdir(), 'proxy-terms-')), 'terms.toml')
+    writeFileSync(path, 'redaction.terms = ["Fictionaluser"]')
+    const { redaction, localUsernames } = loadConfig(path, {}, { username: 'fictionaluser', homedir: '/Users/fictionaluser' })
+    await start({ redaction, localUsernames, toolRestore: { categories: DEFAULT_TOOL_RESTORE_CATEGORIES, tools: new Map() } })
+    reply = () => ({ json: { content: [] } })
+    // The tool name keeps the term, which the proxy does not rewrite.
+    const res = await post('/v1/messages', { model: 'c', max_tokens: 1, tools: [{ name: 'Fictionaluser', input_schema: { type: 'object' } }], messages: [{ role: 'user', content: 'ask Fictionaluser about it' }] }, { 'x-api-key': 'k' })
+    expect(res.status).toBe(422)
+  })
+
+  it('masks the user name as a whole word in any ASCII case and sends a glued occurrence as written, never refusing', async () => {
+    await withUser('fictionaluser')
+    reply = () => ({ json: { content: [] } })
+    const out: string[] = []
+    for (const text of ['notes in fictionaluser_project/x.md', 'see fictionaluser2024 and Fictionaluser-notes', 'user=fictionaluser;', 'FICTIONALUSER wrote it']) {
+      const res = await post('/v1/messages', { model: 'c', max_tokens: 1, messages: [{ role: 'user', content: text }] }, { 'x-api-key': 'k' })
+      out.push(`${res.status} ${seen.at(-1)!.body.messages[0].content}`)
+    }
+    expect(out).toEqual([
+      '200 notes in ⟦TERM_1⟧_project/x.md',
+      '200 see fictionaluser2024 and ⟦TERM_1⟧-notes',
+      '200 user=⟦TERM_1⟧;',
+      '200 ⟦TERM_1⟧ wrote it',
+    ])
   })
 
   it('leaves the word node alone when the proxy runs as the container user node', async () => {

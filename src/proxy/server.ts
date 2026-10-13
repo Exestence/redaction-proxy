@@ -174,11 +174,17 @@ const KNOWN_IDS_MAX = 8
 /** A well-formed placeholder written in request text, such as a kept placeholder the client resends. */
 const LITERAL_PLACEHOLDER = /⟦([A-Z][A-Z0-9]*_[1-9]\d*)⟧/g
 
-/** Original texts of one request, kept for a Responses continuation. */
+/**
+ * Original texts of one request, kept for a Responses continuation. A `⟦id⟧`
+ * in `texts` is always one the proxy passed upstream as written: every other
+ * delimiter is replaced before the texts are stored.
+ */
 interface RequestTexts {
   texts: string[]
   /** The texts the user wrote, which the name model reads. */
   userTexts: Set<string>
+  /** Each identity passed upstream as written in this request or the requests it continues, mapped to its original. */
+  passed: Map<RedactionId, string>
 }
 
 /** A request body after masking; `texts` holds a continuation's earlier texts first. */
@@ -565,27 +571,37 @@ function replaceUnscreenable(text: string): string {
 }
 
 /**
- * The placeholders written in request texts that may pass to the upstream as
- * written: each names an identity this client's earlier requests bound to a
- * remembered original, and exactly one of those originals occurs in the
- * texts, as written or JSON-escaped. Such a placeholder is typically one the
- * proxy kept in a tool call's arguments and the client now resends.
- * @param texts - the request texts, unscreened.
+ * The placeholders written in a request's new texts that may pass to the
+ * upstream as written. One the continued requests passed ({@link RequestTexts.passed})
+ * already names its original upstream and passes again. Any other must name an
+ * identity this client's earlier requests bound to exactly one remembered
+ * original, which occurs in the texts as written or JSON-escaped; an identity
+ * bound to two values, such as `EMAIL_1` of two conversations, never passes.
+ * Such a placeholder is typically one the proxy kept in a tool call's
+ * arguments and the client now resends.
+ * @param fresh - the request's own texts, unscreened, which the placeholders are read from.
+ * @param texts - every text of the request, a continuation's stored texts included.
  * @param issued - remembered originals of each identity ({@link KnownOriginal.ids}).
+ * @param chain - the identities the continued requests passed.
  * @returns each passable identity mapped to its original.
  */
-function passableLiterals(texts: readonly string[], issued: ReadonlyMap<RedactionId, ReadonlySet<string>>): Map<RedactionId, string> {
+function passableLiterals(fresh: readonly string[], texts: readonly string[], issued: ReadonlyMap<RedactionId, ReadonlySet<string>>, chain: ReadonlyMap<RedactionId, string>): Map<RedactionId, string> {
   const pass = new Map<RedactionId, string>()
-  if (issued.size === 0) return pass
-  for (const text of texts) {
+  for (const text of fresh) {
     for (const [, id] of text.matchAll(LITERAL_PLACEHOLDER)) {
       const literal = id as RedactionId
       if (pass.has(literal)) continue
-      const present = [...issued.get(literal) ?? []].filter(original => {
+      const passed = chain.get(literal)
+      if (passed !== undefined) {
+        pass.set(literal, passed)
+        continue
+      }
+      const originals = issued.get(literal)
+      if (originals?.size !== 1) continue
+      for (const original of originals) {
         const spelling = JSON.stringify(original).slice(1, -1)
-        return texts.some(other => other.includes(original) || other.includes(spelling))
-      })
-      if (present.length === 1) pass.set(literal, present[0] as string)
+        if (texts.some(other => other.includes(original) || other.includes(spelling))) pass.set(literal, original)
+      }
     }
   }
   return pass
@@ -596,10 +612,12 @@ function passableLiterals(texts: readonly string[], issued: ReadonlyMap<Redactio
  * @param texts - the texts it must not occur in.
  * @returns one BMP private-use character, or `undefined` when the texts contain every one.
  */
-function unusedPrivateUse(texts: readonly string[]): string | undefined {
+export function unusedPrivateUse(texts: readonly string[]): string | undefined {
+  const used = new Set<string>()
+  for (const text of texts) for (const [char] of text.matchAll(/[\ue000-\uf8ff]/g)) used.add(char)
   for (let code = 0xe000; code <= 0xf8ff; code += 1) {
     const char = String.fromCharCode(code)
-    if (!texts.some(text => text.includes(char))) return char
+    if (!used.has(char)) return char
   }
   return undefined
 }
@@ -1077,6 +1095,9 @@ export function createProxyServer(
     withModel?.forRequest(userTexts, () => { stats.nameModelFailed = true }) ?? rules
   /** Continuation texts by client scope and response id. */
   const continuations = new Map<string, RequestTexts>()
+  // A local user name that a listed term also spells, in any ASCII case, is refused like that term.
+  const listedTerms = new Set((config.redaction.terms ?? []).filter(term => !config.localUsernames.includes(term)).map(foldAsciiCase))
+  const usernames = new Set(config.localUsernames.map(foldAsciiCase).filter(name => !listedTerms.has(name)))
   /**
    * Originals each client scope bound, by bucket, each mapped to its category and expiry time, oldest first.
    * One bucket per category, so a bulk tool result of emails cannot evict a remembered credential,
@@ -1209,21 +1230,29 @@ export function createProxyServer(
     const known = knownTo(client)
     const issued = issuedTo(client)
 
+    const chain = prior?.passed ?? new Map<RedactionId, string>()
+    // A continuation's stored placeholders are upstream already, so they are held whatever this request passes.
+    const priorHolds = priorTexts.some(text => text.includes('⟦'))
+
     /**
-     * Mask the texts once. Each placeholder in `pass` is held out of masking
-     * by a character no text contains, so it reserves no identity, and is
-     * written back afterwards, only if masking bound its identity to the same
-     * original and kept every held position.
+     * Mask the texts once. Each placeholder in `pass`, and each in a
+     * continuation's stored texts, is held out of masking by a character no
+     * text contains, so it reserves no identity, and is written back
+     * afterwards. A placeholder of this request's own texts is written back
+     * only if masking bound its identity to the same original and kept every
+     * held position; one the continued requests passed is not checked again.
      * @param pass - placeholders to pass as written, each mapped to the original it was issued for.
      * @returns the masked texts and what they bound, or `undefined` when a passed placeholder would no longer name its original.
      */
     const attempt = async (pass: ReadonlyMap<RedactionId, string>) => {
-      const sentinel = pass.size === 0 ? '' : unusedPrivateUse(stored)
+      const holding = pass.size > 0 || priorHolds
+      const sentinel = holding ? unusedPrivateUse(stored) : ''
       if (sentinel === undefined) return undefined
       const held: RedactionId[][] = stored.map(() => [])
       const all = stored.map((text, at) => {
-        const kept = pass.size === 0 ? text : text.replace(LITERAL_PLACEHOLDER, (literal, id: RedactionId) => {
-          if (!pass.has(id)) return literal
+        const ownText = at >= priorTexts.length
+        const kept = !holding ? text : text.replace(LITERAL_PLACEHOLDER, (literal, id: RedactionId) => {
+          if (ownText && !pass.has(id)) return literal
           ;(held[at] as RedactionId[]).push(id)
           return sentinel
         })
@@ -1237,40 +1266,40 @@ export function createProxyServer(
       const detected = new Set<string>()
       const result = await mask(withKnownOriginals(detectorFor(new Set(all.filter((_, at) => isUser(at))), stats), known, escaped, detected), all.map((text, seq) => ({ seq, path: '', text })), emptyRedactionIndex())
       const registry = unescaping(result.registry, escaped)
-      if (![...pass].every(([id, original]) => registry.original(id) === original)) return undefined
-      if (pass.size > 0 && !result.masked.every((text, at) => text.split(sentinel).length - 1 === (held[at] as RedactionId[]).length)) return undefined
+      if (![...pass].every(([id, original]) => chain.has(id) || registry.original(id) === original)) return undefined
+      // A continuation's stored masked texts are discarded, so only this request's own must keep their held positions.
+      if (holding && !result.masked.every((text, at) => at < priorTexts.length || text.split(sentinel).length - 1 === (held[at] as RedactionId[]).length)) return undefined
       const back = (text: string, at: number): string => {
         let k = 0
         return (held[at] as RedactionId[]).length === 0 ? text : text.replaceAll(sentinel, () => placeholder((held[at] as RedactionId[])[k++] as RedactionId))
       }
-      return { all, escaped, detected, result, registry, masked: result.masked.map(back), stored: all.map(back) }
+      return { all, escaped, detected, result, registry, masked: result.masked.map(back), stored: all.map(back), passed: new Map([...chain, ...pass]) }
     }
 
     let masking
     try {
-      const pass = passableLiterals(stored, issued)
-      // Any placeholder that would not come out as written falls back to escaping them all, as without memory.
+      const pass = passableLiterals(raw, stored, issued, chain)
+      // Any placeholder of this request that would not come out as written falls back to escaping them all, as without memory.
       masking = (pass.size === 0 ? undefined : await attempt(pass)) ?? await attempt(new Map())
     } catch (error) {
       if (error instanceof NameModelError) throw new Refusal(503, 'the name model failed and nameModel.required is set')
       if (!(error instanceof RedactionError)) throw error
       // Screening above leaves only a conflict a continuation's stored texts can raise.
       if (!config.sendWhenMaskFails) throw new Refusal(422, `request text cannot be masked: ${error.code}`)
-      const texts = stored.map(replaceUnscreenable)
+      const texts = [...priorTexts, ...raw.map(replaceUnscreenable)]
       // oxlint-disable-next-line typescript/no-non-null-assertion -- the body parsed as JSON above.
-      return { outgoing: body!.toString('utf8'), registry: EMPTY_REGISTRY, texts, userTexts: new Set(texts.filter((_, at) => isUser(at))), maskFailed: `request text cannot be masked: ${error.code}; the original body was sent` }
+      return { outgoing: body!.toString('utf8'), registry: EMPTY_REGISTRY, texts, userTexts: new Set(texts.filter((_, at) => isUser(at))), passed: chain, maskFailed: `request text cannot be masked: ${error.code}; the original body was sent` }
     }
-    // `attempt` returns a result whenever `pass` is empty.
-    // oxlint-disable-next-line typescript/no-non-null-assertion
-    const { all, escaped, detected, result, registry } = masking!
-    masking!.masked.slice(priorTexts.length).forEach((masked, i) => {
+    // Without a free private-use character, a continuation's stored placeholders cannot be held.
+    if (masking === undefined) throw new Refusal(422, 'the continued request texts use every private-use character, so the placeholders already sent upstream cannot be kept; start a new conversation')
+    const { all, escaped, detected, result, registry } = masking
+    masking.masked.slice(priorTexts.length).forEach((masked, i) => {
       // oxlint-disable-next-line typescript/no-non-null-assertion -- one masked string per slot.
       const slot = slots[i]!
       ;(slot.parent as Record<string | number, string>)[slot.key] = masked
     })
     const clientTexts = new Set(all.filter((_, at) => isClient(at)))
     // A spelling only memory supplied (as written, JSON-escaped, or a credential in another case) is masked but never refused, nor is the local user name.
-    const usernames = new Set(config.localUsernames.map(foldAsciiCase))
     const rememberedKeys = new Set([...known ?? []].filter(([, category]) => category === 'KEY').map(([original]) => foldAsciiCase(original)))
     const onlyRemembered = (original: string): boolean => {
       const plain = escaped.get(original) ?? original
@@ -1314,8 +1343,8 @@ export function createProxyServer(
     const leaks = findLeaks(parsed, bound, modelValues)
     if (leaks !== undefined && !config.sendWhenMaskFails) throw new Refusal(422, `a detected value is still unmasked at ${leaks}; the request was not forwarded`)
     rememberOriginals(client, registry, clientBound, detected)
-    const texts = masking!.stored
-    const masked: MaskedRequest = { outgoing: JSON.stringify(parsed), registry, texts, userTexts: new Set(texts.filter((_, at) => isUser(at))) }
+    const texts = masking.stored
+    const masked: MaskedRequest = { outgoing: JSON.stringify(parsed), registry, texts, userTexts: new Set(texts.filter((_, at) => isUser(at))), passed: masking.passed }
     if (leaks !== undefined) masked.maskFailed = `a detected value is still unmasked at ${leaks}`
     return masked
   }
@@ -1371,7 +1400,7 @@ export function createProxyServer(
     })
     const remember = (id: string): void => {
       if (masked === undefined) return
-      setNewest(continuations, `${client}:${id}`, { texts: masked.texts, userTexts: masked.userTexts }, CONTINUATIONS_MAX)
+      setNewest(continuations, `${client}:${id}`, { texts: masked.texts, userTexts: masked.userTexts, passed: masked.passed }, CONTINUATIONS_MAX)
     }
     const done = (): void => {
       const counts = Object.entries(stats.masked).map(([category, n]) => `${category} ${n}`).join(', ')
