@@ -93,6 +93,14 @@ toolRestore.categories = ["PATH", "TERM", "PROJECT"]
 # Default 86400 (24 hours).
 knownOriginalsTtlSeconds = 86400
 
+# Mask the name of the account the proxy runs as (and its home directory's
+# last segment when different) as a term, so a bare user name or a
+# project-directory name such as "-Users-<name>-project" is not sent.
+# Names shorter than 3 characters and generic account names (root, node,
+# runner, user, admin, ...) are skipped. Unlike a listed term, the name never
+# gets a request refused where it also spells a JSON key or model id. Default true.
+maskLocalUsername = true
+
 # --- Failure handling ---
 
 # Control characters, U+FFFD, lone surrogates, and ⟦ ⟧ in request text:

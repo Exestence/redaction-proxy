@@ -178,7 +178,7 @@ DeepSeek Harness 透過 dsh-addons 的 redaction 套件以 git submodule（`dsh-
 - **用佔位符，不用假值。** 每個不同的值得到一個 `⟦CATEGORY_n⟧`。以假值替換（「數位分身」）經過實測後被否決：模型逐字保留佔位符的比例是 100%，假值只有 75%；假值還造成無法還原的靜默錯誤（18 段對話中 5 段）。
 - **編號依文字順序。** `collectSlots` 在請求最上層先收集 `tools`、`functions`、`system`、`instructions`，再依 JSON 鍵順序收集其餘欄位。
 - **前綴逐位元組穩定。** 用戶端每次都重送完整歷史，所以只增不改的對話中，同一個值每一輪都得到同一個佔位符，遮罩後的前綴不變，上游的提示快取照常生效。
-- **會打破穩定的情況。** 後面的訊息若含字面的 `EMAIL_3`，這個 id 會被保留，可能讓在它之後首次出現的值重新編號。用戶端若改寫了較早的歷史，前綴也會跟著改變。較後的輪次（或同一憑證的另一個請求）首次偵測到一個先前已出現過的值時，先前的位置也會被遮罩，前綴因此改變一次。
+- **會打破穩定的情況。** 後面的訊息若含字面的 `EMAIL_3`，這個 id 會被保留，可能讓在它之後首次出現的值重新編號。例外是代理留在工具參數中、用戶端照原樣回送的 `⟦EMAIL_3⟧`：符合第 8 節「回送的佔位符」的條件時原樣送出，不保留 id。用戶端若改寫了較早的歷史，前綴也會跟著改變。較後的輪次（或同一憑證的另一個請求）首次偵測到一個先前已出現過的值時，先前的位置也會被遮罩，前綴因此改變一次。
 
 ## 5. 不遮就轉送的欄位
 
@@ -331,6 +331,7 @@ URL 內的佔位符不論類別一律保持原樣；回覆文字（含 reasoning
 - **大小寫。** 記住的憑證不分 ASCII 大小寫：之後出現的 `TR0UB4DOR&3X`、`tr0ub4dor&3x` 都遮，各有自己的佔位符。其他類別照原樣比對。
 - **容量。** 每個範圍每個類別最多 4,096 個值、最多 64 個範圍，都先進先出；請求再綁定的值移到最新端。類別各自計數，所以一次幾千個 email 的工具結果擠不掉記住的憑證。在用戶端自己寫的文字（user、system、developer 訊息的內容與文字部分，以及 Anthropic 的 `system` 與 Responses 的 `instructions`）中綁定的值（包括只靠記憶遮到的值：工具輸出中偵測到、之後使用者不帶關鍵詞寫出的值，移進這個桶時存活時間不變）另外放在每個類別各一個桶中，也是 4,096 個，所以一次幾千行 cookie 的工具結果也擠不掉使用者訊息或系統提示中的密碼；使用者自己貼上的大量同類別新值（例如 4,096 個新的 `password: …`）則會擠掉較舊的憑證，之後它的回聲照原樣送出。記憶依用戶端憑證分開且有上限，所以連得到代理的本機程式可以送大量請求（或用 64 個不同的憑證）把記住的值擠掉；這可以接受，因為代理預設只綁定本機位址，綁定其他位址時必須設 `authToken`（第 11 節）。
 - **外洩檢查。** 列舉欄位（`type`、`role`、`object`、`status`、`finish_reason`、`stop_reason`、`service_tier`、`reasoning_effort`、`tool_choice`）的字串只能是 API 定義的固定值，不帶私人資料；值像列舉值（小寫英文字母開頭，只含小寫英數字與 `_`、`.`、`:`、`-`，最多 64 字元）時外洩檢查不看。否則一個被誤判的 `assistant`，會讓帶 assistant 回合的請求被拒。`metadata`、`stop` 底下與工具呼叫輸入中的鍵由用戶端或工具定義，那裡同名的鍵照常檢查；工具呼叫輸入不論鍵名都遮（第 5 節），所以還原進名為 `type`、`status`、`name` 等工具參數的值，回送時會再被遮罩。物件鍵照常檢查：被誤判的 `messages`、`text` 會讓含這些鍵的請求預設以 422 拒絕。拒絕訊息寫出每個欄位所含值的類別，從不寫值本身。
+- **回送的佔位符。** 不在 `toolRestore` 中的類別以佔位符交給用戶端（第 7 節），用戶端下一輪把 `⟦EMAIL_3⟧` 原樣放在工具呼叫輸入（也常在工具結果）中回送。記憶也記下每個值被綁定的 id（每個值最多 8 個，新的在前）。請求中的 `⟦EMAIL_3⟧` 若是這個用戶端範圍先前綁定給某個記住的值，該 id 的記住值中恰好一個（原樣或 JSON 跳脫寫法）出現在這個請求中，而且不保留 `EMAIL_3` 照常編號時那個值仍得到 `EMAIL_3`、佔位符的位置也沒有被其他偵測吞掉，代理就把 `⟦EMAIL_3⟧` 原樣送上游，不換成 `⟪EMAIL_3⟫`，也不保留這個 id。較早的訊息因此每一輪逐位元組相同（Anthropic 簽章的 `thinking` 區塊與提示快取都依賴這點），回覆文字中的 `⟦EMAIL_3⟧` 還原成同一個值。只要有一個這樣的佔位符不符合條件，整個請求照舊跳脫所有佔位符。原樣送出的佔位符只代表同一個請求中已有、已被遮罩的同一個值，所以使用者或內容注入的 `⟦EMAIL_3⟧` 不會被還原成別的值；不指向記住的值的注入照舊跳脫。`screen = "refuse"` 時，這樣的佔位符不讓請求被拒。照舊跳脫、編號可能逐輪漂移的情況：值已過期或 `knownOriginalsTtlSeconds = 0`、代理重啟、值短於上面的記憶門檻、值已不在重送的歷史中（例如被壓縮成摘要）、一個 id 的兩個記住值同時出現、別的值先拿到這個號碼。Responses 接續請求存下的先前文字保留原樣送出的佔位符，下一次接續再以同樣條件判斷。
 - **存活時間。** 每個值從最後一次被偵測起保留 `knownOriginalsTtlSeconds` 秒（預設 86,400，即 24 小時；`0` 表示什麼都不記），過期的值在下次讀取該範圍的記憶時刪除。只靠記憶遮到的回聲不會延長存活時間。
 
 這些原始值留在記憶體中直到過期、被擠出或代理重啟，不寫入磁碟。
@@ -341,8 +342,8 @@ URL 內的佔位符不論類別一律保持原樣；回覆文字（含 reasoning
 
 | 模式 | 行為 |
 | --- | --- |
-| `replace`（預設） | U+0000–U+001F（tab、換行、CR 除外）換成對應的 Control Pictures 字元（例如 ESC 變 `␛`），U+007F 變 `␡`；C1 控制字元、U+FFFD、孤立 surrogate 變 `␦`；`⟦`、`⟧` 變 `⟪`、`⟫`。上游收到的文字因此與原文不同。 |
-| `refuse` | 以 `screenText` 檢查，並檢查 `⟦`、`⟧`；有任一就以 422 拒絕整個請求，訊息含 JSON 路徑與字元類別。 |
+| `replace`（預設） | U+0000–U+001F（tab、換行、CR 除外）換成對應的 Control Pictures 字元（例如 ESC 變 `␛`），U+007F 變 `␡`；C1 控制字元、U+FFFD、孤立 surrogate 變 `␦`；`⟦`、`⟧` 變 `⟪`、`⟫`，符合第 8 節「回送的佔位符」條件的佔位符除外。上游收到的文字因此與原文不同。 |
+| `refuse` | 以 `screenText` 檢查，並檢查 `⟦`、`⟧`（符合第 8 節「回送的佔位符」條件的佔位符除外）；有任一就以 422 拒絕整個請求，訊息含 JSON 路徑與字元類別。 |
 
 ## 10. 日誌
 
@@ -398,6 +399,7 @@ POST /v1/messages tool arguments: kept by the tool restore policy KEY_1 in bash 
   "screen": "replace",
   "debugMasked": false,
   "knownOriginalsTtlSeconds": 86400,
+  "maskLocalUsername": true,
   "toolRestore": {
     "categories": ["PATH", "TERM", "PROJECT"],
     "tools": { "git_commit": ["PATH", "TERM", "PROJECT", "EMAIL"] }
@@ -424,6 +426,7 @@ POST /v1/messages tool arguments: kept by the tool restore policy KEY_1 in bash 
 | `debugMasked` | `REDACTION_PROXY_DEBUG_MASKED`（`1` 或 `0`） | `false` | 記錄遮罩後的請求本文。檔案中只接受布林值，環境變數只接受 `1` 或 `0`，環境變數覆寫檔案。 |
 | `sendWhenMaskFails` | `REDACTION_PROXY_SEND_WHEN_MASK_FAILS`（`1` 或 `0`） | `false` | 遮罩失敗時仍送出請求，不以 422 拒絕：外洩檢查找到殘留值時送出部分遮罩的本文，`mask` 拋出 `RedactionError` 時送出原始本文。這會把偵測到的值送給服務商。回應帶 `x-redaction-proxy-mask-failed: 1` 標頭，日誌記一行不含值的警告。檔案中只接受布林值，環境變數只接受 `1` 或 `0`，環境變數覆寫檔案。見[第 6 節](#6-拒絕與錯誤狀態碼)。 |
 | `knownOriginalsTtlSeconds` | `REDACTION_PROXY_KNOWN_ORIGINALS_TTL_SECONDS` | `86400` | 偵測到的值為之後的請求保留的秒數，從最後一次偵測起算；`0` 表示不記住。見[第 8 節](#已知原始值)。 |
+| `maskLocalUsername` | `REDACTION_PROXY_MASK_LOCAL_USERNAME`（`1` 或 `0`） | `true` | 命令列代理把執行它的帳號名稱（`os.userInfo().username`），以及不同時的家目錄最後一段，加進 `redaction.terms`，以 `TERM` 遮罩並照 `toolRestore` 預設還原進工具參數。Claude Code 會送出單獨的使用者名稱（`user_identity`）與 `-Users-<名稱>-project` 這類專案目錄名稱，`PATH` 規則只認 `/Users/<名稱>`。少於 3 個字元的名稱與通用帳號名稱（`admin`、`administrator`、`app`、`default`、`dev`、`docker`、`ec2-user`、`guest`、`node`、`nobody`、`root`、`runner`、`runneradmin`、`test`、`ubuntu`、`user`、`vagrant`，不分大小寫）略過，否則一般文字中的同一個詞都會被遮；所以官方 Node.js 映像檔（Docker 映像檔）的 `node` 使用者不遮任何字。與 `terms` 中自己列出的字詞不同，加入的名稱不受外洩檢查：名稱同時是 JSON 鍵、模型 id 或工具名稱的一部分時（`max_tokens` 中的 `max`、`claude-haiku-5-5` 中的 `claude`），那裡照原樣送出，請求不被拒；文字中的出現處照常遮罩。沒有 passwd 項目的帳號（`docker run --user 1234`）沒有名稱可遮。直接呼叫 `loadConfig` 的程式以第三個參數傳入帳號才會加入。檔案中只接受布林值，環境變數只接受 `1` 或 `0`，環境變數覆寫檔案。 |
 | `toolRestore.categories` | `REDACTION_PROXY_TOOL_RESTORE_CATEGORIES`（逗號分隔） | `PATH`、`TERM`、`PROJECT` | 還原進工具呼叫參數的類別，或 `"*"`（全部）；空字串代表都不還原。見[第 7 節](#工具參數的還原政策)。 |
 | `toolRestore.tools` | — | 無 | 依工具名稱（去掉前後空白、不分大小寫）比對的類別清單或 `"*"`，取代該工具的 `categories`。 |
 | `redaction.rules` | — | `card`、`entropy` 以外全部 | 啟用的內建規則；空陣列停用所有內建偵測。代理預設啟用 42 條：全部規則，但以 `card-strict`、`entropy-strict` 取代 `card`、`entropy`（上例即代理預設）。直接使用核心的宿主（`new RulesDetector()`）預設只有臺灣與通用的 10 條（`DEFAULT_RULE_NAMES`），見下方說明。 |
@@ -563,7 +566,7 @@ node scripts/fetch-name-model.mjs ~/models/nym       # 從 Hugging Face 下載�
 | 一種寫法一個佔位符 | `星河計畫`、`星河 計畫` 各有自己的佔位符。模型看不出它們是同一個 term，但每個位置都原樣還原，程式碼裡的識別字不會被改成另一種寫法。 |
 | 只認標準佔位符 | 模型若把 `⟦EMAIL_1⟧` 改寫成 `[EMAIL_1]`，你會原樣看到它。 |
 | 模型品質可能下降 | 需要直接操作被遮值的任務（例如把絕對路徑改成相對路徑）會變差。你會看到佔位符，不是靜默出錯。 |
-| 會改動一些字元 | 預設把控制字元換成可見字元（`␛`），把原文中的 `⟦` `⟧` 換成 `⟪` `⟫`。 |
+| 會改動一些字元 | 預設把控制字元換成可見字元（`␛`），把原文中的 `⟦` `⟧` 換成 `⟪` `⟫`；代理先前留在工具參數中、仍指向同一個值的佔位符除外（第 8 節「回送的佔位符」）。 |
 | 重啟會忘記接續對話與已知原始值 | Responses API 的 `previous_response_id` 依賴記憶體中最近 256 個回應；重啟或被擠出後，接續請求以 422 拒絕。已知原始值（第 8 節）重啟後也會忘記，平時也在最後一次偵測 24 小時後忘記（`knownOriginalsTtlSeconds`）。 |
 | 本機預設沒有驗證 | 預設只綁定 `127.0.0.1`；沒設 `authToken` 時，你電腦上的任何程式都能使用它。網頁的請求（不允許的 `Origin`、DNS rebinding）以 403 拒絕。 |
 | 工具參數只還原允許的類別 | 回應中 URL 內的佔位符保持原樣（合法的 `https://host/⟦PATH_1⟧` 也一樣）。工具參數只還原 `toolRestore` 允許的類別（預設 `PATH`、`TERM`、`PROJECT`），需要其他值的工具拿到佔位符，可能失敗，直到使用者為它開放。允許的類別照常還原並記入日誌，所以 shell 指令等仍可能把它們送出。 |
