@@ -24,6 +24,10 @@ async function maskAll(texts: string[], using = detector) {
   return mask(using, texts.map((text, seq) => ({ seq, path: '', text })), emptyRedactionIndex())
 }
 
+// Linear inputs here take 0.3–1.2 s of CPU on CI runners, and the same test has varied by 2x
+// between runs; the regressions these catch took 20 s or more.
+const CPU_BUDGET_MS = 5_000
+
 describe('leaks', () => {
   it.each([
     '/Users/alice/Code/Nimbus/src/index.ts',
@@ -84,26 +88,26 @@ describe('pathological inputs', () => {
     '-----BEGIN RSA PRIVATE KEY-----\n', 'TAG_1 ', '/Users/a/', 'a@b.co ', 'password=a ', '0912345678 ',
     ' @ ', 'a.b at ', '(at)', 'a [dot] ', 'a(dot)', ' ', '09-1234-', 'A 1', '統編 1234-', 'Nimbus ', '機密 ',
     '%41', '%30', '%E6%98%9F', '%2', '%', 'a%40b.co ', '%2FUsers%2F', '%E6%A9%9F%E5%AF%86',
-  ])('masks 200KB of %j within 2s of CPU time', async unit => {
+  ])('masks 200KB of %j within 5s of CPU time', async unit => {
     const text = unit.repeat(Math.ceil(SIZE / unit.length)).slice(0, SIZE)
     // CPU time of this worker process rather than wall-clock time, so other
     // test files running in parallel do not count against the budget.
     const started = process.cpuUsage()
     await maskAll([text])
     const used = process.cpuUsage(started)
-    expect((used.user + used.system) / 1_000).toBeLessThan(2_000)
+    expect((used.user + used.system) / 1_000).toBeLessThan(CPU_BUDGET_MS)
   })
 })
 
 describe('pathological inputs at 1 MB', () => {
   // The env-line check once read back to the previous newline from every key,
   // so one 1.28 MB line of `password=` took 21 s.
-  it.each(['password=', 'PASSWORD=', ' PASSWORD='])('masks 1 MB of %j within 2s of CPU time', async unit => {
+  it.each(['password=', 'PASSWORD=', ' PASSWORD='])('masks 1 MB of %j within 5s of CPU time', async unit => {
     const text = unit.repeat(Math.ceil(1024 * 1024 / unit.length))
     const started = process.cpuUsage()
     await maskAll([text])
     const used = process.cpuUsage(started)
-    expect((used.user + used.system) / 1_000).toBeLessThan(2_000)
+    expect((used.user + used.system) / 1_000).toBeLessThan(CPU_BUDGET_MS)
   })
 
   it.each([' ', '\t', ' '.repeat(200), `export${' '.repeat(200)}`])('reads an env line after any indent: %j', async indent => {
@@ -122,12 +126,12 @@ describe('pathological inputs to the international rules', () => {
     '(415) ', '415-555-', '415.555.', '1-', '0', '020 7946 ', '07700 ', '01 23 ', '01.', '03-1234-', '0120-',
     '010-1234-', '(11) 9', 'phone ', 'tel 1', 'phone +1 ', 'phone (0', 'phone 1 2 3 ', 'phone 1-', 'phone 2026-10-',
     '電話 0', 'call me at ',
-  ])('masks 200KB of %j within 2s of CPU time', async unit => {
+  ])('masks 200KB of %j within 5s of CPU time', async unit => {
     const text = unit.repeat(Math.ceil(SIZE / unit.length)).slice(0, SIZE)
     const started = process.cpuUsage()
     await maskAll([text], internationalOnly)
     const used = process.cpuUsage(started)
-    expect((used.user + used.system) / 1_000).toBeLessThan(2_000)
+    expect((used.user + used.system) / 1_000).toBeLessThan(CPU_BUDGET_MS)
   })
 })
 
