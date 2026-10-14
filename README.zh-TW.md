@@ -18,7 +18,7 @@
 
 跑得動本機模型、想要更強的隱私，請先安裝分流器；它透過 dsh-addons 的 redaction 套件使用這個代理的遮罩核心，安裝時一起裝上。跑不動的話，單用這個代理也能多一層隱私保護。
 
-> **狀態：** 0.3.0，尚未發布到 npm。已對真實服務驗證：DeepSeek Chat Completions（2026-10-08），以及透過 Claude Code 與 dsh 的 Anthropic Messages（2026-10-13），見下方。OpenAI API 與 Codex CLI 尚未驗證。
+> **狀態：** 0.3.0，尚未發布到 npm。已對真實服務驗證：DeepSeek Chat Completions（2026-10-08），以及透過 Claude Code 與 dsh 的 Anthropic Messages（2026-10-14），見下方。OpenAI API 與 Codex CLI 尚未驗證。
 
 ## 介紹影片
 
@@ -77,9 +77,9 @@ npx redaction-proxy           # 啟動代理，位址 http://127.0.0.1:8787（�
 
 ## 讓你的工具走代理
 
-> **真實服務：已驗證 DeepSeek 與 Anthropic，OpenAI 尚未驗證。** 2026-10-08 用[真實服務驗證工具](e2e/real/README.md)對 DeepSeek 跑了 4 個情境（Chat Completions；非串流 JSON 與串流；純文字與強制工具呼叫），全部通過：上游只看到佔位符，每次 5 個值都還原。2026-10-13 有兩個真實用戶端經由代理使用 Anthropic Messages（Claude Haiku 5.5）：
+> **真實服務：已驗證 DeepSeek 與 Anthropic，OpenAI 尚未驗證。** 2026-10-08 用[真實服務驗證工具](e2e/real/README.md)對 DeepSeek 跑了 4 個情境（Chat Completions；非串流 JSON 與串流；純文字與強制工具呼叫），全部通過：上游只看到佔位符，每次 5 個值都還原。2026-10-13 有兩個真實用戶端經由代理使用 Anthropic Messages（Claude Haiku 5.5），2026-10-14 兩者都在最終的 0.3.0 建置（commit `25881e0`）上再次通過：
 >
-> - **Claude Code 2.1.287**，以訂閱登入，設定 `ANTHROPIC_BASE_URL=http://127.0.0.1:8787`：串流文字與工具（Bash、Read）。偵測到的值上游只看到佔位符，回覆已還原，工具參數依 `toolRestore` 還原 `PATH`、`TERM`、`PROJECT`，其他類別保留為佔位符。0.3.0 之前，工具參數中保留的佔位符在後續回合會被重新編號，模型把同一個工具重試了 7 次；0.3.0 中同一件工作只用 1 次工具呼叫、3 個請求。Claude Code 也會送出作業系統的使用者名稱（在 `safeguards…user_identity` 與專案目錄名稱中），0.3.0 預設會遮掉（`maskLocalUsername`）。
+> - **Claude Code 2.1.287**，以訂閱登入，設定 `ANTHROPIC_BASE_URL=http://127.0.0.1:8787`：串流文字與工具（Bash、Read）。偵測到的值上游只看到佔位符，回覆已還原，工具參數依 `toolRestore` 還原 `PATH`、`TERM`、`PROJECT`，其他類別保留為佔位符。0.3.0 之前，工具參數中保留的佔位符在後續回合會被重新編號，模型把同一個工具重試了 7 次；0.3.0 中工具只執行 1 次（2026-10-13 為 3 個請求；2026-10-14 模型先寫了一句話再呼叫 Bash 與 Read，共 2 個請求，佔位符編號不變）。Claude Code 也會送出作業系統的使用者名稱（在 `safeguards…user_identity` 與專案目錄名稱中），0.3.0 預設會遮掉（`maskLocalUsername`）。
 > - **dsh**（DeepSeek Harness，經由它的 pi-ai Anthropic 路徑）：文字與工具。0.3.0 之前，保留的佔位符讓 Anthropic 以 HTTP 400 拒絕重送的簽章 thinking 區塊；已驗證 0.3.0 修正了這個問題。
 >
 > 未驗證：OpenAI API（沒有金鑰）、Codex CLI（未登入）、直接使用 Anthropic SDK（只經由 dsh 的 pi-ai 使用過）、以本儲存庫的 `e2e:real` 驗證工具對 Anthropic 執行（未執行）。
@@ -88,7 +88,7 @@ npx redaction-proxy           # 啟動代理，位址 http://127.0.0.1:8787（�
 
 | 工具 | 設定 | 狀態 |
 | --- | --- | --- |
-| Claude Code | `ANTHROPIC_BASE_URL=http://127.0.0.1:8787 claude` | 2026-10-13 已驗證（訂閱登入；文字、串流、工具） |
+| Claude Code | `ANTHROPIC_BASE_URL=http://127.0.0.1:8787 claude` | 2026-10-14 已驗證（訂閱登入；文字、串流、工具） |
 | Anthropic SDK | `ANTHROPIC_BASE_URL=http://127.0.0.1:8787`（不加 `/v1`） | 經由 dsh（pi-ai）驗證，未直接驗證 |
 | OpenAI SDK 與多數相容工具 | `OPENAI_BASE_URL=http://127.0.0.1:8787/v1`（要加 `/v1`） | 未測試 |
 | DeepSeek | 以 `REDACTION_PROXY_OPENAI_UPSTREAM=https://api.deepseek.com node lib/cli.js` 啟動代理，再用 `OPENAI_BASE_URL=http://127.0.0.1:8787/v1` 搭配你的 DeepSeek 金鑰。這會取代 OpenAI 上游。 | 已用真實服務驗證工具驗證（僅 API） |

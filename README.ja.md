@@ -18,7 +18,7 @@ OpenAI 互換・Anthropic 互換のクライアントならストリーミング
 
 ローカルモデルを動かせて、より強いプライバシーが必要なら、先にルーターを入れてください。ルーターは dsh-addons の redaction パッケージを通じてこのプロキシのマスク処理の中核を使います（一緒にインストールします）。動かせない場合は、このプロキシ単体でもプライバシーを一段高められます。
 
-> **ステータス：** バージョン 0.3.0 で、npm にはまだ公開していません。実サービスでは DeepSeek の Chat Completions（2026-10-08）と、Claude Code と dsh を通した Anthropic Messages（2026-10-13）で検証済みです（下記参照）。OpenAI API と Codex CLI は未検証です。
+> **ステータス：** バージョン 0.3.0 で、npm にはまだ公開していません。実サービスでは DeepSeek の Chat Completions（2026-10-08）と、Claude Code と dsh を通した Anthropic Messages（2026-10-14）で検証済みです（下記参照）。OpenAI API と Codex CLI は未検証です。
 
 ## 紹介動画
 
@@ -77,9 +77,9 @@ npx redaction-proxy           # プロキシを http://127.0.0.1:8787 で起動�
 
 ## ツールの接続先を変える
 
-> **実サービス：DeepSeek と Anthropic は検証済み、OpenAI は未検証です。** 2026-10-08 に[実サービス検証ツール](e2e/real/README.md)で DeepSeek に対して 4 つのシナリオ（Chat Completions、JSON とストリーミング、テキストと強制ツール呼び出し）を実行し、すべて合格しました。上流が見たのはプレースホルダーだけで、毎回 5 つの値が復元されました。2026-10-13 には 2 つの実クライアントがプロキシを通して Anthropic Messages（Claude Haiku 5.5）を使いました。
+> **実サービス：DeepSeek と Anthropic は検証済み、OpenAI は未検証です。** 2026-10-08 に[実サービス検証ツール](e2e/real/README.md)で DeepSeek に対して 4 つのシナリオ（Chat Completions、JSON とストリーミング、テキストと強制ツール呼び出し）を実行し、すべて合格しました。上流が見たのはプレースホルダーだけで、毎回 5 つの値が復元されました。2026-10-13 には 2 つの実クライアントがプロキシを通して Anthropic Messages（Claude Haiku 5.5）を使い、2026-10-14 には最終の 0.3.0 ビルド（commit `25881e0`）で両方とも再び合格しました。
 >
-> - **Claude Code 2.1.287**（サブスクリプションでログイン、`ANTHROPIC_BASE_URL=http://127.0.0.1:8787`）：ストリーミングのテキストとツール（Bash、Read）。検出した値については上流が見たのはプレースホルダーだけで、応答は復元されました。ツール引数は `toolRestore` に従って `PATH`、`TERM`、`PROJECT` が復元され、ほかのカテゴリはプレースホルダーのままでした。0.3.0 より前は、ツール引数に残したプレースホルダーが後のターンで番号を振り直され、モデルが同じツールを 7 回やり直しました。0.3.0 では同じ作業がツール呼び出し 1 回、リクエスト 3 回で済みました。Claude Code は OS のユーザー名も送ります（`safeguards…user_identity` とプロジェクトディレクトリ名）。0.3.0 は既定でこれをマスクします（`maskLocalUsername`）。
+> - **Claude Code 2.1.287**（サブスクリプションでログイン、`ANTHROPIC_BASE_URL=http://127.0.0.1:8787`）：ストリーミングのテキストとツール（Bash、Read）。検出した値については上流が見たのはプレースホルダーだけで、応答は復元されました。ツール引数は `toolRestore` に従って `PATH`、`TERM`、`PROJECT` が復元され、ほかのカテゴリはプレースホルダーのままでした。0.3.0 より前は、ツール引数に残したプレースホルダーが後のターンで番号を振り直され、モデルが同じツールを 7 回やり直しました。0.3.0 ではツールの実行は 1 回でした（2026-10-13 はリクエスト 3 回、2026-10-14 はモデルが一文を書いてから Bash と Read を呼び、リクエスト 2 回で、プレースホルダーの番号は変わりませんでした）。Claude Code は OS のユーザー名も送ります（`safeguards…user_identity` とプロジェクトディレクトリ名）。0.3.0 は既定でこれをマスクします（`maskLocalUsername`）。
 > - **dsh**（DeepSeek Harness、pi-ai の Anthropic ルート経由）：テキストとツール。0.3.0 より前は、残したプレースホルダーのせいで、再送した署名付き thinking ブロックを Anthropic が HTTP 400 で拒否しました。0.3.0 で直ったことを確認済みです。
 >
 > 未検証：OpenAI API（キーなし）、Codex CLI（未ログイン）、Anthropic SDK の直接利用（dsh の pi-ai 経由でのみ使用）、このリポジトリの `e2e:real` 検証ツールでの Anthropic（未実行）。
@@ -88,7 +88,7 @@ API キーはこれまでどおりツールから送ってください。プロ�
 
 | ツール | 設定 | 状態 |
 | --- | --- | --- |
-| Claude Code | `ANTHROPIC_BASE_URL=http://127.0.0.1:8787 claude` | 2026-10-13 検証済み（サブスクリプションでログイン、テキスト・ストリーミング・ツール） |
+| Claude Code | `ANTHROPIC_BASE_URL=http://127.0.0.1:8787 claude` | 2026-10-14 検証済み（サブスクリプションでログイン、テキスト・ストリーミング・ツール） |
 | Anthropic SDK | `ANTHROPIC_BASE_URL=http://127.0.0.1:8787`（`/v1` なし） | dsh（pi-ai）経由で検証済み、直接は未検証 |
 | OpenAI SDK と多くの互換ツール | `OPENAI_BASE_URL=http://127.0.0.1:8787/v1`（`/v1` あり） | 未検証 |
 | DeepSeek | `REDACTION_PROXY_OPENAI_UPSTREAM=https://api.deepseek.com node lib/cli.js` でプロキシを起動し、DeepSeek のキーと `OPENAI_BASE_URL=http://127.0.0.1:8787/v1` を使います。OpenAI の上流はこれで置き換わります。 | 実サービス検証ツールで検証済み（API のみ） |
