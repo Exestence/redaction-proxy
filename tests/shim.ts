@@ -1,6 +1,6 @@
 /**
- * Stand-ins for the DeepSeek Harness adapter surface, so the rule and engine
- * suites carried over from dsh-addons run against the core unchanged.
+ * Stand-ins for the adapter API that the rule and engine suites carried over
+ * from dsh-addons expect, so they run against the core unchanged.
  */
 import { RulesDetector, mask, restore } from '../src/core/index.ts'
 import type {

@@ -2,7 +2,7 @@
  * Redaction core: rule-based detection (with Taiwan identifiers and
  * checksums), placeholder masking, strict and streaming restoration. It has no
  * runtime dependency beyond Node's standard library and no host types; the
- * proxy and the DeepSeek Harness adapters both build on it.
+ * proxy builds on it.
  *
  * @module redaction-proxy/core
  */

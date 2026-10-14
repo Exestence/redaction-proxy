@@ -38,19 +38,6 @@
 | `src/cli.ts` | 命令列 `redaction-proxy [--config path]`；`--demo` 跑免金鑰示範（`src/demo.ts`，即 `pnpm demo`）。 |
 | `bench/` | 誤遮率量測（`pnpm bench`）。 |
 
-DeepSeek Harness 透過 dsh-addons 的 redaction 套件以 git submodule（`dsh-addons/vendor/redaction-proxy`）使用這份核心；核心只在這個儲存庫修改。[dsh-privacy-router](https://github.com/PersonalAssistanceHsin/dsh-privacy-router) 目前還有自己的串流還原器，未來預計統一到這裡的 `createStreamRestorer`。
-
-和 dsh-privacy-router 的差別：
-
-| | redaction-proxy（本儲存庫） | [dsh-privacy-router](https://github.com/PersonalAssistanceHsin/dsh-privacy-router) |
-| --- | --- | --- |
-| 形式 | 獨立的 HTTP 代理 | dsh 的外掛 |
-| 用戶端 | 任何 OpenAI 或 Anthropic 相容用戶端 | 只限 dsh |
-| 路由 | 不路由：每個請求都遮罩後送往上游 | 每一輪決定送本機模型還是雲端 |
-| 本機模型 | 不需要 | 需要 |
-| 遮罩核心 | 在這裡（`src/core/`） | dsh-addons 的 redaction 套件以 git submodule 引用這份核心 |
-| 串流還原 | `src/core/restore.ts` | 仍有自己的還原器，未來預計統一 |
-
 每個請求的基本行為：
 
 - 同一個值在同一個請求中一律用同一個佔位符。
@@ -96,7 +83,7 @@ DeepSeek Harness 透過 dsh-addons 的 redaction 套件以 git submodule（`dsh-
 
 | 規則 | 類別 | 細節 |
 | --- | --- | --- |
-| `email` | `EMAIL` | 以 `@` 為錨點、有上限地向兩側展開。也接受防爬寫法：`＠`、`(at)`、`[at]`，以及網域中的 `[dot]`、`(dot)`；這些寫法要求頂級網域是兩字母國碼或常見 gTLD（`com`、`org`、`dev`、`test` 等）。`@`、`＠` 必須緊貼前後兩段；`(at)`、`[at]` 兩側可有空白（不跨行），此時頂級網域須全小寫、本地部分須是以 `.`、`_`、`+` 連接的字（`wang.yichun`）且不以 `self.`、`this.` 等程式根開頭。`name @ domain`（`@` 兩側有空白）與單獨的 ` at ` **不遮**：shell 提示字元（`root @ web01.example.com`）、帳號標記（`cc @ alice.me`、`meet @ cafe.tw`）、英文散文（`socket.io at github.com`、`contact fly.io at community.fly.io`）與矩陣程式碼（`layer.weight @ state.dx`）在字面上與地址無法區分；頂級網域白名單與關鍵詞閘門都試過，前者擋不住誤遮、後者使召回掉到 41/54。這類 email 只有隱私分類器把關。 |
+| `email` | `EMAIL` | 以 `@` 為錨點、有上限地向兩側展開。也接受防爬寫法：`＠`、`(at)`、`[at]`，以及網域中的 `[dot]`、`(dot)`；這些寫法要求頂級網域是兩字母國碼或常見 gTLD（`com`、`org`、`dev`、`test` 等）。`@`、`＠` 必須緊貼前後兩段；`(at)`、`[at]` 兩側可有空白（不跨行），此時頂級網域須全小寫、本地部分須是以 `.`、`_`、`+` 連接的字（`wang.yichun`）且不以 `self.`、`this.` 等程式根開頭。`name @ domain`（`@` 兩側有空白）與單獨的 ` at ` **不遮**：shell 提示字元（`root @ web01.example.com`）、帳號標記（`cc @ alice.me`、`meet @ cafe.tw`）、英文散文（`socket.io at github.com`、`contact fly.io at community.fly.io`）與矩陣程式碼（`layer.weight @ state.dx`）在字面上與地址無法區分；頂級網域白名單與關鍵詞閘門都試過，前者擋不住誤遮、後者使召回掉到 41/54。這類 email 不會被偵測。 |
 | `user-path` | `PATH` | 只遮家目錄前綴（`/Users/x`、`/home/x`、`C:\Users\x`、`~x/`），含 JSON 跳脫形式；路徑其餘部分保持可讀。 |
 | `api-key` | `KEY` | PEM、AWS `AKIA`/`ASIA`、GitHub `ghp_` 系列、`sk-`、Slack `xox` 與 webhook、Google `AIza`、JWT、`Authorization`/`Bearer`、URL 中的帳密、`curl -u`、`--password x`，以及鍵名代表憑證的 `key=value` 指派（含中英文關鍵詞）。值是 schema 用字、聊天協定的欄位名稱、角色與內容類型、型別名稱、遮蔽寫法或範本佔位時不遮（`password: required`、`text`、`assistant`、`messages`、`str`、`***`、`xxx`、`<redacted>`、`your-password`、`<your secret>`、`{password}`、`{{ secrets.DB_PW }}`、`${{ secrets.PW2 }}`），因為這類字被綁成憑證後，之後每個請求的 `role`、`type` 欄位與欄位名稱都會對到它；雙大括號範本可含數字，單大括號中有數字的值是字面值（`{hunter2}` 照常遮）。OpenAI Chat Completions、Responses 與 Anthropic Messages API 的請求與回應欄位名稱（`password: max_tokens`、`top_p`、`temperature`、`metadata`、`reasoning`、`truncation`、`tool_calls`、`cache_control`）不論是否加引號、是否在 `.env` 行上、大小寫為何都不遮（`{"password":"max_tokens"}`、`DB_PASSWORD=cache_control` 也不遮），因為遮了會讓同一請求中同名的 JSON 鍵被外洩檢查擋下（422），而 Anthropic 每個請求都帶 `max_tokens`。由 API 欄位用字組成的其他 snake_case 值（`data_store`、`web_server`、`blue_horse_battery`）照常遮；`admin`、`changeme`、`123456` 這類弱密碼是真的密碼，照常遮（`.env` 範例的 `DB_PASSWORD=changeme` 也會遮）。未加引號的值中，後面緊接英數字或非 ASCII 的字母、數字、符號的引號屬於值（`password: ab"cd12ef`、`password: p@ss"🔑x12`）；其他引號結束外層字串。 |
 | `tw-national-id` | `TWID` | 身分證字號（第二碼 1/2）與居留證號（第二碼 8/9），**驗證檢查碼**。也接受字母後（`A 123456789`）或第四字元後（`A123-456789`）的一個空白或連字號；其他位置的分隔不算。 |
@@ -167,10 +154,10 @@ DeepSeek Harness 透過 dsh-addons 的 redaction 套件以 git submodule（`dsh-
 **路徑不整段遮。** `user-path` 只遮家目錄前綴（使用者名稱），其餘保留，所以公開評測把多數路徑算成「部分遮蔽」。整段遮會讓模型看不到檔案結構與副檔名，讀 stack trace、建議改哪個檔案都會變差；使用者名稱是路徑中唯一必然指向個人的部分，保留集上 97% 的路徑完整遮到它。路徑中的專案或客戶名稱用 `projectNames`、`terms` 遮，這兩者在路徑中也會比對。因此不提供整段遮的選項；有需要再加。
 
 - **NFKC 投影。** 每條規則也會在去除零寬字元（U+200B–U+200D、U+2060、U+FEFF）與軟連字號（U+00AD）後的 NFKC 投影上再跑一次，所以全形數字（`０９１２３４５６７８`）、全形 `＠`、`ali\u200bce@…` 都抓得到。其他隱形字元（U+200E/U+200F 等雙向標記、U+034F、變體選擇符、標籤字元）不去除，夾在值中間時該值不被偵測。
-- **百分比解碼投影。** 每條規則（包括 `terms`）也會在百分比解碼後的文字上再跑一次。每一段連續的 `%XX` 逐個 UTF-8 字元解碼：合法的位元組序列解碼成字元，無法開始或完成合法序列的 `%XX`（截斷的 `%E6`、單獨的 `%FF`、過長編碼、代理碼位）照原樣保留並一對一對應，同一段其餘部分照常解碼；`+` 不當成空格。解碼後的文字再做一次去除零寬字元與軟連字號的 NFKC 投影，兩層對應組合後仍指回編碼原文，所以 `lin%E2%80%8B.yating%40…` 與百分比編碼的全形數字也抓得到。偵測到的範圍對應回整段編碼原文，佔位符蓋住編碼原文，登錄表綁定的也是編碼原文，所以還原與工具參數都逐位元組寫回原樣（大小寫混用的 `%2f` 也一樣）。編碼過的 term 與其他寫法一樣有自己的佔位符，還原成自己的寫法。只解碼一層：編碼兩次的值（`%2540`）不偵測。表單編碼查詢中代表空格的 `+`（`星河+計畫`）不偵測。需要左側不是英數字、且以數字開頭的規則（手機號碼 `PHONE_MOBILE`、`PHONE_MOBILE_SPLIT`、`PHONE_KEYWORD`、統一編號、信用卡號、私有 IP）與金鑰前綴把緊接在前的 `%80`–`%FF` 視為邊界，所以 `%E6%2B886…`、`%E609-1234-5678`、`tel%3A%E602-…`、`%c0sk-…` 抓得到；`%00`–`%7F` 一定會解碼，`%41%42` 後面的數字仍算同一個字詞。同值擴散的左邊界也一樣。以字母開頭的身分證字號沒有這個邊界：Big5 與 Shift-JIS 中緊接在前導位元組後面的 ASCII 字母是該字的尾位元組（`%A4A` 是「乙」、`%83P%81%5B%83X` 是「ケース」），所以緊接在無效 `%XX` 後面的身分證字號（`%E6A123456789`）不偵測。金鑰前綴保留這個邊界，所以尾位元組為 `A` 的 Shift-JIS 字元加上 `KIA…`（`%83AKIA…`）會遮成形似金鑰的範圍。URL 裡經 base64 編碼的值不解碼；隱私路由只在工具輸出中解碼 base64。
+- **百分比解碼投影。** 每條規則（包括 `terms`）也會在百分比解碼後的文字上再跑一次。每一段連續的 `%XX` 逐個 UTF-8 字元解碼：合法的位元組序列解碼成字元，無法開始或完成合法序列的 `%XX`（截斷的 `%E6`、單獨的 `%FF`、過長編碼、代理碼位）照原樣保留並一對一對應，同一段其餘部分照常解碼；`+` 不當成空格。解碼後的文字再做一次去除零寬字元與軟連字號的 NFKC 投影，兩層對應組合後仍指回編碼原文，所以 `lin%E2%80%8B.yating%40…` 與百分比編碼的全形數字也抓得到。偵測到的範圍對應回整段編碼原文，佔位符蓋住編碼原文，登錄表綁定的也是編碼原文，所以還原與工具參數都逐位元組寫回原樣（大小寫混用的 `%2f` 也一樣）。編碼過的 term 與其他寫法一樣有自己的佔位符，還原成自己的寫法。只解碼一層：編碼兩次的值（`%2540`）不偵測。表單編碼查詢中代表空格的 `+`（`星河+計畫`）不偵測。需要左側不是英數字、且以數字開頭的規則（手機號碼 `PHONE_MOBILE`、`PHONE_MOBILE_SPLIT`、`PHONE_KEYWORD`、統一編號、信用卡號、私有 IP）與金鑰前綴把緊接在前的 `%80`–`%FF` 視為邊界，所以 `%E6%2B886…`、`%E609-1234-5678`、`tel%3A%E602-…`、`%c0sk-…` 抓得到；`%00`–`%7F` 一定會解碼，`%41%42` 後面的數字仍算同一個字詞。同值擴散的左邊界也一樣。以字母開頭的身分證字號沒有這個邊界：Big5 與 Shift-JIS 中緊接在前導位元組後面的 ASCII 字母是該字的尾位元組（`%A4A` 是「乙」、`%83P%81%5B%83X` 是「ケース」），所以緊接在無效 `%XX` 後面的身分證字號（`%E6A123456789`）不偵測。金鑰前綴保留這個邊界，所以尾位元組為 `A` 的 Shift-JIS 字元加上 `KIA…`（`%83AKIA…`）會遮成形似金鑰的範圍。URL 裡經 base64 編碼的值不解碼。
 - **同值擴散。** 一個值被偵測到之後，它在同一請求中的其他出現位置也會用同一個佔位符遮掉（`propagate`）。
 - **允許清單。** `allowlist` 中的字面值不會被任何內建規則遮罩，預設是 `git@github.com` 與 `noreply@github.com`。設為空陣列就什麼都不放過。
-- **未偵測的拆開寫法。** 點後加空格的私有 IP（`192. 168. 1. 2`）、被空格或換行拆開的金鑰（只有高熵規則可能抓到片段），以及寫成 `name @ domain`（有空白）或單獨用 ` at ` 的 email 不遮（只有分類器把關）。
+- **未偵測的拆開寫法。** 點後加空格的私有 IP（`192. 168. 1. 2`）、被空格或換行拆開的金鑰（只有高熵規則可能抓到片段），以及寫成 `name @ domain`（有空白）或單獨用 ` at ` 的 email 不遮。
 - **保留 id。** 原文中若出現字面的 `EMAIL_3`（某個政策類別的 `CATEGORY_n`），這個 id 會被保留、不分配給偵測到的值。
 
 ## 4. 遮罩順序與提示快取
@@ -437,7 +424,7 @@ POST /v1/messages tool arguments: kept by the tool restore policy KEY_1 in bash 
 | — | `REDACTION_PROXY_OPENAI_API_KEY` | 無 | OpenAI 型用戶端沒送 `authorization` 時才以 `Bearer` 補上。只存記憶體。 |
 | — | `REDACTION_PROXY_ANTHROPIC_API_KEY` | 無 | Anthropic 型用戶端沒送 `x-api-key` 與 `authorization` 時才補上。只存記憶體。 |
 
-**國際規則、延伸規則與政策摘要。** 偵測器的 `policyDigest` 是偵測器版本與啟用規則清單的雜湊，持久化 span 索引的宿主（DeepSeek Harness 的隱私路由）用它判斷先前記錄的遮罩是否仍適用；摘要不同時，`mask` 以 `policy` 拒絕。核心預設不含國際規則與延伸規則。`rules-7` 讓 `api-key` 不再遮 schema 用字、協定用字與遮蔽寫法（見[第 3 節](#3-偵測規則)），也不再把 `Authorization:` 後的空白算進值；`rules-8` 再讓它不遮由協定用字組成的 snake_case 欄位名稱（`max_tokens`）與範本佔位（`<your secret>`），並遮含引號的值（`ab"cd12ef`）；`rules-9` 改為只不遮未加引號、不在 `.env` 行上的知名 API 欄位名稱，再遮 `data_store`、`web_server` 這類由協定用字組成的密碼，並把含數字的 `${{ secrets.PW2 }}` 整段當成範本；`rules-10` 讓 OpenAI 與 Anthropic API 的欄位名稱在任何寫法都不遮，並讓首尾是英文字母或數字的 `terms`、`projectNames` 只比對完整的詞（這項只少遮，所以也遞增版本）。`rules-11` 讓原文中是完整單字、但 NFKC 投影上不是的 `terms`、`projectNames` 出現處也遮（`Orion™`、`Lin№5`、`Orion\u200Bcloud`），與外洩檢查的判斷一致，並讓 `api-key` 未加引號的值在引號後接非 ASCII 字母、數字或符號時延續（`p@ss"🔑x12` 整段遮）。`rules-12` 讓 `terms`、`projectNames` 的原文邊界把 BMP 以外的字母與數字當成字母與數字（`Lin𝐀bc` 不再遮，這項只少遮），外洩檢查也把零寬字元後接的組合符號算在前一個字母上（`Orion\u200B\u0301`）。所以未設定 `rules` 的宿主的偵測器版本從 `rules-11` 變成 `rules-12`，摘要從 `sha256:de67f507…a04124` 變成 `sha256:2e02d33a…8c674d`，以 `rules-11` 記錄的 session 會遇到 `policy` 拒絕（隱私路由會改在本機回答）。在這類宿主啟用任一國際規則，偵測器版本變成 `rules-12+intl-2`；啟用任一延伸規則再加上 `+ext-1`；摘要隨之改變，之前記錄的 session 會遇到 `policy` 拒絕（隱私路由會改在本機回答）。國際規則的結果改變時只遞增 `INTERNATIONAL_RULES_VERSION`，延伸規則只遞增 `EXTENDED_RULES_VERSION`，都不影響未啟用它們的宿主。`intl-2` 加入 8 條電話規則，並讓 `e164-phone` 在行首只認分組寫法、略過日期。`intl-2` 與 `ext-1` 在 v0.1.0 之前的修改沿用這兩個版本。自 v0.1.0 起，任何改變偵測結果的修改都必須遞增對應的版本（`DETECTOR_VERSION`、`INTERNATIONAL_RULES_VERSION` 或 `EXTENDED_RULES_VERSION`），因為以 git submodule 固定使用這份核心的宿主（dsh-addons 的 redaction 套件）會比對政策摘要。`terms`、`projectNames` 的比對改為詞的部分之間可有一串分隔符（`Margaret  Holloway`、換行縮排）時沿用 `rules-6`：摘要只含字面值的數量，不含比對方式；新的比對只多遮、不少遮；已記錄的訊息不重新掃描，其中這類寫法只在新訊息綁定同一寫法後才經值傳播遮掉。代理不保存索引，每個請求都用空索引，所以摘要對代理沒有影響，代理因此預設啟用全部規則（嚴格版取代 `card`、`entropy`）。
+**國際規則、延伸規則與政策摘要。** 偵測器的 `policyDigest` 是偵測器版本與啟用規則清單的雜湊，持久化 span 索引的宿主用它判斷先前記錄的遮罩是否仍適用；摘要不同時，`mask` 以 `policy` 拒絕。核心預設不含國際規則與延伸規則。`rules-7` 讓 `api-key` 不再遮 schema 用字、協定用字與遮蔽寫法（見[第 3 節](#3-偵測規則)），也不再把 `Authorization:` 後的空白算進值；`rules-8` 再讓它不遮由協定用字組成的 snake_case 欄位名稱（`max_tokens`）與範本佔位（`<your secret>`），並遮含引號的值（`ab"cd12ef`）；`rules-9` 改為只不遮未加引號、不在 `.env` 行上的知名 API 欄位名稱，再遮 `data_store`、`web_server` 這類由協定用字組成的密碼，並把含數字的 `${{ secrets.PW2 }}` 整段當成範本；`rules-10` 讓 OpenAI 與 Anthropic API 的欄位名稱在任何寫法都不遮，並讓首尾是英文字母或數字的 `terms`、`projectNames` 只比對完整的詞（這項只少遮，所以也遞增版本）。`rules-11` 讓原文中是完整單字、但 NFKC 投影上不是的 `terms`、`projectNames` 出現處也遮（`Orion™`、`Lin№5`、`Orion\u200Bcloud`），與外洩檢查的判斷一致，並讓 `api-key` 未加引號的值在引號後接非 ASCII 字母、數字或符號時延續（`p@ss"🔑x12` 整段遮）。`rules-12` 讓 `terms`、`projectNames` 的原文邊界把 BMP 以外的字母與數字當成字母與數字（`Lin𝐀bc` 不再遮，這項只少遮），外洩檢查也把零寬字元後接的組合符號算在前一個字母上（`Orion\u200B\u0301`）。所以未設定 `rules` 的宿主的偵測器版本從 `rules-11` 變成 `rules-12`，摘要從 `sha256:de67f507…a04124` 變成 `sha256:2e02d33a…8c674d`，以 `rules-11` 記錄的 session 會遇到 `policy` 拒絕。在這類宿主啟用任一國際規則，偵測器版本變成 `rules-12+intl-2`；啟用任一延伸規則再加上 `+ext-1`；摘要隨之改變，之前記錄的 session 會遇到 `policy` 拒絕。國際規則的結果改變時只遞增 `INTERNATIONAL_RULES_VERSION`，延伸規則只遞增 `EXTENDED_RULES_VERSION`，都不影響未啟用它們的宿主。`intl-2` 加入 8 條電話規則，並讓 `e164-phone` 在行首只認分組寫法、略過日期。`intl-2` 與 `ext-1` 在 v0.1.0 之前的修改沿用這兩個版本。自 v0.1.0 起，任何改變偵測結果的修改都必須遞增對應的版本（`DETECTOR_VERSION`、`INTERNATIONAL_RULES_VERSION` 或 `EXTENDED_RULES_VERSION`），因為持久化 span 索引的宿主會比對政策摘要。`terms`、`projectNames` 的比對改為詞的部分之間可有一串分隔符（`Margaret  Holloway`、換行縮排）時沿用 `rules-6`：摘要只含字面值的數量，不含比對方式；新的比對只多遮、不少遮；已記錄的訊息不重新掃描，其中這類寫法只在新訊息綁定同一寫法後才經值傳播遮掉。代理不保存索引，每個請求都用空索引，所以摘要對代理沒有影響，代理因此預設啟用全部規則（嚴格版取代 `card`、`entropy`）。
 
 上游 base 要設成讓 `<base>/v1/chat/completions`（或 `<base>/v1/messages`）是真正的端點，例如 `https://api.deepseek.com`。結尾斜線會被去掉。
 
@@ -447,7 +434,7 @@ POST /v1/messages tool arguments: kept by the tool restore policy KEY_1 in bash 
 
 | 檔案 | 內容 |
 | --- | --- |
-| `rules-detection`、`rules-secrets`、`rules-normalization`、`rules-propagation`、`rules-config`、`rules-synthetic-corpus` | 與 DeepSeek Harness 轉接層共用的規則測試：各規則、憑證樣式、NFKC 與零寬字元、同值擴散、設定驗證、合成語料。 |
+| `rules-detection`、`rules-secrets`、`rules-normalization`、`rules-propagation`、`rules-config`、`rules-synthetic-corpus` | 規則測試：各規則、憑證樣式、NFKC 與零寬字元、同值擴散、設定驗證、合成語料。 |
 | `rules-regroup`、`rules-regroup-review*`、`rules-percent*` | 拆開寫法、百分比編碼的值與逐位元組還原、手機號碼的字母邊界、逐字元解碼與解碼後的 NFKC 投影，含兩組各 10,000 筆、不同種子的模糊測試，以及緊接在無效 `%XX` 後面的值。 |
 | `rules-international` | 國際規則：每條規則的合成正例、檢查碼錯誤與結構不符的反例、程式碼與日誌形狀的反例（時間戳、雜湊、訂單號、版本字串、UUID）、與卡號重疊時的類別、全形與百分比編碼、預設政策摘要不變、代理預設規則、diff 新增行與 `+` 後的日期不被當成電話；國內電話格式的正例，與時間戳、ISBN、SSN、IPv4、表格列、十六進位傾印、UUID、CSV 列等反例。`rules-synthetic-corpus` 另有國際規則在隨機日誌 id 與數字列上的誤遮上限，`adversarial` 另有 52 種國際規則的 200 KB 病態輸入。 |
 | `rules-extended` | 延伸規則：每條規則的正例與反例（程式碼、套件名、檔名、命名空間、環境變數、資源路徑、成員鏈、版本範圍、純數字 UUID）、預設 `card`、`entropy` 的結果不變、偵測器版本與摘要，以及 32 種 200 KB 病態輸入。 |
@@ -499,7 +486,6 @@ npx：尚未發布到 npm。2026-10-14 以本機 tarball 驗證（0.3.0 的 `npm
 - 量測中文散文語料的誤遮率。
 - 發布到 npm。套件已可發布（`bin` 入口 `redaction-proxy`，`npm pack` 只含 `lib/`、README、LICENSE、NOTICE、`config.example.toml`），但 `package.json` 仍是 `"private": true`；決定發布時刪掉這一行即可（若改用 scoped 名稱，另加 `"publishConfig": { "access": "public" }`）。`prepublishOnly` 會先跑型別檢查與測試。授權條款已定為 Apache-2.0（[LICENSE](../LICENSE)）。
 - 在 linux/amd64 上建置並執行 Docker 映像，並以真模型執行人名模型版映像（linux/arm64 的映像已於 2026-10-13 驗證，見[第 13 節](#13-測試)）。
-- 將 dsh-privacy-router 的串流還原器統一到這份核心。
 
 ## 16. 人名模型（實驗性）
 
@@ -566,8 +552,8 @@ node scripts/fetch-name-model.mjs ~/models/nym       # 從 Hugging Face 下載�
 | 人名、地址只有列出才遮 | 預設沒有自由文字的人名偵測，也沒有地址規則：地址是自由文字，沒有固定格式、檢查碼或關鍵詞，規則無法和一般句子區分。人名、公司名、代號要列進 `terms` 或 `projectNames`，或開啟[實驗性的人名模型](#16-人名模型實驗性)，但它會漏掉一些人名。病況、薪資照原樣送出。 |
 | 有些欄位不遮 | 圖片、PDF 等 base64 檔案（純文字文件的內容照常遮罩）、音訊、`metadata`、工具名稱、帶簽章的 thinking 原樣轉送且不掃描，JSON 物件的鍵也是。在被遮文字中偵測到的值若也出現在這些欄位，整個請求預設以 422 拒絕；只出現在這些欄位的值照原樣送出。回送的工具呼叫輸入不論鍵名都遮（第 5 節）。 |
 | Cursor 不能用 | Cursor 的自訂 base URL 請求是從 Cursor 自己的伺服器發出，連不到你的 `127.0.0.1`；而且 Cursor 後端在任何代理之前就看到未遮罩的提示。 |
-| 有些拆開的寫法抓不到 | 偵測不到：點後加空格的私有 IP（`192. 168. 1. 2`）；被空格或換行拆開的 API 金鑰（高熵規則只抓得到部分片段）；寫成 `name @ domain`（`@` 兩側有空白，`wang.yichun @ example.tw`）或單獨用 ` at `（`wang.yichun at example.tw`）的 email 不遮，因為 shell 提示字元（`root @ web01.example.com`）、帳號標記（`cc @ alice.me`）、英文散文（`socket.io at github.com`）與矩陣程式碼（`a.b @ c.de`）長得一樣；這類 email 只有隱私分類器把關。抓得到：加了空格或連字號的 terms、`＠`、`(at)`、`[at]`、`[dot]`，以及中間有一個分隔符的身分證字號、統編、手機號碼；啟用延伸規則時（代理預設）也抓得到小寫字母開頭或夾不換行空白的身分證字號，以及以 `.`、`/`、`_` 分組或前 4 碼加括號的手機號碼。仍偵測不到：一般空白或連字號在其他位置的身分證字號（`A12345-6789`），以及小寫字母開頭又有一般空白或連字號的寫法（`a 123456789`）；沒有關鍵詞的護照與健保卡號（沒有檢查碼），以及以空白分組的護照號碼（`passport 312 345 678`）；`jwt=X` 中不是 JWT 形狀的值（`key = X` 指派由 `api-key` 讀，`jwt` 不在它的關鍵詞中；JWT 形狀的值本來就由 `api-key`、`token-format` 遮）。 |
-| 有些編碼寫法抓不到 | 百分比編碼（percent-encoding）的值（`lin.yating%40example.com`、查詢字串裡的 `%E6%98%9F…`、`%2FUsers%2F…`）會解碼一層後偵測，遮罩範圍是編碼原文，回覆還原時寫回編碼原文。夾雜無效或截斷的位元組（`%FF`、在 `%E6` 處被截斷的 URL）不會讓其餘部分不解碼，解碼後的全形字元與零寬字元也和一般文字一樣折疊，緊接在無效位元組後面的號碼或金鑰（`%E6%2B886…`、`%E609-1234-5678`、`%FFsk-…`）也抓得到。啟用 `email-escaped` 時（代理預設），`@` 寫成 `&#64;`、`&#x40;`、`&commat;`、`\u0040` 的 email 也抓得到。偵測不到：編碼兩次的值（`%2540`）；表單編碼查詢中代表空格的 `+`（`星河+計畫`）；URL 裡經 base64 編碼的值（隱私路由只在工具輸出中解碼 base64）；緊接在無效位元組後面的身分證字號（`%E6A123456789`），因為 Big5 與 Shift-JIS 中緊接在前導位元組後面的字母是該字的一部分（`%A4A` 是「乙」）。同理，尾位元組為 `A` 的 Shift-JIS 字元可能讓 `%83AKIA…` 被遮成形似金鑰的範圍。 |
+| 有些拆開的寫法抓不到 | 偵測不到：點後加空格的私有 IP（`192. 168. 1. 2`）；被空格或換行拆開的 API 金鑰（高熵規則只抓得到部分片段）；寫成 `name @ domain`（`@` 兩側有空白，`wang.yichun @ example.tw`）或單獨用 ` at `（`wang.yichun at example.tw`）的 email 不遮，因為 shell 提示字元（`root @ web01.example.com`）、帳號標記（`cc @ alice.me`）、英文散文（`socket.io at github.com`）與矩陣程式碼（`a.b @ c.de`）長得一樣；這類 email 不會被偵測。抓得到：加了空格或連字號的 terms、`＠`、`(at)`、`[at]`、`[dot]`，以及中間有一個分隔符的身分證字號、統編、手機號碼；啟用延伸規則時（代理預設）也抓得到小寫字母開頭或夾不換行空白的身分證字號，以及以 `.`、`/`、`_` 分組或前 4 碼加括號的手機號碼。仍偵測不到：一般空白或連字號在其他位置的身分證字號（`A12345-6789`），以及小寫字母開頭又有一般空白或連字號的寫法（`a 123456789`）；沒有關鍵詞的護照與健保卡號（沒有檢查碼），以及以空白分組的護照號碼（`passport 312 345 678`）；`jwt=X` 中不是 JWT 形狀的值（`key = X` 指派由 `api-key` 讀，`jwt` 不在它的關鍵詞中；JWT 形狀的值本來就由 `api-key`、`token-format` 遮）。 |
+| 有些編碼寫法抓不到 | 百分比編碼（percent-encoding）的值（`lin.yating%40example.com`、查詢字串裡的 `%E6%98%9F…`、`%2FUsers%2F…`）會解碼一層後偵測，遮罩範圍是編碼原文，回覆還原時寫回編碼原文。夾雜無效或截斷的位元組（`%FF`、在 `%E6` 處被截斷的 URL）不會讓其餘部分不解碼，解碼後的全形字元與零寬字元也和一般文字一樣折疊，緊接在無效位元組後面的號碼或金鑰（`%E6%2B886…`、`%E609-1234-5678`、`%FFsk-…`）也抓得到。啟用 `email-escaped` 時（代理預設），`@` 寫成 `&#64;`、`&#x40;`、`&commat;`、`\u0040` 的 email 也抓得到。偵測不到：編碼兩次的值（`%2540`）；表單編碼查詢中代表空格的 `+`（`星河+計畫`）；URL 裡經 base64 編碼的值；緊接在無效位元組後面的身分證字號（`%E6A123456789`），因為 Big5 與 Shift-JIS 中緊接在前導位元組後面的字母是該字的一部分（`%A4A` 是「乙」）。同理，尾位元組為 `A` 的 Shift-JIS 字元可能讓 `%83AKIA…` 被遮成形似金鑰的範圍。 |
 | 像佔位字的密碼不遮 | `api-key` 不遮 schema 用字、知名 API 欄位名稱（任何寫法）與範本佔位（`password: required`、`password: max_tokens`、`password: <your secret>`），所以真的用這類字當密碼時照原樣送出。由協定用字組成的 snake_case 密碼（`data_store`）只在綁定它的請求中遮，不記到之後的請求（見第 8 節）。 |
 | 一種寫法一個佔位符 | `星河計畫`、`星河 計畫` 各有自己的佔位符。模型看不出它們是同一個 term，但每個位置都原樣還原，程式碼裡的識別字不會被改成另一種寫法。 |
 | 只認標準佔位符 | 模型若把 `⟦EMAIL_1⟧` 改寫成 `[EMAIL_1]`，你會原樣看到它。 |
