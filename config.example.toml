@@ -77,7 +77,8 @@ allowInsecureUpstream = false
 # --- Tool restore ---
 
 # Placeholder categories restored into tool-call arguments; other categories
-# reach the tool as the placeholder. "*" restores every category.
+# reach the tool as the placeholder, which stays in what the tool writes.
+# "*" restores every category.
 # Default ["PATH", "TERM", "PROJECT"].
 toolRestore.categories = ["PATH", "TERM", "PROJECT"]
 
@@ -93,11 +94,23 @@ toolRestore.categories = ["PATH", "TERM", "PROJECT"]
 # Default 86400 (24 hours).
 knownOriginalsTtlSeconds = 86400
 
+# Mask the name of the account the proxy runs as (and its home directory's
+# last segment when different) as a term, so a bare user name or a
+# project-directory name such as "-Users-<name>-project" is not sent.
+# Names shorter than 3 characters and generic account names (root, node,
+# runner, user, admin, ...) are skipped. Unlike a listed term, the name never
+# gets a request refused, wherever it occurs: where it also spells a JSON key,
+# a model id, or a tool name, or is glued to letters or digits ("<name>2024"),
+# which the whole-word match skips, it is sent as is. A name redaction.terms
+# lists, in any ASCII case, stays a listed term. Default true.
+maskLocalUsername = true
+
 # --- Failure handling ---
 
 # Control characters, U+FFFD, lone surrogates, and ⟦ ⟧ in request text:
 # "replace" turns them into visible stand-ins, "refuse" rejects the request
-# with 422. Default "replace".
+# with 422. A resent placeholder that passes as written (DETAILS §8, "resent
+# placeholders") is exempt in both modes. Default "replace".
 screen = "replace"
 
 # false: refuse a request with 422 when masking fails (a detected value is

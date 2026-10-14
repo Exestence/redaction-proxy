@@ -178,7 +178,7 @@ DeepSeek Harness 透過 dsh-addons 的 redaction 套件以 git submodule（`dsh-
 - **用佔位符，不用假值。** 每個不同的值得到一個 `⟦CATEGORY_n⟧`。以假值替換（「數位分身」）經過實測後被否決：模型逐字保留佔位符的比例是 100%，假值只有 75%；假值還造成無法還原的靜默錯誤（18 段對話中 5 段）。
 - **編號依文字順序。** `collectSlots` 在請求最上層先收集 `tools`、`functions`、`system`、`instructions`，再依 JSON 鍵順序收集其餘欄位。
 - **前綴逐位元組穩定。** 用戶端每次都重送完整歷史，所以只增不改的對話中，同一個值每一輪都得到同一個佔位符，遮罩後的前綴不變，上游的提示快取照常生效。
-- **會打破穩定的情況。** 後面的訊息若含字面的 `EMAIL_3`，這個 id 會被保留，可能讓在它之後首次出現的值重新編號。用戶端若改寫了較早的歷史，前綴也會跟著改變。較後的輪次（或同一憑證的另一個請求）首次偵測到一個先前已出現過的值時，先前的位置也會被遮罩，前綴因此改變一次。
+- **會打破穩定的情況。** 後面的訊息若含字面的 `EMAIL_3`，這個 id 會被保留，可能讓在它之後首次出現的值重新編號。例外是代理留在工具參數中、用戶端照原樣回送的 `⟦EMAIL_3⟧`：符合第 8 節「回送的佔位符」的條件時原樣送出，不保留 id。用戶端若改寫了較早的歷史，前綴也會跟著改變。較後的輪次（或同一憑證的另一個請求）首次偵測到一個先前已出現過的值時，先前的位置也會被遮罩，前綴因此改變一次。
 
 ## 5. 不遮就轉送的欄位
 
@@ -206,7 +206,7 @@ DeepSeek Harness 透過 dsh-addons 的 redaction 套件以 git submodule（`dsh-
 | 204 | 允許的來源發出的 CORS 預檢（`OPTIONS` 帶 `Access-Control-Request-Method`）。不需權杖，不轉送。 | 無本文 |
 | 413 | 請求本文超過 64 MiB。 | 上限 |
 | 404 | POST 到代理不遮罩的路由（例如 `/v1/embeddings`），或 GET、POST 與 OPTIONS 預檢以外的方法。 | 方法與路徑 |
-| 422 | `screen: "refuse"` 且某段文字含控制字元、U+FFFD、孤立 surrogate 或 `⟦`/`⟧`。 | JSON 路徑與字元類別 |
+| 422 | `screen: "refuse"` 且某段文字含控制字元、U+FFFD、孤立 surrogate 或 `⟦`/`⟧`（符合第 8 節「回送的佔位符」條件、原樣送出的佔位符除外）。 | JSON 路徑與字元類別 |
 | 422 | **送出前外洩檢查**：遮罩後請求的任一字串或鍵中，仍找得到這個請求偵測到的某個原始值（原樣或 JSON 跳脫形式）。規則值在任何位置、不分 ASCII 大小寫都算（`LIN@EXAMPLE.TEST` 算 `lin@example.test`）。只由先前請求記住的值（第 8 節）不檢查。名稱模型的值與 `terms`、`projectNames` 的字面值：以空格分詞的文字只算完整單字（`Leeds` 裡的 `Lee`、`Hsinchu` 裡的 `Hsin` 不算），中日韓文字在任何位置都算；字面值不分 ASCII 大小寫，只有一個字的模型值不檢查。列舉欄位（`role`、`type` 等）的值像列舉值時不檢查，`metadata`、`stop` 底下與工具呼叫輸入中照常檢查，見第 8 節。設定 `sendWhenMaskFails` 時不拒絕，改送出部分遮罩的本文，見下方。 | 最多 5 個欄位路徑，各附所含值的類別 |
 | 422 | 帶 `previous_response_id`，但代理沒有這個用戶端憑證的先前輸入（重啟、被擠出、從未經過代理，或屬於另一個用戶端）。 | 固定訊息 |
 | 422 | 與 `previous_response_id` 先前輸入合併後 `mask` 拋出 `RedactionError`。設定 `sendWhenMaskFails` 時不拒絕，改送出原始本文，見下方。 | 錯誤代碼 |
@@ -331,6 +331,7 @@ URL 內的佔位符不論類別一律保持原樣；回覆文字（含 reasoning
 - **大小寫。** 記住的憑證不分 ASCII 大小寫：之後出現的 `TR0UB4DOR&3X`、`tr0ub4dor&3x` 都遮，各有自己的佔位符。其他類別照原樣比對。
 - **容量。** 每個範圍每個類別最多 4,096 個值、最多 64 個範圍，都先進先出；請求再綁定的值移到最新端。類別各自計數，所以一次幾千個 email 的工具結果擠不掉記住的憑證。在用戶端自己寫的文字（user、system、developer 訊息的內容與文字部分，以及 Anthropic 的 `system` 與 Responses 的 `instructions`）中綁定的值（包括只靠記憶遮到的值：工具輸出中偵測到、之後使用者不帶關鍵詞寫出的值，移進這個桶時存活時間不變）另外放在每個類別各一個桶中，也是 4,096 個，所以一次幾千行 cookie 的工具結果也擠不掉使用者訊息或系統提示中的密碼；使用者自己貼上的大量同類別新值（例如 4,096 個新的 `password: …`）則會擠掉較舊的憑證，之後它的回聲照原樣送出。記憶依用戶端憑證分開且有上限，所以連得到代理的本機程式可以送大量請求（或用 64 個不同的憑證）把記住的值擠掉；這可以接受，因為代理預設只綁定本機位址，綁定其他位址時必須設 `authToken`（第 11 節）。
 - **外洩檢查。** 列舉欄位（`type`、`role`、`object`、`status`、`finish_reason`、`stop_reason`、`service_tier`、`reasoning_effort`、`tool_choice`）的字串只能是 API 定義的固定值，不帶私人資料；值像列舉值（小寫英文字母開頭，只含小寫英數字與 `_`、`.`、`:`、`-`，最多 64 字元）時外洩檢查不看。否則一個被誤判的 `assistant`，會讓帶 assistant 回合的請求被拒。`metadata`、`stop` 底下與工具呼叫輸入中的鍵由用戶端或工具定義，那裡同名的鍵照常檢查；工具呼叫輸入不論鍵名都遮（第 5 節），所以還原進名為 `type`、`status`、`name` 等工具參數的值，回送時會再被遮罩。物件鍵照常檢查：被誤判的 `messages`、`text` 會讓含這些鍵的請求預設以 422 拒絕。拒絕訊息寫出每個欄位所含值的類別，從不寫值本身。
+- **回送的佔位符。** 不在 `toolRestore` 中的類別以佔位符交給用戶端（第 7 節），用戶端下一輪把 `⟦EMAIL_3⟧` 原樣放在工具呼叫輸入（也常在工具結果）中回送。記憶也記下每個值被綁定的 id（每個值最多 8 個，新的在前）。請求中的 `⟦EMAIL_3⟧` 要有錨點才可能原樣送出：它依遮罩順序（先 system、tools 與 instructions，第 4 節）第一次出現就在這個請求重送的工具呼叫中由模型寫的輸入裡（Anthropic `tool_use` 的 `input`；Chat Completions 的 `tool_calls[].function.arguments`、`tool_calls[].custom.input` 與舊的 `function_call.arguments`；Responses `*_call` 項目的 `arguments`、`action`、`code`、`input`、`queries`、`operation`，都是模型依這段對話的佔位符寫的；工具或伺服器寫進這些項目的內容，例如 `output`、`outputs`、`error`、`results`、`pending_safety_checks`，以及 `web_search_call` 的 `action.sources`，照常遮罩但不算錨點；Responses 的 `mcp_approval_request` 不算工具呼叫，其 `arguments` 回送時照舊跳脫），或是代理在 Responses 接續鏈先前回覆的工具呼叫參數中留下的（接續鏈第一次回送工具結果時，請求中沒有工具呼叫）。助理文字與推理（Anthropic 助理的 `text` 區塊、Chat 助理的 `content` 與 DeepSeek 的 `reasoning_content`、Responses 助理的 `output_text` 與 `reasoning` 摘要）不算錨點；它們與帶這個 id 的工具呼叫在同一個模型回合時是在預告這個呼叫，不算第一次出現。同一個模型回合指：Anthropic 與 Chat 是同一則助理訊息；Responses 是連續的 `reasoning`、助理 `message` 與 `*_call` 項目，從前一個其他項目（使用者、system 或 developer 訊息，或工具輸出）之後，到下一個其他項目之前。較早的助理回合算第一次出現，例如用戶端以助理訊息插入的摘要，所以之後照抄它的工具呼叫沒有錨點。有錨點的 id 在同一個請求的工具結果與其他文字中也一起原樣送出。此外，它在這個用戶端範圍的記憶中只綁定過一個記住的值，該值（原樣或 JSON 跳脫寫法）出現在這個請求中，而且不保留 `EMAIL_3` 照常編號時那個值仍得到 `EMAIL_3`、佔位符的位置也沒有被其他偵測吞掉，代理才把 `⟦EMAIL_3⟧` 原樣送上游，不換成 `⟪EMAIL_3⟫`，也不保留這個 id。較早的訊息因此每一輪逐位元組相同（Anthropic 簽章的 `thinking` 區塊與提示快取都依賴這點），回覆文字中的 `⟦EMAIL_3⟧` 還原成同一個值。第一次出現在使用者文字、工具結果、較早的助理回合或系統提示中的佔位符沒有錨點，之後的工具呼叫照抄它也不算，照 0.2.x 跳脫：從檔案讀回或寫在摘要中的 `⟦EMAIL_1⟧`，可能是代理重啟前寫的，或為一個已過期的值寫的；跳脫保留它的號碼，這次的值可能換號，但上游回覆中的這個號碼不會還原成別的值。`toolRestore` 以外的類別寫進檔案或指令輸出時，就以佔位符留在磁碟上，代理重啟後讀回也一樣跳脫。不符合記憶條件的佔位符單獨跳脫；保留的佔位符遮罩後無法保持號碼時，整個請求跳脫所有佔位符：代理先試著原樣送出，不成時整個請求再遮罩一次，所以偵測（包括人名模型）對這個請求跑兩次。記憶中綁定過兩個值的 id（例如兩段對話各自的 `EMAIL_1`）一律跳脫，所以兩個值不會共用一個佔位符。這只看仍記得的值：另一個值已過期或被擠出記憶，或它綁定過的 id 超過 8 個、較舊的 id 被擠掉時，記憶中這個 id 又只剩一個值，這時有錨點的舊佔位符遇到這個值仍會原樣送出。原樣送出的佔位符只代表同一個請求中已有、已被遮罩的同一個值；使用者或內容注入的 `⟦EMAIL_3⟧` 第一次出現不在工具呼叫輸入中，所以沒有錨點，照舊跳脫。殘餘風險：用戶端保留工具呼叫，卻丟掉含有它的值的文字或工具結果、模型寫出這個請求中沒出現過的佔位符，或用戶端把文字插進與工具呼叫同一個模型回合時（同一則助理訊息，或 Responses 中與呼叫相鄰、中間沒有使用者訊息或工具輸出的助理項目），舊的佔位符仍可能還原成這個號碼現在代表的值；有錨點的 id 在整個請求中都原樣送出，所以工具結果中注入的同一個 id 也還原成同一個值（使用者自己的值）。`screen = "refuse"` 時，原樣送出的佔位符不讓請求被拒，沒有錨點的佔位符照舊讓請求被拒。照舊跳脫、編號可能逐輪漂移的情況：佔位符沒有錨點、值已過期或 `knownOriginalsTtlSeconds = 0`、代理重啟、值短於上面的記憶門檻、值已不在重送的歷史中（例如被壓縮成摘要）、這個 id 在記憶中綁定過兩個值（例如跨對話撞號）、別的值先拿到這個號碼。Responses 接續請求存下的先前文字保留原樣送出的佔位符，它們已在上游；新輸入中重送同一個佔位符時也原樣送出，所以另一段對話之後把同一個號碼綁到別的值，也不會讓接續鏈重新編號；這只限接續鏈已原樣送出過的 id，只在先前回覆的工具呼叫參數中留下、還沒原樣送出過的 id 遇到撞號時照舊跳脫。每次接續仍檢查：照常編號時，每個保留的 id 都要得到上游所知的那個原始值。編號移動時（例如記憶學到先前文字中較早出現的值，或只靠記憶遮到的值過期、新的值拿到它的號碼），這次請求把先前文字中的佔位符也跳脫，保留它們的號碼，所以偵測對這個請求最多跑三次。新輸入中被跳脫的佔位符（`⟪EMAIL_1⟫`）或單獨寫出的 `EMAIL_1` 也保留該號碼。這兩種情況下，先前文字中的值換號，上游記得的舊 `⟦EMAIL_1⟧` 出現在回覆中時當成未知、原樣保留，不會還原成別的值。
 - **存活時間。** 每個值從最後一次被偵測起保留 `knownOriginalsTtlSeconds` 秒（預設 86,400，即 24 小時；`0` 表示什麼都不記），過期的值在下次讀取該範圍的記憶時刪除。只靠記憶遮到的回聲不會延長存活時間。
 
 這些原始值留在記憶體中直到過期、被擠出或代理重啟，不寫入磁碟。
@@ -341,8 +342,8 @@ URL 內的佔位符不論類別一律保持原樣；回覆文字（含 reasoning
 
 | 模式 | 行為 |
 | --- | --- |
-| `replace`（預設） | U+0000–U+001F（tab、換行、CR 除外）換成對應的 Control Pictures 字元（例如 ESC 變 `␛`），U+007F 變 `␡`；C1 控制字元、U+FFFD、孤立 surrogate 變 `␦`；`⟦`、`⟧` 變 `⟪`、`⟫`。上游收到的文字因此與原文不同。 |
-| `refuse` | 以 `screenText` 檢查，並檢查 `⟦`、`⟧`；有任一就以 422 拒絕整個請求，訊息含 JSON 路徑與字元類別。 |
+| `replace`（預設） | U+0000–U+001F（tab、換行、CR 除外）換成對應的 Control Pictures 字元（例如 ESC 變 `␛`），U+007F 變 `␡`；C1 控制字元、U+FFFD、孤立 surrogate 變 `␦`；`⟦`、`⟧` 變 `⟪`、`⟫`，符合第 8 節「回送的佔位符」條件的佔位符除外。上游收到的文字因此與原文不同。 |
+| `refuse` | 以 `screenText` 檢查，並檢查 `⟦`、`⟧`（符合第 8 節「回送的佔位符」條件的佔位符除外）；有任一就以 422 拒絕整個請求，訊息含 JSON 路徑與字元類別。 |
 
 ## 10. 日誌
 
@@ -398,6 +399,7 @@ POST /v1/messages tool arguments: kept by the tool restore policy KEY_1 in bash 
   "screen": "replace",
   "debugMasked": false,
   "knownOriginalsTtlSeconds": 86400,
+  "maskLocalUsername": true,
   "toolRestore": {
     "categories": ["PATH", "TERM", "PROJECT"],
     "tools": { "git_commit": ["PATH", "TERM", "PROJECT", "EMAIL"] }
@@ -424,6 +426,7 @@ POST /v1/messages tool arguments: kept by the tool restore policy KEY_1 in bash 
 | `debugMasked` | `REDACTION_PROXY_DEBUG_MASKED`（`1` 或 `0`） | `false` | 記錄遮罩後的請求本文。檔案中只接受布林值，環境變數只接受 `1` 或 `0`，環境變數覆寫檔案。 |
 | `sendWhenMaskFails` | `REDACTION_PROXY_SEND_WHEN_MASK_FAILS`（`1` 或 `0`） | `false` | 遮罩失敗時仍送出請求，不以 422 拒絕：外洩檢查找到殘留值時送出部分遮罩的本文，`mask` 拋出 `RedactionError` 時送出原始本文。這會把偵測到的值送給服務商。回應帶 `x-redaction-proxy-mask-failed: 1` 標頭，日誌記一行不含值的警告。檔案中只接受布林值，環境變數只接受 `1` 或 `0`，環境變數覆寫檔案。見[第 6 節](#6-拒絕與錯誤狀態碼)。 |
 | `knownOriginalsTtlSeconds` | `REDACTION_PROXY_KNOWN_ORIGINALS_TTL_SECONDS` | `86400` | 偵測到的值為之後的請求保留的秒數，從最後一次偵測起算；`0` 表示不記住。見[第 8 節](#已知原始值)。 |
+| `maskLocalUsername` | `REDACTION_PROXY_MASK_LOCAL_USERNAME`（`1` 或 `0`） | `true` | 命令列代理把執行它的帳號名稱（`os.userInfo().username`），以及不同時的家目錄最後一段，加進 `redaction.terms`，以 `TERM` 遮罩並照 `toolRestore` 預設還原進工具參數。Claude Code 會送出單獨的使用者名稱（`user_identity`）與 `-Users-<名稱>-project` 這類專案目錄名稱，`PATH` 規則只認 `/Users/<名稱>`。少於 3 個字元的名稱與通用帳號名稱（`admin`、`administrator`、`app`、`default`、`dev`、`docker`、`ec2-user`、`guest`、`node`、`nobody`、`root`、`runner`、`runneradmin`、`test`、`ubuntu`、`user`、`vagrant`，不分大小寫）略過，否則一般文字中的同一個詞都會被遮；所以官方 Node.js 映像檔（Docker 映像檔）的 `node` 使用者不遮任何字。與 `terms` 中自己列出的字詞不同，加入的名稱在整個請求中都不受外洩檢查，在任何地方都不讓請求被拒：名稱同時是 JSON 鍵、模型 id 或工具名稱的一部分時（`max_tokens` 中的 `max`、`claude-haiku-5-5` 中的 `claude`），那裡照原樣送出；文字中以完整單字出現處照常遮罩（任何 ASCII 大小寫，`<名稱>_project` 中的也遮），黏著英文字母或數字的出現處（`<名稱>2024`）不符合完整單字的比對，照原樣送出。`terms` 已列出的名稱（不分 ASCII 大小寫，例如列了 `Fictionaluser` 而帳號是 `fictionaluser`）不再加入，仍是列出的字詞，照常受外洩檢查。沒有 passwd 項目的帳號（`docker run --user 1234`）沒有名稱可遮。直接呼叫 `loadConfig` 的程式以第三個參數傳入帳號才會加入。檔案中只接受布林值，環境變數只接受 `1` 或 `0`，環境變數覆寫檔案。 |
 | `toolRestore.categories` | `REDACTION_PROXY_TOOL_RESTORE_CATEGORIES`（逗號分隔） | `PATH`、`TERM`、`PROJECT` | 還原進工具呼叫參數的類別，或 `"*"`（全部）；空字串代表都不還原。見[第 7 節](#工具參數的還原政策)。 |
 | `toolRestore.tools` | — | 無 | 依工具名稱（去掉前後空白、不分大小寫）比對的類別清單或 `"*"`，取代該工具的 `categories`。 |
 | `redaction.rules` | — | `card`、`entropy` 以外全部 | 啟用的內建規則；空陣列停用所有內建偵測。代理預設啟用 42 條：全部規則，但以 `card-strict`、`entropy-strict` 取代 `card`、`entropy`（上例即代理預設）。直接使用核心的宿主（`new RulesDetector()`）預設只有臺灣與通用的 10 條（`DEFAULT_RULE_NAMES`），見下方說明。 |
@@ -440,7 +443,7 @@ POST /v1/messages tool arguments: kept by the tool restore policy KEY_1 in bash 
 
 ## 13. 測試
 
-`pnpm test`（vitest）執行 32 個檔案、2,006 個測試：1,998 個通過；需要真模型的 1 個檔案（8 個測試）未設定模型目錄時略過。
+`pnpm test`（vitest）執行 37 個檔案、2,088 個測試：2,080 個通過；需要真模型的 1 個檔案（8 個測試）未設定模型目錄時略過。
 
 | 檔案 | 內容 |
 | --- | --- |
@@ -449,8 +452,8 @@ POST /v1/messages tool arguments: kept by the tool restore policy KEY_1 in bash 
 | `rules-international` | 國際規則：每條規則的合成正例、檢查碼錯誤與結構不符的反例、程式碼與日誌形狀的反例（時間戳、雜湊、訂單號、版本字串、UUID）、與卡號重疊時的類別、全形與百分比編碼、預設政策摘要不變、代理預設規則、diff 新增行與 `+` 後的日期不被當成電話；國內電話格式的正例，與時間戳、ISBN、SSN、IPv4、表格列、十六進位傾印、UUID、CSV 列等反例。`rules-synthetic-corpus` 另有國際規則在隨機日誌 id 與數字列上的誤遮上限，`adversarial` 另有 52 種國際規則的 200 KB 病態輸入。 |
 | `rules-extended` | 延伸規則：每條規則的正例與反例（程式碼、套件名、檔名、命名空間、環境變數、資源路徑、成員鏈、版本範圍、純數字 UUID）、預設 `card`、`entropy` 的結果不變、偵測器版本與摘要，以及 32 種 200 KB 病態輸入。 |
 | `engine` | 遮罩引擎：編號、保留 id、索引重用、嚴格還原。 |
-| `adversarial` | 洩漏與往返、失敗即關閉的篩檢、54 種 200 KB 病態輸入與 3 種 1 MB 的 `password=` 行各須在 2 秒 CPU 時間內（量測 worker 行程的 CPU 時間而非經過時間，平行執行的其他測試不計入）、串流回覆的所有 2 段與 3 段切法、100 KB 串流以 4 字元為單位。 |
-| `proxy` | 對本機假上游的端對端測試：Chat Completions、Responses、Anthropic Messages 的 JSON 與 SSE，佔位符跨越分塊邊界並出現在工具呼叫 JSON 中；413、未知接續的 422、鍵中原始值寫成 `<key>`；上游重新導向回 502、巢狀過深的本文回 400、未結束或格式錯誤的串流仍送出殘留與其餘事件、用戶端中途斷線也記一行日誌。 |
+| `adversarial` | 洩漏與往返、失敗即關閉的篩檢、54 種 200 KB 病態輸入與 3 種 1 MB 的 `password=` 行各須在 5 秒 CPU 時間內（量測 worker 行程的 CPU 時間而非經過時間，平行執行的其他測試不計入）、串流回覆的所有 2 段與 3 段切法、100 KB 串流以 4 字元為單位。 |
+| `proxy`、`proxy-pass-review*`、`proxy-turn-scan` | 對本機假上游的端對端測試：Chat Completions、Responses、Anthropic Messages 的 JSON 與 SSE，佔位符跨越分塊邊界並出現在工具呼叫 JSON 中；413、未知接續的 422、鍵中原始值寫成 `<key>`；上游重新導向回 502、巢狀過深的本文回 400、未結束或格式錯誤的串流仍送出殘留與其餘事件、用戶端中途斷線也記一行日誌；回送佔位符的錨點規則（哪些工具呼叫欄位算錨點，伺服器寫的欄位不算；同一個模型回合的助理文字與推理不算第一次出現，較早的助理回合算）。 |
 | `proxy-host`、`restore-urls` | 綁定位址、權杖、`allowedOrigins` 與設定錯誤即拒絕啟動；403（`Host`、`Origin`）與 401；工具呼叫參數中 URL 內的佔位符不還原，其他還原的佔位符回報 JSON 指標而不含原始值。 |
 | `config-file` | 設定檔：TOML 與 JSON 內容相同時結果相同、`config.example.toml` 即預設值、副檔名判斷（沒有副檔名讀成 JSON、`.toml`／`.json` 點檔、其他副檔名拒絕）、開頭的 BOM、語法錯誤只寫路徑與行列而不引用內容、表與布林值的型別檢查、錯誤訊息只引用像名稱的字（`printable` 對權杖形狀的值與非本機 `host` 寫成佔位文字）、`sendWhenMaskFails`、`debugMasked`、`allowInsecureUpstream` 的環境變數雙向覆寫與只接受 `1`／`0`。 |
 | `proxy-mask-fails` | `sendWhenMaskFails`：外洩檢查找到殘留值或 `mask` 拋出時改為送出、回應帶 `x-redaction-proxy-mask-failed: 1`（含遮罩失敗後代理回的 502）、上游送來的同名標頭被去掉、警告行不含值、不記錄本文，以及其他拒絕（`screen: "refuse"` 等）不受影響。 |
@@ -458,7 +461,11 @@ POST /v1/messages tool arguments: kept by the tool restore policy KEY_1 in bash 
 | `name-model-config`、`name-model-detector`、`name-model-spans`、`proxy-name-model`、`name-model-real` | 人名模型：設定驗證、以假模型（`name-model-fake.ts`）測哪些文字送進模型、規則優先、敬稱切除、整個請求中的擴散、推論失敗時只用規則或在 `nameModel.required` 時回 503；`name-model-real` 載入真模型，只在設定模型目錄時執行。 |
 | `public-bench`、`real-e2e-harness` | 公開評測：開發集的產生與檢查碼、計分方式（完全、部分遮罩與未遮罩，macro 平均，精確率）、保留集的載入與 `MANIFEST` 雜湊檢查；真實服務驗證工具對本機假上游的完整流程（沒有金鑰時略過、上游錯誤訊息引用的金鑰被替換、佔位符還原的判定）。 |
 
-`pnpm typecheck` 做型別檢查。CI（`.github/workflows/ci.yml`）在 ubuntu 與 macOS、Node 22 與 24 上跑型別檢查、測試、建置、`--demo` 與 `npm pack --dry-run`，不安裝人名模型的選用依賴；真實服務的驗證（`e2e-real.yml`）只能手動觸發，金鑰來自 repository secrets。`pnpm test` 的端對端測試與 `pnpm demo` 都只用本機假上游。真實服務只驗證過 DeepSeek：2026-10-08 只設 `DEEPSEEK_API_KEY` 執行 `pnpm run e2e:real`，DeepSeek Chat Completions 的 4 個情境全部通過，OpenAI 與 Anthropic 因沒有金鑰而略過（[e2e/real](../e2e/real/README.md)）。尚未對真實用戶端驗證。
+`pnpm typecheck` 做型別檢查。CI（`.github/workflows/ci.yml`）在 ubuntu 與 macOS、Node 22 與 24 上跑型別檢查、測試、建置、`--demo` 與 `npm pack --dry-run`，不安裝人名模型的選用依賴；真實服務的驗證（`e2e-real.yml`）只能手動觸發，金鑰來自 repository secrets。`pnpm test` 的端對端測試與 `pnpm demo` 都只用本機假上游。真實服務：2026-10-08 只設 `DEEPSEEK_API_KEY` 執行 `pnpm run e2e:real`，DeepSeek Chat Completions 的 4 個情境全部通過，OpenAI 與 Anthropic 因沒有金鑰而略過（[e2e/real](../e2e/real/README.md)）。2026-10-13 以兩個真實用戶端經由代理使用 Anthropic Messages（Claude Haiku 5.5），2026-10-14 兩者都在最終的 0.3.0 建置（commit `1a12a30`）上再次通過：Claude Code 2.1.287 以訂閱登入、設定 `ANTHROPIC_BASE_URL=http://127.0.0.1:8787`，串流文字與工具（Bash、Read）都可用，偵測到的值上游只看到佔位符，回覆已還原，工具參數依 `toolRestore` 還原 `PATH`、`TERM`、`PROJECT`，其他類別保留為佔位符；0.3.0 之前保留的佔位符在後續回合被重新編號，模型把同一個工具重試了 7 次，0.3.0 中工具只執行 1 次（2026-10-13 為 3 個請求；2026-10-14 模型先寫了一句話再呼叫 Bash 與 Read，共 2 個請求，佔位符編號不變）。Claude Code 也送出作業系統的使用者名稱（`safeguards…user_identity` 與專案目錄名稱），0.3.0 以 `maskLocalUsername` 預設遮掉。dsh（DeepSeek Harness，pi-ai 的 Anthropic 路徑）的文字與工具也可用；0.3.0 之前保留的佔位符讓 Anthropic 以 HTTP 400 拒絕重送的簽章 thinking 區塊，已驗證 0.3.0 修正。未驗證：OpenAI API（沒有金鑰）、Codex CLI（未登入）、直接使用 Anthropic SDK（只經由 dsh 的 pi-ai）、以 `e2e:real` 對 Anthropic 執行（未執行）。
+
+Docker 映像：2026-10-13 在 Apple Silicon 上以 Docker Desktop 29.6.2（linux/arm64）對本機假上游驗證：可以建置（347 MB；加 `--build-arg NAME_MODEL=1` 為 864 MB），以非 root 使用者 `node` 執行；綁定 `0.0.0.0` 時沒設 `REDACTION_PROXY_AUTH_TOKEN` 就拒絕啟動，沒帶權杖的請求回 401；email、身分證字號與家目錄路徑在 OpenAI Chat Completions JSON、串流與 Anthropic Messages 中都遮罩後送上游並還原；以 `--config /redaction.toml` 掛載設定檔可用；允許來源的 CORS 預檢回 204 且不轉送，其他來源回 403。未測試：以真模型執行人名模型版映像、linux/amd64。上游是非本機的明文 `http://`（例如經由 `host.docker.internal` 連到的本機模型伺服器）時，要加 `-e REDACTION_PROXY_ALLOW_INSECURE_UPSTREAM=1`。
+
+npx：尚未發布到 npm。2026-10-14 以本機 tarball 驗證（0.3.0 的 `npm pack`，201.6 kB、60 個檔案）：`npx --yes --package=./redaction-proxy-<version>.tgz redaction-proxy --demo` 印出示範輸出，不加 `--demo` 時代理在 127.0.0.1:8787 啟動。代理沒有健康檢查端點：GET 請求會轉送到上游。
 
 ## 14. 誤遮率量測方法
 
@@ -484,14 +491,14 @@ POST /v1/messages tool arguments: kept by the tool restore policy KEY_1 in bash 
 
 29 個檔案因含 `⟦`/`⟧` 被拒絕（`unsupported`），還原失敗 0。
 
-以 `BENCH_RULES=proxy pnpm bench` 量測代理預設（42 條規則，`rules-12+intl-2+ext-1`）：`ENTROPY` 從 873 降為 18（翻譯目錄 `*.i18n.yaml` 以檔名為鍵的來源雜湊與 `@` 後的 commit id 不再遮），`CARD` 從 3 降為 0，`IP` 從 42 增為 44（`ip-cgnat-ula` 遮到 SSRF 測試中真正的 `100.64.0.1` 與 `fc00::1`），其他每一類的數量與上表完全相同，其餘新規則在這份語料上新增 0 個遮罩，耗時約 9 秒。`BENCH_RULES=all` 同時啟用預設與嚴格版，結果是兩者的聯集。英文程式碼語料幾乎不含這類識別碼形狀，所以這個數字只說明它們不會誤遮一般程式碼；隨機日誌 id 上的誤遮率由 `rules-synthetic-corpus` 的上限測試把關。與識別碼格式完全相同的值本來就會被遮：任何 `123-45-6789` 形式的數字（SSN 沒有檢查碼）、`+` 後接 10–15 位數且國碼已分配的數字（例如寫成 `+12345678901` 的帶號整數），以及約 1/10 到 1/97 通過檢查碼的同格式隨機值。語料是英文程式碼；以中文為主的散文語料尚未量測。
+以 `BENCH_RULES=proxy pnpm bench` 量測代理預設（42 條規則，`rules-12+intl-2+ext-1`）：`ENTROPY` 從 873 降為 18（翻譯目錄 `*.i18n.yaml` 以檔名為鍵的來源雜湊與 `@` 後的 commit id 不再遮），`CARD` 從 3 降為 0，`IP` 從 42 增為 44（`ip-cgnat-ula` 遮到 SSRF 測試中真正的 `100.64.0.1` 與 `fc00::1`），其他每一類的數量與上表完全相同，其餘新規則在這份語料上新增 0 個遮罩，耗時約 7–9 秒（依機器而定）。`BENCH_RULES=all` 同時啟用預設與嚴格版，結果是兩者的聯集。英文程式碼語料幾乎不含這類識別碼形狀，所以這個數字只說明它們不會誤遮一般程式碼；隨機日誌 id 上的誤遮率由 `rules-synthetic-corpus` 的上限測試把關。與識別碼格式完全相同的值本來就會被遮：任何 `123-45-6789` 形式的數字（SSN 沒有檢查碼）、`+` 後接 10–15 位數且國碼已分配的數字（例如寫成 `+12345678901` 的帶號整數），以及約 1/10 到 1/97 通過檢查碼的同格式隨機值。語料是英文程式碼；以中文為主的散文語料尚未量測。
 
 ## 15. 尚待完成
 
-- 對真實 OpenAI、Anthropic API 與真實用戶端（Claude Code、OpenAI SDK）做端對端驗證。
+- 對真實 OpenAI API、Codex CLI 與直接使用的 Anthropic SDK 做端對端驗證，並以 `e2e:real` 對 Anthropic 執行（Claude Code 與 dsh 經由 Anthropic Messages 已於 2026-10-14 在最終建置上驗證，見[第 13 節](#13-測試)）。
 - 量測中文散文語料的誤遮率。
 - 發布到 npm。套件已可發布（`bin` 入口 `redaction-proxy`，`npm pack` 只含 `lib/`、README、LICENSE、NOTICE、`config.example.toml`），但 `package.json` 仍是 `"private": true`；決定發布時刪掉這一行即可（若改用 scoped 名稱，另加 `"publishConfig": { "access": "public" }`）。`prepublishOnly` 會先跑型別檢查與測試。授權條款已定為 Apache-2.0（[LICENSE](../LICENSE)）。
-- 實際建置並執行 Docker 映像（`Dockerfile` 已寫好，尚未在有 Docker 的環境建置）。映像綁定 `0.0.0.0`，所以必須以 `-e REDACTION_PROXY_AUTH_TOKEN` 傳入權杖，並以 `-p 127.0.0.1:8787:8787` 只發布到本機。
+- 在 linux/amd64 上建置並執行 Docker 映像，並以真模型執行人名模型版映像（linux/arm64 的映像已於 2026-10-13 驗證，見[第 13 節](#13-測試)）。
 - 將 dsh-privacy-router 的串流還原器統一到這份核心。
 
 ## 16. 人名模型（實驗性）
@@ -547,6 +554,8 @@ node scripts/fetch-name-model.mjs ~/models/nym       # 從 Hugging Face 下載�
 | `nameModel.allowlist` | 工具與設定值用字 | 整段完全相符就不遮；設定後取代預設清單。 |
 | `nameModel.required` | `false` | 推論失敗時，`false` 讓該請求只用規則遮罩並在日誌記 `nameModel failed`；`true` 以 503 拒絕。 |
 
+殘餘風險：人名模型的結果不一定每次相同。在 Responses 接續鏈上，一個請求找到的人名，下一個請求可能沒找到，這時編號移動，回送的佔位符照舊跳脫；短於記憶門檻（第 8 節）的值（例如單字人名）不記住，回送的佔位符無法保持編號；另一段對話把同一個 `NAME_n` 綁到別的值時，這個號碼也照舊跳脫（接續鏈已原樣送出過的除外）。
+
 模型在開放連接埠之前載入；缺檔案或套件時啟動失敗並指出缺什麼。開啟模型會改變 policy digest，所以保存 span index 的宿主不會在新設定下接續舊的 index。
 
 ## 17. 完整限制清單
@@ -563,24 +572,24 @@ node scripts/fetch-name-model.mjs ~/models/nym       # 從 Hugging Face 下載�
 | 一種寫法一個佔位符 | `星河計畫`、`星河 計畫` 各有自己的佔位符。模型看不出它們是同一個 term，但每個位置都原樣還原，程式碼裡的識別字不會被改成另一種寫法。 |
 | 只認標準佔位符 | 模型若把 `⟦EMAIL_1⟧` 改寫成 `[EMAIL_1]`，你會原樣看到它。 |
 | 模型品質可能下降 | 需要直接操作被遮值的任務（例如把絕對路徑改成相對路徑）會變差。你會看到佔位符，不是靜默出錯。 |
-| 會改動一些字元 | 預設把控制字元換成可見字元（`␛`），把原文中的 `⟦` `⟧` 換成 `⟪` `⟫`。 |
+| 會改動一些字元 | 預設把控制字元換成可見字元（`␛`），把原文中的 `⟦` `⟧` 換成 `⟪` `⟫`；有錨點、仍指向同一個值的回送佔位符除外：它在請求中第一次出現就在模型寫的工具呼叫輸入中（與該呼叫同一個助理回合的文字與推理不算，較早的助理回合算），或是代理在 Responses 接續鏈先前回覆的工具參數中留下的（第 8 節「回送的佔位符」）。 |
 | 重啟會忘記接續對話與已知原始值 | Responses API 的 `previous_response_id` 依賴記憶體中最近 256 個回應；重啟或被擠出後，接續請求以 422 拒絕。已知原始值（第 8 節）重啟後也會忘記，平時也在最後一次偵測 24 小時後忘記（`knownOriginalsTtlSeconds`）。 |
 | 本機預設沒有驗證 | 預設只綁定 `127.0.0.1`；沒設 `authToken` 時，你電腦上的任何程式都能使用它。網頁的請求（不允許的 `Origin`、DNS rebinding）以 403 拒絕。 |
 | 工具參數只還原允許的類別 | 回應中 URL 內的佔位符保持原樣（合法的 `https://host/⟦PATH_1⟧` 也一樣）。工具參數只還原 `toolRestore` 允許的類別（預設 `PATH`、`TERM`、`PROJECT`），需要其他值的工具拿到佔位符，可能失敗，直到使用者為它開放。允許的類別照常還原並記入日誌，所以 shell 指令等仍可能把它們送出。 |
 | 請求大小 | 本文超過 64 MiB 以 413 拒絕。 |
 | 沒有上游逾時 | 代理不限制等待上游的時間；上游不回應時，請求一直等到用戶端自己的逾時或斷線，代理隨即中止上游請求。 |
-| 真實服務只驗證過 DeepSeek | 2026-10-08 以[真實服務驗證工具](../e2e/real/README.md)對 DeepSeek Chat Completions 驗證，4 個情境全部通過。OpenAI、Anthropic 與真實用戶端尚未驗證；其餘測試與示範都用本機假上游。 |
+| 真實服務只驗證過 DeepSeek 與 Anthropic | 2026-10-08 以[真實服務驗證工具](../e2e/real/README.md)對 DeepSeek Chat Completions 驗證，4 個情境全部通過。2026-10-13 經由 Claude Code 與 dsh 驗證 Anthropic Messages，2026-10-14 在最終的 0.3.0 建置上再次通過（見[第 13 節](#13-測試)）。OpenAI API、Codex CLI 與直接使用的 Anthropic SDK 尚未驗證；其餘測試與示範都用本機假上游。 |
 
 ## 18. 實測數字
 
 | 項目 | 結果 | 代表什麼 |
 | --- | --- | --- |
-| 測試 | 1,998 個通過、8 個需要真模型而略過（32 個檔案、共 2,006 個） | 規則、引擎、對抗輸入、對假上游的三種 API 串流與非串流、Host／Origin／權杖檢查。 |
+| 測試 | 2,080 個通過、8 個需要真模型而略過（37 個檔案、共 2,088 個） | 規則、引擎、對抗輸入、對假上游的三種 API 串流與非串流、Host／Origin／權杖檢查。 |
 | 憑證誤遮 | 每千行程式碼 **0.85** 處 | 在不含真實金鑰的 DeepSeek Harness 原始碼上量測（69.8 萬行程式碼），平均約 1,180 行有一處被誤當成金鑰而遮掉。 |
 | 還原失敗 | 0 | 遮罩成功的檔案全部都能逐位元組還原。 |
 | 速度 | 約 85 萬行 / 約 5–8 秒 | 依機器而定；Apple M5 Max 約 5 秒。 |
-| 合成多語提示，保留集第 2 版（盲寫、只跑一次） | 英文 1,527 個值、10 類 macro 平均完全遮蔽：核心預設 25.9%、代理預設 39.5%、加人名模型 44.8%；Presidio cutoff 0 為 40.4%、cutoff 0.4 為 37.8%。完全沒遮：核心預設 64.0%、代理預設 49.9%、加人名模型 35.6%、Presidio 29.3–35.0%。遮掉的範圍與敏感值重疊的比例：規則 94.3–95.8%、加人名模型 94.8%、Presidio 64.9–68.0%。中位數耗時：規則 0.10–0.12 ms、加人名模型 10.8 ms、Presidio 11.2–11.4 ms。全部 7 種語言的 macro 平均：核心預設 27.3%、代理預設 37.9%、加人名模型 44.4%（Presidio 34.5%、32.8%，只當英文分析，僅供參考）。還原：只用規則時 1,617 筆全部逐位元組還原，開啟人名模型時 1,587 筆（30 筆不一致） | `heldout-v2.jsonl`（SHA-256 `e3d45536…0bb04`）：英、繁中、簡中、日、韓、德、法共 1,617 筆、10,268 個敏感值、2,997 個困難反例，撰寫者沒看過規則與評測程式，約 60% 的值是非標準寫法；凍結後在 2026-10-07 只評分一次，使用代理預設的偵測器 `rules-6+intl-2+ext-1`。標準寫法與非標準寫法（英文、代理預設、完全遮蔽）：email 100%（n=107）／61.5%（n=148）、電話 70.4%／41.1%、身分證號 89.5%／30.4%、卡號 94.7%／0.0%（n=40）、IBAN 100%（n=15）／0.0%（n=46）、金鑰 95.9%／80.7%、主機 100%（n=93）／43.6%；100% 只出現在標準寫法，且樣本小。弱點（英文、代理預設）：非標準的 IBAN、卡號、身分證號大多抓不到，38% 的非標準 email 完全沒遮；路徑 88% 只遮掉一部分；沒有地址規則（0%）；人名要靠人名模型，完全遮蔽 49%（全部語言 52%）；電話完全遮蔽 51%（Presidio 85%），帶分機的 30 個沒有一個被完全遮蔽。量測之後的所有修改（偵測器從 `rules-6` 到 `rules-12`，見[第 12 節](#12-完整設定)與 README）都不在這些數字中，其中包括：`card-strict` 改認重新分組、點分隔、混用空格和 `-`，以及換行斷開的卡號（這次代理預設的英文卡號完全遮蔽 30.5%，低於核心預設的 44.1%）；人名模型的還原錯誤已修正：同一個名字的不同寫法（`Jordan`、`JORDAN`）現在各拿一個佔位符。完整結果：[bench/results/public-bench-held-out-v2.md](../bench/results/public-bench-held-out-v2.md)。第 1 版（1,518 筆、較舊的 `rules-6+intl-1`、只有標準寫法）留作紀錄：[bench/results/public-bench-held-out.md](../bench/results/public-bench-held-out.md)。 |
-| 合成多語提示，開發集（初步） | 代理預設（`rules-6+intl-2+ext-1`）、9 類 macro 平均完全遮蔽：英文 88.9%、全部語言 86.1% | 1,200 筆固定種子的提示（英、繁中、簡中、日），由規則作者撰寫、和規則一起調整，所以分數比保留集高得多；只當開發時的檢查：[bench/results/public-bench-dev.md](../bench/results/public-bench-dev.md)。 |
+| 合成多語提示，保留集第 2 版（盲寫、只跑一次） | 英文 1,527 個值、10 類 macro 平均完全遮蔽：核心預設 25.9%、代理預設 39.5%、加人名模型 44.8%；Presidio cutoff 0 為 40.4%、cutoff 0.4 為 37.8%。完全沒遮：核心預設 64.0%、代理預設 49.9%、加人名模型 35.6%、Presidio 29.3–35.0%。遮掉的範圍與敏感值重疊的比例：規則 94.3–95.8%、加人名模型 94.8%、Presidio 64.9–68.0%。中位數耗時：規則 0.10–0.12 ms、加人名模型 10.8 ms、Presidio 11.2–11.4 ms。全部 7 種語言的 macro 平均：核心預設 27.3%、代理預設 37.9%、加人名模型 44.4%（Presidio 34.5%、32.8%，只當英文分析，僅供參考）。還原：只用規則時 1,617 筆全部逐位元組還原，開啟人名模型時 1,587 筆（30 筆不一致） | `heldout-v2.jsonl`（SHA-256 `e3d45536…0bb04`）：英、繁中、簡中、日、韓、德、法共 1,617 筆、10,268 個敏感值、2,997 個困難反例，撰寫者沒看過規則與評測程式，約 60% 的值是非標準寫法；凍結後在 2026-10-07 只評分一次，使用代理預設的偵測器 `rules-6+intl-2+ext-1`（當時的 `ext-1` 只有現在 10 條延伸規則中的 5 條，v0.1.0 之前的修改沿用這個版本；人名模型是 `nym-edge-int8-2`，現在是 `nym-edge-int8-3`）。標準寫法與非標準寫法（英文、代理預設、完全遮蔽）：email 100%（n=107）／61.5%（n=148）、電話 70.4%／41.1%、身分證號 89.5%／30.4%、卡號 94.7%／0.0%（n=40）、IBAN 100%（n=15）／0.0%（n=46）、金鑰 95.9%／80.7%、主機 100%（n=93）／43.6%；100% 只出現在標準寫法，且樣本小。弱點（英文、代理預設）：非標準的 IBAN、卡號、身分證號大多抓不到，38% 的非標準 email 完全沒遮；路徑 88% 只遮掉一部分；沒有地址規則（0%）；人名要靠人名模型，完全遮蔽 49%（全部語言 52%）；電話完全遮蔽 51%（Presidio 85%），帶分機的 30 個沒有一個被完全遮蔽。量測之後的所有修改（偵測器從 `rules-6` 到 `rules-12`，見[第 12 節](#12-完整設定)與 README）都不在這些數字中，其中包括：`card-strict` 改認重新分組、點分隔、混用空格和 `-`，以及換行斷開的卡號（這次代理預設的英文卡號完全遮蔽 30.5%，低於核心預設的 44.1%）；人名模型的還原錯誤已修正：同一個名字的不同寫法（`Jordan`、`JORDAN`）現在各拿一個佔位符。保留集不以發布版偵測器重新評分：這些修改有些（例如 `card-strict` 那一項）是看過這些結果後做的，再評分一次就不是盲測；要有新的保留集數字，需要新的一組保留集。完整結果：[bench/results/public-bench-held-out-v2.md](../bench/results/public-bench-held-out-v2.md)。第 1 版（1,518 筆、較舊的 `rules-6+intl-1`、只有標準寫法）留作紀錄：[bench/results/public-bench-held-out.md](../bench/results/public-bench-held-out.md)。 |
+| 合成多語提示，開發集（初步） | 代理預設（`rules-12+intl-2+ext-1`）、9 類 macro 平均完全遮蔽：英文 88.9%、全部語言 86.1% | 1,200 筆固定種子的提示（英、繁中、簡中、日），由規則作者撰寫、和規則一起調整，所以分數比保留集高得多；只當開發時的檢查。2026-10-13 以發布版偵測器重跑（含人名模型 `nym-edge-int8-3` 與 Presidio），每個系統的遮蔽結果都與 `rules-6` 時相同，只有耗時不同：[bench/results/public-bench-dev.md](../bench/results/public-bench-dev.md)。 |
 
 誤遮的代價是模型看到一個不必要的佔位符，回覆時會被換回原值。語料是英文程式碼，中文散文的誤遮率尚未量測。以 `pnpm test`、`pnpm bench` 與 `pnpm run bench:public` 重現；加上 `--heldout bench/heldout/heldout-v2.jsonl`（或 `heldout-v1.jsonl`）可另外評分凍結的保留集；兩個檔案的 SHA-256 記在同目錄的 `MANIFEST`，載入時檢查（格式見 `bench/public/heldout.ts`）。
 

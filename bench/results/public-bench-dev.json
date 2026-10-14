@@ -5,7 +5,7 @@
   "sampleCount": 1200,
   "goldCount": 3122,
   "negativeCount": 1966,
-  "detectorVersion": "rules-6",
+  "detectorVersion": "rules-12",
   "editsAfterResults": [
     "`session={uuid}` in the log templates was relabelled `request_id={uuid}` after the first run, in which the rules masked every such UUID. A session id is a credential, so the alternative was to keep it and label it SECRET.",
     "a bare commit hash after a version and an `etag={sha256}` context were added after the first run; they added rules false positives."
@@ -466,8 +466,8 @@
         }
       },
       "latency": {
-        "median": 0.05262500000003456,
-        "p95": 0.12833399999999529
+        "median": 0.05312499999990905,
+        "p95": 0.12075000000004366
       }
     },
     {
@@ -925,13 +925,13 @@
         }
       },
       "latency": {
-        "median": 0.049042000000099506,
-        "p95": 0.0897499999999809
+        "median": 0.05216699999982666,
+        "p95": 0.08937500000001819
       }
     },
     {
       "name": "rules + name model (experimental)",
-      "note": "rules + name model (experimental): the proxy-default rules plus the nym name model (`rules-6+intl-2+ext-1+nym-edge-int8-2`, shipped `nameModel` defaults), through the code path the proxy uses for user-written text. Each prompt is one user message; the model reads only its prose lines and skips code, log, config, and data lines by design, so it cannot find names there except by propagation of a value found in prose. Sensitive values inside prose lines, by format: chat 100%, code 0%, log 60%, config 0%, email 100%, stacktrace 0%. Its latency includes inference",
+      "note": "rules + name model (experimental): the proxy-default rules plus the nym name model (`rules-12+intl-2+ext-1+nym-edge-int8-3`, shipped `nameModel` defaults), through the code path the proxy uses for user-written text. Each prompt is one user message; the model reads only its prose lines and skips code, log, config, and data lines by design, so it cannot find names there except by propagation of a value found in prose. Sensitive values inside prose lines, by format: chat 100%, code 0%, log 60%, config 0%, email 100%, stacktrace 0%. Its latency includes inference",
       "byCategory": {
         "PERSON": {
           "outcomes": {
@@ -1385,8 +1385,8 @@
         }
       },
       "latency": {
-        "median": 5.813791999999921,
-        "p95": 12.734040999999934
+        "median": 5.83324999999968,
+        "p95": 12.889000000000124
       }
     },
     {
@@ -1814,8 +1814,8 @@
         }
       },
       "latency": {
-        "median": 6.047750008292496,
-        "p95": 8.417334000114352
+        "median": 5.669042002409697,
+        "p95": 7.384916068986058
       }
     },
     {
@@ -2243,8 +2243,8 @@
         }
       },
       "latency": {
-        "median": 6.1402079882100224,
-        "p95": 8.11116595286876
+        "median": 5.732999998144805,
+        "p95": 7.475375081412494
       }
     }
   ],
@@ -2788,8 +2788,8 @@
         }
       },
       "latency": {
-        "median": 0.05066700000003266,
-        "p95": 0.09924999999998363
+        "median": 0.04916600000001381,
+        "p95": 0.09383299999990413
       }
     },
     {
@@ -3331,13 +3331,13 @@
         }
       },
       "latency": {
-        "median": 0.05808399999989433,
-        "p95": 0.10500000000001819
+        "median": 0.061249999999972715,
+        "p95": 0.10966699999994489
       }
     },
     {
       "name": "rules + name model (experimental)",
-      "note": "rules + name model (experimental): the proxy-default rules plus the nym name model (`rules-6+intl-2+ext-1+nym-edge-int8-2`, shipped `nameModel` defaults), through the code path the proxy uses for user-written text. Each prompt is one user message; the model reads only its prose lines and skips code, log, config, and data lines by design, so it cannot find names there except by propagation of a value found in prose. Sensitive values inside prose lines, by format: chat 100%, code 0%, log 60%, config 0%, email 100%, stacktrace 0%. Its latency includes inference",
+      "note": "rules + name model (experimental): the proxy-default rules plus the nym name model (`rules-12+intl-2+ext-1+nym-edge-int8-3`, shipped `nameModel` defaults), through the code path the proxy uses for user-written text. Each prompt is one user message; the model reads only its prose lines and skips code, log, config, and data lines by design, so it cannot find names there except by propagation of a value found in prose. Sensitive values inside prose lines, by format: chat 100%, code 0%, log 60%, config 0%, email 100%, stacktrace 0%. Its latency includes inference",
       "byCategory": {
         "PERSON": {
           "outcomes": {
@@ -3875,8 +3875,8 @@
         }
       },
       "latency": {
-        "median": 5.875667000000249,
-        "p95": 13.413749999999709
+        "median": 5.805959000000257,
+        "p95": 12.89666699999998
       }
     },
     {
@@ -4376,8 +4376,8 @@
         }
       },
       "latency": {
-        "median": 5.25804195785895,
-        "p95": 7.368166989181191
+        "median": 5.220416933298111,
+        "p95": 7.384916068986058
       }
     },
     {
@@ -4877,8 +4877,8 @@
         }
       },
       "latency": {
-        "median": 5.468250019475818,
-        "p95": 7.614999951329082
+        "median": 5.172208067961037,
+        "p95": 7.465458009392023
       }
     }
   ],

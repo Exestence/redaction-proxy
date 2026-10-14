@@ -220,3 +220,38 @@ describe('sendWhenMaskFails', () => {
     expect(() => loadConfig(undefined, { REDACTION_PROXY_SEND_WHEN_MASK_FAILS: 'yes' })).toThrow('REDACTION_PROXY_SEND_WHEN_MASK_FAILS must be 1 or 0')
   })
 })
+
+describe('maskLocalUsername', () => {
+  // A synthetic account; the tests never read the real one.
+  const user = { username: 'fictionaluser', homedir: '/Users/fictionaluser' }
+
+  it('adds the local user name to the terms by default, beside the configured ones', () => {
+    expect(loadConfig(undefined, {}, user).redaction.terms).toEqual(['fictionaluser'])
+    expect(loadConfig(file('terms.toml', 'redaction.terms = ["Denise Whitlock"]'), {}, user).redaction.terms).toEqual(['Denise Whitlock', 'fictionaluser'])
+    expect(loadConfig(undefined, {}, { username: 'fictionaluser', homedir: '/home/fictional-home' }).redaction.terms).toEqual(['fictionaluser', 'fictional-home'])
+    expect(loadConfig(undefined, {}).redaction.terms).toBeUndefined()
+  })
+
+  it('leaves a name the file lists as a term in any ASCII case a listed term, not a user name', () => {
+    const listed = loadConfig(file('terms-case.toml', 'redaction.terms = ["Fictionaluser"]'), {}, user)
+    expect(listed.redaction.terms).toEqual(['Fictionaluser'])
+    expect(listed.localUsernames).toEqual([])
+  })
+
+  it('is turned off by the file or the environment, which overrides the file', () => {
+    const off = file('user-off.toml', 'maskLocalUsername = false')
+    expect(loadConfig(off, {}, user).redaction.terms).toBeUndefined()
+    expect(loadConfig(off, {}, user).maskLocalUsername).toBe(false)
+    expect(loadConfig(off, { REDACTION_PROXY_MASK_LOCAL_USERNAME: '1' }, user).redaction.terms).toEqual(['fictionaluser'])
+    expect(loadConfig(undefined, { REDACTION_PROXY_MASK_LOCAL_USERNAME: '0' }, user).redaction.terms).toBeUndefined()
+    expect(() => loadConfig(file('user-str.toml', 'maskLocalUsername = "false"'), {}, user)).toThrow('maskLocalUsername must be true or false')
+    expect(() => loadConfig(undefined, { REDACTION_PROXY_MASK_LOCAL_USERNAME: 'no' }, user)).toThrow('REDACTION_PROXY_MASK_LOCAL_USERNAME must be 1 or 0')
+  })
+
+  it('skips names shorter than 3 characters and generic account names such as the container user node', () => {
+    for (const username of ['ab', 'node', 'root', 'Admin', 'runner', 'user']) {
+      expect(loadConfig(undefined, {}, { username, homedir: `/home/${username}` }).redaction.terms, username).toBeUndefined()
+    }
+    expect(loadConfig(undefined, {}, { username: 'node', homedir: '/' }).redaction.terms).toBeUndefined()
+  })
+})

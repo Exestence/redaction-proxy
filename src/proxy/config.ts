@@ -96,6 +96,18 @@ export interface ProxyConfig {
    */
   knownOriginalsTtlSeconds: number
   /**
+   * Whether `loadConfig` added the local account's names ({@link localUsernames})
+   * to `redaction.terms`; on by default.
+   */
+  maskLocalUsername: boolean
+  /**
+   * The names `loadConfig` added to `redaction.terms` that the file did not list in any ASCII case.
+   * They are masked like terms but never refuse a request: a user name such as
+   * `max` or `claude` also spells JSON keys (`max_tokens`) and model ids, which
+   * the proxy does not rewrite.
+   */
+  localUsernames: string[]
+  /**
    * When masking fails, send the request anyway instead of refusing it with
    * 422: the partly masked body when the leak scan finds a detected value
    * still present, the original body when masking throws. Off by default.
@@ -117,8 +129,37 @@ export const PROXY_DEFAULT_RULES = RULE_NAMES.filter(rule => rule !== 'card' && 
 const FILE_KEYS = new Set([
   'port', 'host', 'authToken', 'allowedOrigins', 'openaiUpstream', 'anthropicUpstream', 'allowInsecureUpstream',
   'redaction', 'nameModel', 'screen', 'debugMasked', 'toolRestore', 'knownOriginalsTtlSeconds',
-  'sendWhenMaskFails',
+  'sendWhenMaskFails', 'maskLocalUsername',
 ])
+
+/**
+ * Account names too generic to mask as words: service and container defaults
+ * (`node` in the official Node.js image, `runner` on GitHub Actions) and
+ * words prose uses on its own.
+ */
+const GENERIC_USERNAMES = new Set([
+  'admin', 'administrator', 'app', 'default', 'dev', 'docker', 'ec2-user', 'guest', 'node', 'nobody', 'root',
+  'runner', 'runneradmin', 'test', 'ubuntu', 'user', 'vagrant',
+])
+
+/** The account a proxy runs as, as `os.userInfo()` reports it. */
+export interface LocalUser {
+  username: string
+  homedir: string
+}
+
+/**
+ * The names of the local account worth masking as terms: the user name and,
+ * when it differs, the home directory's last segment. A name shorter than 3
+ * characters or in {@link GENERIC_USERNAMES} (in any case) is skipped, as it
+ * would mask ordinary words.
+ * @param user - the local account.
+ * @returns the names to add to `redaction.terms`.
+ */
+export function localUsernames(user: LocalUser): string[] {
+  const names = [user.username, basename(user.homedir)].map(name => name.trim())
+  return [...new Set(names)].filter(name => [...name].length >= 3 && !GENERIC_USERNAMES.has(name.toLowerCase()) && !/[⟦⟧]/.test(name))
+}
 
 /** Shortest `authToken` accepted; `openssl rand -hex 32` gives 64 characters. */
 const AUTH_TOKEN_MIN = 16
@@ -301,10 +342,11 @@ function envFlag(env: NodeJS.ProcessEnv, name: string, fileValue: boolean): bool
  * Load the configuration.
  * @param path - TOML or JSON config file, or `undefined` for none.
  * @param env - environment; `REDACTION_PROXY_*` variables override the file.
+ * @param user - the account the proxy runs as, whose names are masked as terms unless `maskLocalUsername` is off; `undefined` adds none.
  * @returns the validated configuration.
  * @throws {Error} on an unreadable or unparsable file, an unsupported extension, an unknown key, or an invalid value.
  */
-export function loadConfig(path: string | undefined, env: NodeJS.ProcessEnv): ProxyConfig {
+export function loadConfig(path: string | undefined, env: NodeJS.ProcessEnv, user?: LocalUser): ProxyConfig {
   const file = path === undefined ? {} : readConfigFile(path)
   for (const key of Object.keys(file)) {
     if (!FILE_KEYS.has(key)) throw new Error(`config: unknown key ${printable(key, 'key')}${/key|secret/i.test(key) ? ' (upstream API keys belong in the environment, not the file)' : ''}`)
@@ -334,8 +376,14 @@ export function loadConfig(path: string | undefined, env: NodeJS.ProcessEnv): Pr
   }
   const sendWhenMaskFails = envFlag(env, 'REDACTION_PROXY_SEND_WHEN_MASK_FAILS', fileBoolean(file.sendWhenMaskFails, 'sendWhenMaskFails'))
   const debugMasked = envFlag(env, 'REDACTION_PROXY_DEBUG_MASKED', fileBoolean(file.debugMasked, 'debugMasked'))
+  const maskLocalUsername = envFlag(env, 'REDACTION_PROXY_MASK_LOCAL_USERNAME', fileBoolean(file.maskLocalUsername ?? true, 'maskLocalUsername'))
   const redaction = { rules: [...PROXY_DEFAULT_RULES], ...table(file.redaction, 'redaction') } as RulesRedactionConfig
   resolveRulesConfig(redaction)
+  // A name listed as a term in any ASCII case stays a listed term, which the leak check refuses.
+  const fold = (text: string): string => text.replace(/[A-Z]+/g, run => run.toLowerCase())
+  const listed = new Set((redaction.terms ?? []).map(fold))
+  const names = (maskLocalUsername && user !== undefined ? localUsernames(user) : []).filter(name => !listed.has(fold(name)))
+  if (names.length > 0) redaction.terms = [...redaction.terms ?? [], ...names]
   const config: ProxyConfig = {
     port,
     host,
@@ -348,6 +396,8 @@ export function loadConfig(path: string | undefined, env: NodeJS.ProcessEnv): Pr
     toolRestore: toolRestore(file.toolRestore, env.REDACTION_PROXY_TOOL_RESTORE_CATEGORIES),
     knownOriginalsTtlSeconds,
     sendWhenMaskFails,
+    maskLocalUsername,
+    localUsernames: names,
   }
   const model = nameModel(file.nameModel, env.REDACTION_PROXY_NAME_MODEL_DIR)
   if (model !== undefined) config.nameModel = model

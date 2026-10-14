@@ -13,6 +13,7 @@
  * @module redaction-proxy/cli
  */
 
+import { userInfo } from 'node:os'
 import { parseArgs } from 'node:util'
 import { loadNameModel } from './core/model/name-model.ts'
 import { loadConfig } from './proxy/config.ts'
@@ -38,9 +39,15 @@ if (values.demo) {
   await runDemo()
   process.exit(0)
 }
+let user
+try {
+  user = userInfo()
+} catch {
+  // An account without a passwd entry (`docker run --user 1234`) has no name to mask.
+}
 let config
 try {
-  config = loadConfig(values.config ?? process.env.REDACTION_PROXY_CONFIG, process.env)
+  config = loadConfig(values.config ?? process.env.REDACTION_PROXY_CONFIG, process.env, user)
 } catch (error) {
   exitWith(error)
 }

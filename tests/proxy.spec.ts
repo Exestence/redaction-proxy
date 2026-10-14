@@ -1,12 +1,15 @@
 // End to end: a client talks to the proxy, the proxy talks to a fake upstream
 // on 127.0.0.1 that answers with the placeholders it received, split into
 // 3-character SSE chunks so every placeholder straddles chunk boundaries.
+import { mkdtempSync, writeFileSync } from 'node:fs'
 import { createServer, request } from 'node:http'
 import type { IncomingHttpHeaders, Server } from 'node:http'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 import { DEFAULT_TOOL_RESTORE_CATEGORIES, loadConfig } from '../src/proxy/config.ts'
 import type { ProxyConfig, RestoredCategories } from '../src/proxy/config.ts'
-import { createProxyServer, listen } from '../src/proxy/server.ts'
+import { createProxyServer, listen, unusedPrivateUse } from '../src/proxy/server.ts'
 
 // Every value is fictional: example.test addresses, a checksum-valid invented
 // national ID, a made-up key, and a made-up home path.
@@ -1416,5 +1419,311 @@ describe('upstream failures', () => {
     expect(res.status).toBe(400)
     expect(await res.text()).toContain('nested too deeply')
     expect(seen).toHaveLength(0)
+  })
+})
+
+describe('placeholders kept in tool calls and resent', () => {
+  // The default policy keeps EMAIL and TWID in tool arguments, so the client receives `⟦EMAIL_1⟧` and sends it back.
+  beforeAll(() => start({ toolRestore: { categories: DEFAULT_TOOL_RESTORE_CATEGORIES, tools: new Map() } }))
+  afterAll(() => start())
+
+  const OTHER = 'second.fictional@example.test'
+  const ASK = `Run: echo mail ${EMAIL} id ${TWID} path ${HOME}/notes.md`
+  const id = (entry: Seen, category: string): string => placeholders(entry.raw).find(found => found.startsWith(`⟦${category}_`))!
+  const echo = (entry: Seen): string => `echo mail ${id(entry, 'EMAIL')} id ${id(entry, 'TWID')} path ${id(entry, 'PATH')}/notes.md`
+  let credential = 0
+  const fresh = (): Record<string, string> => ({ 'x-api-key': `kept-client-${credential += 1}`, authorization: `Bearer kept-client-${credential}` })
+
+  it('resends an Anthropic conversation byte for byte, the kept placeholder as written, with stable numbers', async () => {
+    const headers = fresh()
+    reply = entry => ({ json: { id: 'm', type: 'message', role: 'assistant', content: [{ type: 'tool_use', id: 'tu1', name: 'Bash', input: { command: echo(entry) } }] } })
+    const first = await (await post('/v1/messages', { model: 'c', max_tokens: 1, messages: [{ role: 'user', content: ASK }] }, headers)).json() as any
+    const input = first.content[0].input
+    expect(input.command).toBe(`echo mail ⟦EMAIL_1⟧ id ⟦TWID_1⟧ path ${HOME}/notes.md`)
+
+    const turn2 = [
+      { role: 'user', content: ASK },
+      { role: 'assistant', content: [{ type: 'tool_use', id: 'tu1', name: 'Bash', input }] },
+      { role: 'user', content: [{ type: 'tool_result', tool_use_id: 'tu1', content: `mail ⟦EMAIL_1⟧ id ⟦TWID_1⟧ path ${HOME}/notes.md\nowner: ${OTHER}` }] },
+    ]
+    reply = () => ({ json: { id: 'm', type: 'message', role: 'assistant', content: [{ type: 'text', text: 'Mailed ⟦EMAIL_1⟧ and ⟦EMAIL_2⟧.' }] } })
+    const second = await (await post('/v1/messages', { model: 'c', max_tokens: 1, messages: turn2 }, headers)).json() as any
+    expect(second.content[0].text).toBe(`Mailed ${EMAIL} and ${OTHER}.`)
+    const turn3 = [...turn2, { role: 'assistant', content: second.content }, { role: 'user', content: 'Thanks.' }]
+    await post('/v1/messages', { model: 'c', max_tokens: 1, messages: turn3 }, headers)
+
+    const [one, two, three] = seen
+    expect(JSON.stringify(two!.body.messages[0])).toBe(JSON.stringify(one!.body.messages[0]))
+    expect(two!.body.messages[1].content[0].input.command).toBe('echo mail ⟦EMAIL_1⟧ id ⟦TWID_1⟧ path ⟦PATH_1⟧/notes.md')
+    expect(two!.body.messages[2].content[0].content).toBe('mail ⟦EMAIL_1⟧ id ⟦TWID_1⟧ path ⟦PATH_1⟧/notes.md\nowner: ⟦EMAIL_2⟧')
+    expect(JSON.stringify(three!.body.messages.slice(0, 3))).toBe(JSON.stringify(two!.body.messages))
+    for (const entry of seen) {
+      expect(entry.raw).not.toContain('⟪')
+      for (const original of [EMAIL, TWID, HOME, OTHER]) expect(entry.raw).not.toContain(original)
+    }
+  })
+
+  it('resends a Chat Completions conversation byte for byte, the kept placeholder as written in arguments', async () => {
+    const headers = fresh()
+    const call = (args: string) => ({ id: 'call1', type: 'function', function: { name: 'bash', arguments: args } })
+    reply = entry => ({ json: { choices: [{ index: 0, message: { role: 'assistant', content: null, tool_calls: [call(JSON.stringify({ command: echo(entry) }))] } }] } })
+    const first = await (await post('/v1/chat/completions', { model: 'm', messages: [{ role: 'user', content: ASK }] }, headers)).json() as any
+    const message = first.choices[0].message
+    expect(JSON.parse(message.tool_calls[0].function.arguments).command).toBe(`echo mail ⟦EMAIL_1⟧ id ⟦TWID_1⟧ path ${HOME}/notes.md`)
+
+    const turn2 = [
+      { role: 'user', content: ASK },
+      message,
+      { role: 'tool', tool_call_id: 'call1', content: `mail ⟦EMAIL_1⟧ id ⟦TWID_1⟧\nowner: ${OTHER}` },
+    ]
+    reply = () => ({ json: { choices: [{ index: 0, message: { role: 'assistant', content: 'Done.' } }] } })
+    await post('/v1/chat/completions', { model: 'm', messages: turn2 }, headers)
+    await post('/v1/chat/completions', { model: 'm', messages: [...turn2, { role: 'assistant', content: 'Done.' }, { role: 'user', content: 'Thanks.' }] }, headers)
+
+    const [one, two, three] = seen
+    expect(JSON.stringify(two!.body.messages[0])).toBe(JSON.stringify(one!.body.messages[0]))
+    expect(JSON.parse(two!.body.messages[1].tool_calls[0].function.arguments).command).toBe('echo mail ⟦EMAIL_1⟧ id ⟦TWID_1⟧ path ⟦PATH_1⟧/notes.md')
+    expect(two!.body.messages[2].content).toBe('mail ⟦EMAIL_1⟧ id ⟦TWID_1⟧\nowner: ⟦EMAIL_2⟧')
+    expect(JSON.stringify(three!.body.messages.slice(0, 3))).toBe(JSON.stringify(two!.body.messages))
+  })
+
+  it('restores the passed placeholder in a streamed reply and keeps it in streamed tool input', async () => {
+    const headers = fresh()
+    reply = entry => ({ json: { id: 'm', type: 'message', role: 'assistant', content: [{ type: 'tool_use', id: 'tu1', name: 'Bash', input: { command: echo(entry) } }] } })
+    const first = await (await post('/v1/messages', { model: 'c', max_tokens: 1, messages: [{ role: 'user', content: ASK }] }, headers)).json() as any
+    const input = first.content[0].input
+    reply = () => ({
+      sse: sse([
+        ['message_start', { type: 'message_start', message: { id: 'm2', role: 'assistant', content: [], model: 'claude' } }],
+        ['content_block_start', { type: 'content_block_start', index: 0, content_block: { type: 'text', text: '' } }],
+        ...chunk('Again ⟦EMAIL_1⟧.').map((part): [string, unknown] => ['content_block_delta', { type: 'content_block_delta', index: 0, delta: { type: 'text_delta', text: part } }]),
+        ['content_block_stop', { type: 'content_block_stop', index: 0 }],
+        ['content_block_start', { type: 'content_block_start', index: 1, content_block: { type: 'tool_use', id: 'tu2', name: 'Bash', input: {} } }],
+        ...chunk(JSON.stringify({ command: 'echo ⟦EMAIL_1⟧' }), 2).map((part): [string, unknown] => ['content_block_delta', { type: 'content_block_delta', index: 1, delta: { type: 'input_json_delta', partial_json: part } }]),
+        ['content_block_stop', { type: 'content_block_stop', index: 1 }],
+        ['message_stop', { type: 'message_stop' }],
+      ]),
+    })
+    const messages = [
+      { role: 'user', content: ASK },
+      { role: 'assistant', content: [{ type: 'tool_use', id: 'tu1', name: 'Bash', input }] },
+      { role: 'user', content: [{ type: 'tool_result', tool_use_id: 'tu1', content: 'mail ⟦EMAIL_1⟧' }] },
+    ]
+    const all = events(await (await post('/v1/messages', { model: 'c', max_tokens: 1, stream: true, messages }, headers)).text())
+    expect(all.filter(e => e.delta?.type === 'text_delta').map(e => e.delta.text).join('')).toBe(`Again ${EMAIL}.`)
+    expect(JSON.parse(all.filter(e => e.delta?.type === 'input_json_delta').map(e => e.delta.partial_json).join(''))).toEqual({ command: 'echo ⟦EMAIL_1⟧' })
+  })
+
+  it('keeps numbering across Responses continuations that resend a kept placeholder', async () => {
+    const headers = fresh()
+    reply = () => ({ json: { id: 'r1', output: [{ type: 'function_call', call_id: 'c', name: 'bash', arguments: JSON.stringify({ command: 'echo ⟦EMAIL_1⟧' }) }] } })
+    const first = await (await post('/v1/responses', { model: 'm', input: `mail ${EMAIL}` }, headers)).json() as any
+    expect(JSON.parse(first.output[0].arguments).command).toBe('echo ⟦EMAIL_1⟧')
+    reply = () => ({ json: { id: 'r2', output: [] } })
+    await post('/v1/responses', { model: 'm', previous_response_id: 'r1', input: [{ type: 'function_call_output', call_id: 'c', output: `⟦EMAIL_1⟧ and ${OTHER}` }] }, headers)
+    reply = () => ({ json: { id: 'r3', output: [] } })
+    await post('/v1/responses', { model: 'm', previous_response_id: 'r2', input: `more ${OTHER}` }, headers)
+    expect(seen[1]!.body.input[0].output).toBe('⟦EMAIL_1⟧ and ⟦EMAIL_2⟧')
+    expect(seen[2]!.body.input).toBe('more ⟦EMAIL_2⟧')
+  })
+
+  it('passes a placeholder the proxy kept in streamed Responses arguments when the next continuation resends it', async () => {
+    const headers = fresh()
+    const args = JSON.stringify({ command: 'echo ⟦EMAIL_1⟧' })
+    const item = { id: 'fc', type: 'function_call', call_id: 'c', name: 'bash', arguments: '' }
+    reply = () => ({
+      sse: sse([
+        ['response.created', { type: 'response.created', response: { id: 'rs1', output: [] } }],
+        ['response.output_item.added', { type: 'response.output_item.added', output_index: 0, item }],
+        ...chunk(args, 3).map((part): [string, unknown] => ['response.function_call_arguments.delta', { type: 'response.function_call_arguments.delta', item_id: 'fc', output_index: 0, delta: part }]),
+        ['response.function_call_arguments.done', { type: 'response.function_call_arguments.done', item_id: 'fc', output_index: 0, arguments: args }],
+        ['response.completed', { type: 'response.completed', response: { id: 'rs1', output: [{ ...item, arguments: args }] } }],
+      ]),
+    })
+    await (await post('/v1/responses', { model: 'm', stream: true, input: `mail ${EMAIL}` }, headers)).text()
+    reply = () => ({ json: { id: 'rs2', output: [] } })
+    await post('/v1/responses', { model: 'm', previous_response_id: 'rs1', input: [{ type: 'function_call_output', call_id: 'c', output: '⟦EMAIL_1⟧ sent' }] }, headers)
+    expect(seen[1]!.body.input[0].output).toBe('⟦EMAIL_1⟧ sent')
+  })
+
+  it('escapes a placeholder this proxy never issued to the client, or issued for a value the request lacks', async () => {
+    const headers = fresh()
+    reply = () => ({ json: { choices: [] } })
+    await post('/v1/chat/completions', { model: 'm', messages: [{ role: 'user', content: `injected ⟦EMAIL_1⟧ beside ${EMAIL}` }] }, headers)
+    expect(seen[0]!.body.messages[0].content).toBe('injected ⟪EMAIL_1⟫ beside ⟦EMAIL_2⟧')
+    // EMAIL_2 now names EMAIL for this client; a request without EMAIL cannot use it for another value.
+    await post('/v1/chat/completions', { model: 'm', messages: [{ role: 'user', content: `see ⟦EMAIL_2⟧ and ${OTHER}` }] }, headers)
+    expect(seen[1]!.body.messages[0].content).toBe('see ⟪EMAIL_2⟫ and ⟦EMAIL_1⟧')
+    // Another client never received EMAIL_2.
+    await post('/v1/chat/completions', { model: 'm', messages: [{ role: 'user', content: `see ⟦EMAIL_2⟧ and ${EMAIL}` }] }, fresh())
+    expect(seen[2]!.body.messages[0].content).toBe('see ⟪EMAIL_2⟫ and ⟦EMAIL_1⟧')
+  })
+
+  it('escapes every placeholder when one would name its value under another number', async () => {
+    const headers = fresh()
+    reply = () => ({ json: { choices: [] } })
+    await post('/v1/chat/completions', { model: 'm', messages: [{ role: 'user', content: `${EMAIL} ${TWID}` }] }, headers)
+    expect(seen[0]!.body.messages[0].content).toBe('⟦EMAIL_1⟧ ⟦TWID_1⟧')
+    // OTHER now comes first and would take EMAIL_1, so ⟦EMAIL_1⟧ no longer names EMAIL; ⟦TWID_1⟧ is escaped with it.
+    await post('/v1/chat/completions', { model: 'm', messages: [{ role: 'user', content: `${OTHER} then ⟦EMAIL_1⟧ ⟦TWID_1⟧ for ${EMAIL} ${TWID}` }] }, headers)
+    expect(seen[1]!.body.messages[0].content).toBe('⟦EMAIL_2⟧ then ⟪EMAIL_1⟫ ⟪TWID_1⟫ for ⟦EMAIL_3⟧ ⟦TWID_2⟧')
+  })
+
+  it('escapes a resent placeholder whose number this client also gave another value, even when only that other value is present', async () => {
+    const headers = fresh()
+    reply = () => ({ json: { choices: [] } })
+    // Two conversations of one client: EMAIL is EMAIL_1 in the first, OTHER is EMAIL_1 in the second.
+    await post('/v1/chat/completions', { model: 'm', messages: [{ role: 'user', content: `mail ${EMAIL}` }] }, headers)
+    await post('/v1/chat/completions', { model: 'm', messages: [{ role: 'user', content: `mail ${OTHER}` }] }, headers)
+    expect(seen.map(entry => entry.body.messages[0].content)).toEqual(['mail ⟦EMAIL_1⟧', 'mail ⟦EMAIL_1⟧'])
+    // The first conversation, compacted: its summary keeps ⟦EMAIL_1⟧ (EMAIL), EMAIL is gone, and the user pastes OTHER.
+    await post('/v1/chat/completions', { model: 'm', messages: [
+      { role: 'user', content: 'Summary of earlier turns: the customer is ⟦EMAIL_1⟧.' },
+      { role: 'user', content: `Also cc ${OTHER}` },
+    ] }, headers)
+    expect(seen[2]!.body.messages.map((message: any) => message.content)).toEqual(['Summary of earlier turns: the customer is ⟪EMAIL_1⟫.', 'Also cc ⟦EMAIL_2⟧'])
+  })
+
+  it('keeps a Responses chain\'s numbering after another conversation gives a passed number a second value', async () => {
+    const headers = fresh()
+    const THIRD = 'third.fictional@example.test'
+    reply = () => ({ json: { id: 'r1', output: [{ type: 'function_call', call_id: 'c', name: 'bash', arguments: JSON.stringify({ command: 'echo ⟦EMAIL_1⟧' }) }] } })
+    await post('/v1/responses', { model: 'm', input: `mail ${EMAIL}` }, headers)
+    reply = () => ({ json: { id: 'r2', output: [] } })
+    await post('/v1/responses', { model: 'm', previous_response_id: 'r1', input: [{ type: 'function_call_output', call_id: 'c', output: `⟦EMAIL_1⟧ ok, also ${OTHER}` }] }, headers)
+    const otherId = (seen[1]!.body.input[0].output as string).match(/⟦EMAIL_\d+⟧/g)!.at(-1)!
+    // Another conversation of the client binds THIRD to EMAIL_1.
+    reply = () => ({ json: { choices: [] } })
+    await post('/v1/chat/completions', { model: 'm', messages: [{ role: 'user', content: `mail ${THIRD}` }] }, headers)
+    expect(seen[2]!.body.messages[0].content).toBe('mail ⟦EMAIL_1⟧')
+    // The chain goes on: the upstream still holds the numbers r2 sent, so its reply must restore by them.
+    reply = () => ({ json: { id: 'r3', output: [{ type: 'message', content: [{ type: 'output_text', text: `first ⟦EMAIL_1⟧, other ${otherId}` }] }] } })
+    const third = await (await post('/v1/responses', { model: 'm', previous_response_id: 'r2', input: `and ${THIRD}, resend ⟦EMAIL_1⟧` }, headers)).json() as any
+    expect(third.output[0].content[0].text).toBe(`first ${EMAIL}, other ${OTHER}`)
+    // ⟦EMAIL_1⟧ already names EMAIL upstream in this chain, so the new text passes it too.
+    expect(seen[3]!.body.input).toMatch(/^and ⟦EMAIL_\d+⟧, resend ⟦EMAIL_1⟧$/)
+    expect(seen[3]!.body.input).not.toContain(otherId)
+  })
+
+  it('finds a free holding character in one pass over the texts, even when they use nearly every private-use character', () => {
+    let pua = ''
+    for (let code = 0xe000; code < 0xf8ff; code += 1) pua += String.fromCharCode(code)
+    const texts = [...Array.from({ length: 50_000 }, () => '中'.repeat(100)), pua]
+    const started = performance.now()
+    expect(unusedPrivateUse(texts)).toBe('\uf8ff')
+    // Scanning every text once per private-use character took several seconds here.
+    expect(performance.now() - started).toBeLessThan(500)
+    expect(unusedPrivateUse([pua, '\uf8ff'])).toBeUndefined()
+  })
+
+  it('escapes as before when memory is off', async () => {
+    await start({ toolRestore: { categories: DEFAULT_TOOL_RESTORE_CATEGORIES, tools: new Map() }, knownOriginalsTtlSeconds: 0 })
+    try {
+      const headers = fresh()
+      reply = () => ({ json: { choices: [] } })
+      await post('/v1/chat/completions', { model: 'm', messages: [{ role: 'user', content: EMAIL }] }, headers)
+      await post('/v1/chat/completions', { model: 'm', messages: [{ role: 'user', content: EMAIL }, { role: 'assistant', content: 'mail ⟦EMAIL_1⟧' }] }, headers)
+      expect(seen[1]!.body.messages.map((message: any) => message.content)).toEqual(['⟦EMAIL_2⟧', 'mail ⟪EMAIL_1⟫'])
+    } finally {
+      await start({ toolRestore: { categories: DEFAULT_TOOL_RESTORE_CATEGORIES, tools: new Map() } })
+    }
+  })
+
+  it('passes the placeholder through a refusing screen, which still refuses an unknown one', async () => {
+    await start({ toolRestore: { categories: DEFAULT_TOOL_RESTORE_CATEGORIES, tools: new Map() }, screen: 'refuse' })
+    try {
+      const headers = fresh()
+      reply = () => ({ json: { choices: [] } })
+      await post('/v1/chat/completions', { model: 'm', messages: [{ role: 'user', content: EMAIL }] }, headers)
+      const call = { id: 'call1', type: 'function', function: { name: 'bash', arguments: JSON.stringify({ command: 'mail ⟦EMAIL_1⟧' }) } }
+      const ok = await post('/v1/chat/completions', { model: 'm', messages: [{ role: 'user', content: EMAIL }, { role: 'assistant', content: null, tool_calls: [call] }] }, headers)
+      expect(ok.status).toBe(200)
+      expect(JSON.parse(seen[1]!.body.messages[1].tool_calls[0].function.arguments).command).toBe('mail ⟦EMAIL_1⟧')
+      const unknown = await post('/v1/chat/completions', { model: 'm', messages: [{ role: 'user', content: EMAIL }, { role: 'assistant', content: 'mail ⟦EMAIL_7⟧' }] }, headers)
+      expect(unknown.status).toBe(422)
+      // Only in assistant text, the issued placeholder is not anchored, so it is refused like an unknown one.
+      const unanchored = await post('/v1/chat/completions', { model: 'm', messages: [{ role: 'user', content: EMAIL }, { role: 'assistant', content: 'mail ⟦EMAIL_1⟧' }] }, headers)
+      expect(unanchored.status).toBe(422)
+    } finally {
+      await start({ toolRestore: { categories: DEFAULT_TOOL_RESTORE_CATEGORIES, tools: new Map() } })
+    }
+  })
+})
+
+describe('the local user name', () => {
+  // Synthetic accounts; the tests never read the real one.
+  const withUser = (username: string): Promise<void> => {
+    const { redaction, localUsernames } = loadConfig(undefined, {}, { username, homedir: `/Users/${username}` })
+    return start({ redaction, localUsernames, toolRestore: { categories: DEFAULT_TOOL_RESTORE_CATEGORIES, tools: new Map() } })
+  }
+  afterAll(() => start())
+
+  it('is masked bare and inside project-directory names, and restored into tool arguments', async () => {
+    await withUser('fictionaluser')
+    const context = {
+      user_identity: 'fictionaluser',
+      live_cwd: '/private/tmp/claude-501/-Users-fictionaluser-project/abc/scratchpad',
+      trusted_directories: ['/Users/fictionaluser/project'],
+    }
+    reply = entry => {
+      const term = placeholders(entry.raw).find(found => found.startsWith('⟦TERM_'))!
+      return { json: { id: 'm', type: 'message', role: 'assistant', content: [{ type: 'text', text: `Hi ${term}` }, { type: 'tool_use', id: 't', name: 'Bash', input: { command: `ls /tmp/-Users-${term}-project` } }] } }
+    }
+    const body = await (await post('/v1/messages', { model: 'c', max_tokens: 1, safeguards: [{ classifier_context: context }], messages: [{ role: 'user', content: 'Where am I?' }] }, { 'x-api-key': 'k' })).json() as any
+    expect(seen[0]!.raw).not.toMatch(/fictionaluser/i)
+    expect(seen[0]!.body.safeguards[0].classifier_context).toEqual({
+      user_identity: '⟦TERM_1⟧',
+      live_cwd: '/private/tmp/claude-501/-Users-⟦TERM_1⟧-project/abc/scratchpad',
+      trusted_directories: [expect.stringMatching(/^⟦(PATH|TERM)_1⟧/)],
+    })
+    expect(body.content[0].text).toBe('Hi fictionaluser')
+    expect(body.content[1].input.command).toBe('ls /tmp/-Users-fictionaluser-project')
+  })
+
+  it('never refuses a request over a user name that also spells a key, a model id, or a tool name', async () => {
+    reply = () => ({ json: { content: [] } })
+    for (const username of ['max', 'claude', 'bash']) {
+      await withUser(username)
+      const res = await post('/v1/messages', {
+        model: 'claude-haiku-5-5', max_tokens: 1, tools: [{ name: 'bash', input_schema: { type: 'object' } }],
+        messages: [{ role: 'user', content: `ask ${username} about it` }],
+      }, { 'x-api-key': 'k' })
+      expect(res.status, username).toBe(200)
+      expect(seen.at(-1)!.body.messages[0].content, username).toBe('ask ⟦TERM_1⟧ about it')
+    }
+  })
+
+  it('still refuses over a listed term that spells the user name in another case', async () => {
+    const path = join(mkdtempSync(join(tmpdir(), 'proxy-terms-')), 'terms.toml')
+    writeFileSync(path, 'redaction.terms = ["Fictionaluser"]')
+    const { redaction, localUsernames } = loadConfig(path, {}, { username: 'fictionaluser', homedir: '/Users/fictionaluser' })
+    await start({ redaction, localUsernames, toolRestore: { categories: DEFAULT_TOOL_RESTORE_CATEGORIES, tools: new Map() } })
+    reply = () => ({ json: { content: [] } })
+    // The tool name keeps the term, which the proxy does not rewrite.
+    const res = await post('/v1/messages', { model: 'c', max_tokens: 1, tools: [{ name: 'Fictionaluser', input_schema: { type: 'object' } }], messages: [{ role: 'user', content: 'ask Fictionaluser about it' }] }, { 'x-api-key': 'k' })
+    expect(res.status).toBe(422)
+  })
+
+  it('masks the user name as a whole word in any ASCII case and sends a glued occurrence as written, never refusing', async () => {
+    await withUser('fictionaluser')
+    reply = () => ({ json: { content: [] } })
+    const out: string[] = []
+    for (const text of ['notes in fictionaluser_project/x.md', 'see fictionaluser2024 and Fictionaluser-notes', 'user=fictionaluser;', 'FICTIONALUSER wrote it']) {
+      const res = await post('/v1/messages', { model: 'c', max_tokens: 1, messages: [{ role: 'user', content: text }] }, { 'x-api-key': 'k' })
+      out.push(`${res.status} ${seen.at(-1)!.body.messages[0].content}`)
+    }
+    expect(out).toEqual([
+      '200 notes in ⟦TERM_1⟧_project/x.md',
+      '200 see fictionaluser2024 and ⟦TERM_1⟧-notes',
+      '200 user=⟦TERM_1⟧;',
+      '200 ⟦TERM_1⟧ wrote it',
+    ])
+  })
+
+  it('leaves the word node alone when the proxy runs as the container user node', async () => {
+    await withUser('node')
+    reply = () => ({ json: { choices: [] } })
+    await post('/v1/chat/completions', { model: 'm', messages: [{ role: 'user', content: 'Install node, then run node index.js.' }] })
+    expect(seen[0]!.body.messages[0].content).toBe('Install node, then run node index.js.')
   })
 })
