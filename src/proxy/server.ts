@@ -133,7 +133,7 @@ interface Slot {
   key: string | number
   /** JSON pointer of the string, keys through {@link pointerSegment}, for diagnostics that never carry text. */
   path: string
-  /** Whether the string is a resent tool call's input, which the model wrote: Anthropic `tool_use` input, Chat or Responses `arguments`, a `*_call` item's fields except its output. */
+  /** Whether the string anchors its placeholders: model-written tool call input ({@link isModelCallInput}), not the server- or tool-written fields of a `*_call` item, which are masked as tool input all the same. */
   tool: boolean
 }
 
