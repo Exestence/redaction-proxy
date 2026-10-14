@@ -54,15 +54,19 @@ const SKIP_MASK = new Set([
 /**
  * Keys of a resent Responses `*_call` item that the model wrote: `function_call`
  * and `mcp_call` `arguments`, `custom_tool_call` `input`, `local_shell_call`,
- * `shell_call`, `computer_call`, and `web_search_call` `action`,
- * `code_interpreter_call` `code`, `file_search_call` `queries`, and
- * `apply_patch_call` `operation`. Its other keys, such as `output`, `results`,
- * or `pending_safety_checks`, hold what a tool or the server answered.
+ * `shell_call`, `computer_call`, and `web_search_call` `action` (except its
+ * `sources`, {@link SERVER_SOURCES_PATH}), `code_interpreter_call` `code`,
+ * `file_search_call` `queries`, and `apply_patch_call` `operation`. Its other
+ * keys, such as `output`, `outputs`, `results`, `error`, or
+ * `pending_safety_checks`, hold what a tool or the server answered.
  */
 const MODEL_CALL_KEYS = new Set(['arguments', 'action', 'code', 'input', 'queries', 'operation'])
 
-/** A Chat Completions tool call's `function` object, or a message's legacy `function_call`, whose `arguments` the model wrote. */
-const CHAT_CALL_PATH = /^\/messages\/\d+\/(tool_calls\/\d+\/function|function_call)$/
+/** A Responses `web_search_call`'s `action.sources`, the pages the server searched, under a model-written `action`. */
+const SERVER_SOURCES_PATH = /^\/input\/\d+\/action\/sources$/
+
+/** A Chat Completions tool call's input the model wrote: a `function` call's `arguments`, a `custom` call's `input`, or a message's legacy `function_call` `arguments`. */
+const CHAT_CALL_INPUT_PATH = /^\/messages\/\d+\/(tool_calls\/\d+\/(function\/arguments|custom\/input)|function_call\/arguments)$/
 
 /** Request keys whose whole value is forwarded unmasked: caller metadata and exact stop strings. */
 const SKIP_SUBTREE = new Set(['metadata', 'stop'])
@@ -385,7 +389,7 @@ function collectSlots(value: unknown, path: string, out: Slot[], tool = false, a
     const item = record[key]
     const at = `${path}/${pointerSegment(key)}`
     const input = isToolInput(record, key)
-    const model = anchor || isModelCallInput(record, key, path)
+    const model = (anchor && !SERVER_SOURCES_PATH.test(at)) || isModelCallInput(record, key, path)
     if (typeof item !== 'string') collectSlots(item, at, out, tool || input, model)
     else if (tool || !SKIP_MASK.has(key) || isTextSource(record, key)) out.push({ parent: record, key, path: at, tool: model })
   }
@@ -420,8 +424,8 @@ function isToolInput(record: Record<string, unknown>, key: string): boolean {
 /**
  * Whether `record[key]` is tool input the model wrote, whose placeholders
  * anchor: an Anthropic `*tool_use` block's `input`, a Responses `*_call`
- * item's {@link MODEL_CALL_KEYS}, or a Chat Completions call's `arguments`
- * ({@link CHAT_CALL_PATH}).
+ * item's {@link MODEL_CALL_KEYS}, or a Chat Completions call's input
+ * ({@link CHAT_CALL_INPUT_PATH}).
  * @param record - a request object.
  * @param key - one of its keys.
  * @param path - JSON pointer of `record`.
@@ -431,7 +435,7 @@ function isModelCallInput(record: Record<string, unknown>, key: string, path: st
   const type = String(record.type)
   if (/tool_use$/.test(type)) return key === 'input'
   if (/_call$/.test(type)) return MODEL_CALL_KEYS.has(key)
-  return key === 'arguments' && CHAT_CALL_PATH.test(path)
+  return CHAT_CALL_INPUT_PATH.test(`${path}/${pointerSegment(key)}`)
 }
 
 /**
@@ -479,6 +483,40 @@ function isModelText(body: Json, path: string): boolean {
   if (item.role !== 'assistant' || field === 'summary') return false
   if (field === 'reasoning_content') return part === undefined
   return part === undefined || MODEL_TEXT_PARTS.has((item.content as Json[])[Number(part)]?.type)
+}
+
+/**
+ * Whether a Responses input item is part of a model turn: a `reasoning` item,
+ * a `*_call` item, or an assistant message.
+ * @param item - one item of a Responses `input` list.
+ * @returns whether the model wrote it.
+ */
+function isModelItem(item: unknown): boolean {
+  if (item === null || typeof item !== 'object') return false
+  const { type, role } = item as Json
+  return type === 'reasoning' || (typeof type === 'string' && type.endsWith('_call')) || (role === 'assistant' && (type === undefined || type === 'message'))
+}
+
+/**
+ * The model turn a request string belongs to, as a JSON pointer: for
+ * Messages and Chat Completions its message (`/messages/N`); for Responses
+ * the first of the consecutive model items ({@link isModelItem}) that hold
+ * it, so a turn is every reasoning, assistant message, and `*_call` item
+ * between the previous other item (a user, system, or developer message, a
+ * tool output) and the next.
+ * @param body - the parsed request body.
+ * @param path - JSON pointer of the string.
+ * @returns the turn's pointer, or `undefined` outside a message list.
+ */
+function modelTurnOf(body: Json, path: string): string | undefined {
+  const match = /^\/(messages|input)\/(\d+)(?:\/|$)/.exec(path)
+  if (match === null) return undefined
+  const [, list, index] = match
+  const items = body[list as string]
+  if (list === 'messages' || !Array.isArray(items)) return `/${list}/${index}`
+  let start = Number(index)
+  while (start > 0 && isModelItem(items[start - 1])) start -= 1
+  return `/input/${start}`
 }
 
 /** The role whose text the name model reads. */
@@ -1353,13 +1391,24 @@ export function createProxyServer(
     let masking
     try {
       const anchored = new Set(prior?.kept)
-      // An id whose first occurrence is outside tool input (a file read back, a summary, the system prompt) is not anchored by a later tool call that copies it.
-      // Assistant text and reasoning, which usually announce the call they precede, neither anchor nor count as that first occurrence.
+      // An id whose first occurrence is outside model-written tool input (a file read back, a summary, an earlier assistant turn, the system prompt) is not anchored by a later tool call that copies it.
+      // Assistant text and reasoning in the same model turn as a tool call that carries the id announce that call: they neither anchor it nor count as its first occurrence.
+      const callIds = new Map<string, Set<RedactionId>>()
+      raw.forEach((text, at) => {
+        const slot = slots[at] as Slot
+        const turn = slot.tool ? modelTurnOf(parsed, slot.path) : undefined
+        if (turn === undefined) return
+        const ids = callIds.get(turn) ?? new Set<RedactionId>()
+        for (const [, id] of text.matchAll(LITERAL_PLACEHOLDER)) ids.add(id as RedactionId)
+        callIds.set(turn, ids)
+      })
       const seen = new Set<RedactionId>()
       raw.forEach((text, at) => {
-        if (isModelText(parsed, (slots[at] as Slot).path)) return
+        const slot = slots[at] as Slot
+        const announced = isModelText(parsed, slot.path) ? callIds.get(modelTurnOf(parsed, slot.path) as string) : undefined
         for (const [, id] of text.matchAll(LITERAL_PLACEHOLDER)) {
-          if (!seen.has(id as RedactionId) && (slots[at] as Slot).tool) anchored.add(id as RedactionId)
+          if (announced?.has(id as RedactionId)) continue
+          if (!seen.has(id as RedactionId) && slot.tool) anchored.add(id as RedactionId)
           seen.add(id as RedactionId)
         }
       })

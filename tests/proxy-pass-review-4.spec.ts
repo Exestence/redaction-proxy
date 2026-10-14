@@ -88,7 +88,7 @@ describe('assistant text or reasoning before the tool call it announces', () => 
     expect(body.messages[1].content[1].input.to).toBe('⟦EMAIL_1⟧')
   })
 
-  it('Anthropic: a text block in an earlier assistant turn passes as written and A keeps EMAIL_1', async () => {
+  it('Anthropic: a text block in an earlier assistant turn de-anchors: escaped, and A renumbers', async () => {
     const headers = anth()
     reply = () => ({ json: { content: [] } })
     await post('/v1/messages', { model: 'c', max_tokens: 1, messages: [{ role: 'user', content: `contact ${A}` }] }, headers)
@@ -100,9 +100,9 @@ describe('assistant text or reasoning before the tool call it announces', () => 
       { role: 'user', content: [{ type: 'tool_result', tool_use_id: 't1', content: 'sent' }] },
     ] }, headers)
     const body = seen[1]!.body
-    expect(body.messages[0].content).toBe('contact ⟦EMAIL_1⟧')
-    expect(body.messages[1].content[0].text).toBe('The contact is ⟦EMAIL_1⟧.')
-    expect(body.messages[3].content[0].input.to).toBe('⟦EMAIL_1⟧')
+    expect(body.messages[0].content).toBe('contact ⟦EMAIL_2⟧')
+    expect(body.messages[1].content[0].text).toBe('The contact is ⟪EMAIL_1⟫.')
+    expect(body.messages[3].content[0].input.to).toBe('⟪EMAIL_1⟫')
   })
 
   it('Chat: assistant content before tool_calls passes as written and A keeps EMAIL_1', async () => {
