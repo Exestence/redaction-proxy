@@ -67,8 +67,7 @@ describe('WO-6 review 3 D3: unseen positives (each carries an amendment keyword)
   })
 })
 
-// WO-6 amendment R4: spaced `@` is not detected (the classifier is the only
-// guard), so these spaced-`@` addresses are asserted unmasked.
+// WO-6 amendment R4: spaced `@` is not detected, so these spaced-`@` addresses are asserted unmasked.
 describe('WO-6 round 5: spaced @ is not detected', () => {
   it.each([
     'email: wang.yichun @ gmail.com',
