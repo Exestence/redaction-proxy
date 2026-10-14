@@ -514,10 +514,17 @@ function modelTurnOf(body: Json, path: string): string | undefined {
   const [, list, index] = match
   const items = body[list as string]
   if (list === 'messages' || !Array.isArray(items)) return `/${list}/${index}`
-  let start = Number(index)
-  while (start > 0 && isModelItem(items[start - 1])) start -= 1
-  return `/input/${start}`
+  let starts = turnStarts.get(items)
+  if (starts === undefined) {
+    starts = items.map(() => 0)
+    for (let i = 1; i < items.length; i += 1) starts[i] = isModelItem(items[i - 1]) ? (starts[i - 1] as number) : i
+    turnStarts.set(items, starts)
+  }
+  return `/input/${starts[Number(index)] ?? Number(index)}`
 }
+
+/** Each Responses `input` list's turn start per item, computed once per request body. */
+const turnStarts = new WeakMap<unknown[], number[]>()
 
 /** The role whose text the name model reads. */
 const USER_ROLE: ReadonlySet<string> = new Set(['user'])
