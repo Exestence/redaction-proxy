@@ -37,7 +37,7 @@ A scenario is `inconclusive` when the model echoed no placeholder of the request
 
 ## Pointing real clients at the proxy
 
-Start the proxy with `pnpm build && node lib/cli.js` (port 8787). Claude Code was verified through the proxy on 2026-10-13 and again on 2026-10-14 on the final 0.3.0 build (commit `25881e0`, where the model wrote a sentence before its tool calls, the Bash command ran once, and placeholder numbers stayed stable across requests): version 2.1.287 with its subscription login against Anthropic Messages (Claude Haiku 5.5), streaming text and the Bash and Read tools; the upstream saw only placeholders for detected values, replies were restored, and tool arguments were restored per `toolRestore` (`PATH`, `TERM`, `PROJECT`) and kept as placeholders for other categories. Codex CLI has not been verified. This harness has not been run against Anthropic.
+Start the proxy with `pnpm build && node lib/cli.js` (port 8787). Claude Code was verified through the proxy on 2026-10-13 and again on 2026-10-14 on the final 0.3.0 build (commit `1a12a30`, where the model wrote a sentence before its tool calls, the Bash command ran once, and placeholder numbers stayed stable across requests): version 2.1.287 with its subscription login against Anthropic Messages (Claude Haiku 5.5), streaming text and the Bash and Read tools; the upstream saw only placeholders for detected values, replies were restored, and tool arguments were restored per `toolRestore` (`PATH`, `TERM`, `PROJECT`) and kept as placeholders for other categories. Codex CLI has not been verified. This harness has not been run against Anthropic.
 
 **Claude Code** (API key or subscription login; the proxy forwards either credential unchanged):
 
