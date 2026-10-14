@@ -1282,7 +1282,8 @@ describe('refusals and screening', () => {
     const started = process.cpuUsage()
     expect((await post('/v1/chat/completions', { model: 'm', messages })).status).toBe(200)
     const used = process.cpuUsage(started)
-    expect((used.user + used.system) / 1_000).toBeLessThan(2_000)
+    // 0.4 s here, up to 2.1 s of CPU on CI runners; a scan per value would take minutes.
+    expect((used.user + used.system) / 1_000).toBeLessThan(5_000)
   })
 
   it('replaces control characters and stray delimiters by default, and refuses them on request', async () => {
