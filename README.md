@@ -8,15 +8,7 @@ A small proxy on your own machine that replaces emails, API keys, ID numbers, an
 
 It works with any OpenAI- or Anthropic-compatible client, streaming included, and needs no local model. It **reduces** leaks of personal data and secrets; it does **not** make a conversation private.
 
-**Which one do you need?**
-
-| | This proxy | [dsh-privacy-router](https://github.com/PersonalAssistanceHsin/dsh-privacy-router) |
-| --- | --- | --- |
-| Needs a local model | No | Yes (answers the private turns) |
-| What reaches the cloud | Every request, masked | Only turns judged public, masked; turns it judges private stay on your machine |
-| Works with | Any OpenAI- or Anthropic-compatible client | DeepSeek Harness (dsh) only |
-
-If you can run a local model and want stronger privacy, install the router first; it uses this proxy's masking core through dsh-addons' redaction packages, which you install with it. Otherwise, this proxy alone adds a layer of privacy.
+If content must never leave your machine, answer it with a local model instead; this proxy is for when you choose a cloud model and still want fewer leaks.
 
 > **Status:** 0.3.0, not yet on npm. Verified with real services: DeepSeek Chat Completions (2026-10-08) and Anthropic Messages through Claude Code and dsh (2026-10-14); see below. The OpenAI API and Codex CLI are not verified yet.
 
@@ -253,7 +245,7 @@ Full tables: [held-out v2 results](bench/results/public-bench-held-out-v2.md). T
 - **Not protected:** once a value is restored on your machine, what your tools do with it is outside the proxy. Anything the detector misses is sent as is; see [What it does not protect](#what-it-does-not-protect) and the [full list of limits](docs/DETAILS.md#17-完整限制清單).
 - **Two tiers.** A value detected in a request is masked throughout that request, and by default the request is refused (422) if the value is still in it after masking; `sendWhenMaskFails` switches that refusal off and sends the request with the value. Memory across requests is best-effort extra masking: it never refuses a request, and a remembered value glued into other text or in a new spelling may be sent as is.
 - **Does not work:** tasks that need the content of a masked value, such as the domain of an email or transforming a key: the model sees only `⟦EMAIL_1⟧`.
-- **Content that must never leave your machine** should be answered by a local model instead, for example through a router that keeps such turns local ([dsh-privacy-router](https://github.com/PersonalAssistanceHsin/dsh-privacy-router)).
+- **Content that must never leave your machine** should be answered by a local model instead.
 
 ## What it does not protect
 
@@ -269,7 +261,7 @@ Also: a model that rewrites `⟦EMAIL_1⟧` as `[EMAIL_1]` shows it to you as wr
 
 ## More
 
-[docs/DETAILS.md](docs/DETAILS.md) (Traditional Chinese) covers the architecture, the comparison with dsh-privacy-router, the core API, every rule, streaming restore, 422 refusals, the threat model, the full configuration, tests, measurement methods, an FAQ, and how to regenerate the images and video in this README.
+[docs/DETAILS.md](docs/DETAILS.md) (Traditional Chinese) covers the architecture, the core API, every rule, streaming restore, 422 refusals, the threat model, the full configuration, tests, measurement methods, an FAQ, and how to regenerate the images and video in this README.
 
 ## License
 

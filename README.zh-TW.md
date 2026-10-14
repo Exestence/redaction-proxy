@@ -8,15 +8,7 @@
 
 適用任何 OpenAI 或 Anthropic 相容的用戶端，串流回覆也一樣，不需要本機模型。它**減少**個資與機密外洩，但**不會**讓對話變成私密的。
 
-**該用哪一個？**
-
-| | 這個代理 | [dsh-privacy-router](https://github.com/PersonalAssistanceHsin/dsh-privacy-router) |
-| --- | --- | --- |
-| 需要本機模型 | 不需要 | 需要（由它回答私密的輪次） |
-| 什麼會送到雲端 | 每個請求，遮罩後送出 | 只有判為公開的輪次，遮罩後送出；判為私密的輪次留在你的電腦 |
-| 適用 | 任何 OpenAI 或 Anthropic 相容的用戶端 | 只限 DeepSeek Harness（dsh） |
-
-跑得動本機模型、想要更強的隱私，請先安裝分流器；它透過 dsh-addons 的 redaction 套件使用這個代理的遮罩核心，安裝時一起裝上。跑不動的話，單用這個代理也能多一層隱私保護。
+絕不能離開電腦的內容，請改用本機模型回答；這個代理適合你選擇用雲端模型、但仍想減少外洩的時候。
 
 > **狀態：** 0.3.0，尚未發布到 npm。已對真實服務驗證：DeepSeek Chat Completions（2026-10-08），以及透過 Claude Code 與 dsh 的 Anthropic Messages（2026-10-14），見下方。OpenAI API 與 Codex CLI 尚未驗證。
 
@@ -253,7 +245,7 @@ REDACTION_PROXY_NAME_MODEL_DIR=$HOME/models/nym node lib/cli.js
 - **不保護什麼：** 值在你的電腦上還原之後，工具怎麼使用它不在代理的範圍內。偵測器漏掉的內容照原樣送出，見[它不保護什麼](#它不保護什麼)與[完整限制清單](docs/DETAILS.md#17-完整限制清單)。
 - **兩層：** 請求中偵測到的值在整個請求中遮罩，遮罩後若仍在請求中，請求預設以 422 拒絕；`sendWhenMaskFails` 可關閉這項拒絕，連同該值送出請求。跨請求的記憶只是盡力而為的額外遮罩：從不拒絕請求，記住的值黏在其他文字中或換了寫法時，可能照原樣送出。
 - **做不到什麼：** 需要被遮值內容的任務，例如取出 email 的網域或轉換一把金鑰：模型只看到 `⟦EMAIL_1⟧`。
-- **絕不能離開電腦的內容**應改由本機模型回答，例如透過把這類對話輪次留在本機的分流器（[dsh-privacy-router](https://github.com/PersonalAssistanceHsin/dsh-privacy-router)）。
+- **絕不能離開電腦的內容**應改由本機模型回答。
 
 ## 它不保護什麼
 
@@ -269,7 +261,7 @@ REDACTION_PROXY_NAME_MODEL_DIR=$HOME/models/nym node lib/cli.js
 
 ## 更多
 
-[docs/DETAILS.md](docs/DETAILS.md) 包含架構、與 dsh-privacy-router 的比較、核心 API、每條規則、串流還原、422 拒絕、威脅模型、完整設定、測試、量測方法、常見問題，以及如何重新產生本頁的圖片與影片。
+[docs/DETAILS.md](docs/DETAILS.md) 包含架構、核心 API、每條規則、串流還原、422 拒絕、威脅模型、完整設定、測試、量測方法、常見問題，以及如何重新產生本頁的圖片與影片。
 
 ## 授權
 

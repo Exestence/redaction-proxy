@@ -8,15 +8,7 @@
 
 兼容任何 OpenAI 或 Anthropic 接口的客户端，流式输出同样支持，不需要本地模型。它能**减少**个人信息和机密信息的泄露，但**不能**让对话变成私密的。
 
-**该用哪一个？**
-
-| | 这个代理 | [dsh-privacy-router](https://github.com/PersonalAssistanceHsin/dsh-privacy-router) |
-| --- | --- | --- |
-| 需要本地模型 | 不需要 | 需要（由它回答私密的轮次） |
-| 什么会发到云端 | 每个请求，脱敏后发出 | 只有判为公开的轮次，脱敏后发出；判为私密的轮次留在你的电脑 |
-| 适用 | 任何 OpenAI 或 Anthropic 兼容的客户端 | 仅限 DeepSeek Harness（dsh） |
-
-跑得动本地模型、想要更强的隐私，请先安装分流器；它通过 dsh-addons 的 redaction 包使用这个代理的脱敏核心，安装时一起装上。跑不动的话，单用这个代理也能多一层隐私保护。
+绝不能离开电脑的内容，请改用本地模型回答；这个代理适合你选择用云端模型、但仍想减少泄露的时候。
 
 > **状态：** 0.3.0，尚未发布到 npm。已在真实服务上验证：DeepSeek Chat Completions（2026-10-08），以及通过 Claude Code 和 dsh 的 Anthropic Messages（2026-10-14），见下文。OpenAI API 和 Codex CLI 尚未验证。
 
@@ -253,7 +245,7 @@ REDACTION_PROXY_NAME_MODEL_DIR=$HOME/models/nym node lib/cli.js
 - **不保护什么：** 值在你的电脑上还原之后，工具怎么使用它不在代理的范围内。检测器漏掉的内容原样发出，见[它防不了什么](#它防不了什么)和[完整限制清单](docs/DETAILS.md#17-完整限制清單)。
 - **两层：** 请求中检测到的值在整个请求中脱敏，脱敏后若仍在请求里，请求默认以 422 拒绝；`sendWhenMaskFails` 可关闭这项拒绝，连同该值发出请求。跨请求的记忆只是尽力而为的额外脱敏：从不拒绝请求，记住的值粘在其他文字中或换了写法时，可能原样发出。
 - **做不到什么：** 需要用到被脱敏的值本身的任务，比如取出 email 的域名或转换一把密钥：模型只看到 `⟦EMAIL_1⟧`。
-- **绝不能离开电脑的内容**应改由本地模型回答，比如通过把这类对话轮次留在本地的分流器（[dsh-privacy-router](https://github.com/PersonalAssistanceHsin/dsh-privacy-router)）。
+- **绝不能离开电脑的内容**应改由本地模型回答。
 
 ## 它防不了什么
 
@@ -269,7 +261,7 @@ REDACTION_PROXY_NAME_MODEL_DIR=$HOME/models/nym node lib/cli.js
 
 ## 更多
 
-[docs/DETAILS.md](docs/DETAILS.md)（繁体中文）包含架构、与 dsh-privacy-router 的对比、核心 API、每条规则、流式还原、422 拒绝、威胁模型、完整配置、测试、测量方法、常见问题，以及如何重新生成本页的图片和视频。
+[docs/DETAILS.md](docs/DETAILS.md)（繁体中文）包含架构、核心 API、每条规则、流式还原、422 拒绝、威胁模型、完整配置、测试、测量方法、常见问题，以及如何重新生成本页的图片和视频。
 
 ## 许可证
 

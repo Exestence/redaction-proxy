@@ -38,19 +38,6 @@
 | `src/cli.ts` | 命令列 `redaction-proxy [--config path]`；`--demo` 跑免金鑰示範（`src/demo.ts`，即 `pnpm demo`）。 |
 | `bench/` | 誤遮率量測（`pnpm bench`）。 |
 
-DeepSeek Harness 透過 dsh-addons 的 redaction 套件以 git submodule（`dsh-addons/vendor/redaction-proxy`）使用這份核心；核心只在這個儲存庫修改。[dsh-privacy-router](https://github.com/PersonalAssistanceHsin/dsh-privacy-router) 目前還有自己的串流還原器，未來預計統一到這裡的 `createStreamRestorer`。
-
-和 dsh-privacy-router 的差別：
-
-| | redaction-proxy（本儲存庫） | [dsh-privacy-router](https://github.com/PersonalAssistanceHsin/dsh-privacy-router) |
-| --- | --- | --- |
-| 形式 | 獨立的 HTTP 代理 | dsh 的外掛 |
-| 用戶端 | 任何 OpenAI 或 Anthropic 相容用戶端 | 只限 dsh |
-| 路由 | 不路由：每個請求都遮罩後送往上游 | 每一輪決定送本機模型還是雲端 |
-| 本機模型 | 不需要 | 需要 |
-| 遮罩核心 | 在這裡（`src/core/`） | dsh-addons 的 redaction 套件以 git submodule 引用這份核心 |
-| 串流還原 | `src/core/restore.ts` | 仍有自己的還原器，未來預計統一 |
-
 每個請求的基本行為：
 
 - 同一個值在同一個請求中一律用同一個佔位符。
@@ -437,7 +424,7 @@ POST /v1/messages tool arguments: kept by the tool restore policy KEY_1 in bash 
 | — | `REDACTION_PROXY_OPENAI_API_KEY` | 無 | OpenAI 型用戶端沒送 `authorization` 時才以 `Bearer` 補上。只存記憶體。 |
 | — | `REDACTION_PROXY_ANTHROPIC_API_KEY` | 無 | Anthropic 型用戶端沒送 `x-api-key` 與 `authorization` 時才補上。只存記憶體。 |
 
-**國際規則、延伸規則與政策摘要。** 偵測器的 `policyDigest` 是偵測器版本與啟用規則清單的雜湊，持久化 span 索引的宿主（DeepSeek Harness 的隱私路由）用它判斷先前記錄的遮罩是否仍適用；摘要不同時，`mask` 以 `policy` 拒絕。核心預設不含國際規則與延伸規則。`rules-7` 讓 `api-key` 不再遮 schema 用字、協定用字與遮蔽寫法（見[第 3 節](#3-偵測規則)），也不再把 `Authorization:` 後的空白算進值；`rules-8` 再讓它不遮由協定用字組成的 snake_case 欄位名稱（`max_tokens`）與範本佔位（`<your secret>`），並遮含引號的值（`ab"cd12ef`）；`rules-9` 改為只不遮未加引號、不在 `.env` 行上的知名 API 欄位名稱，再遮 `data_store`、`web_server` 這類由協定用字組成的密碼，並把含數字的 `${{ secrets.PW2 }}` 整段當成範本；`rules-10` 讓 OpenAI 與 Anthropic API 的欄位名稱在任何寫法都不遮，並讓首尾是英文字母或數字的 `terms`、`projectNames` 只比對完整的詞（這項只少遮，所以也遞增版本）。`rules-11` 讓原文中是完整單字、但 NFKC 投影上不是的 `terms`、`projectNames` 出現處也遮（`Orion™`、`Lin№5`、`Orion\u200Bcloud`），與外洩檢查的判斷一致，並讓 `api-key` 未加引號的值在引號後接非 ASCII 字母、數字或符號時延續（`p@ss"🔑x12` 整段遮）。`rules-12` 讓 `terms`、`projectNames` 的原文邊界把 BMP 以外的字母與數字當成字母與數字（`Lin𝐀bc` 不再遮，這項只少遮），外洩檢查也把零寬字元後接的組合符號算在前一個字母上（`Orion\u200B\u0301`）。所以未設定 `rules` 的宿主的偵測器版本從 `rules-11` 變成 `rules-12`，摘要從 `sha256:de67f507…a04124` 變成 `sha256:2e02d33a…8c674d`，以 `rules-11` 記錄的 session 會遇到 `policy` 拒絕（隱私路由會改在本機回答）。在這類宿主啟用任一國際規則，偵測器版本變成 `rules-12+intl-2`；啟用任一延伸規則再加上 `+ext-1`；摘要隨之改變，之前記錄的 session 會遇到 `policy` 拒絕（隱私路由會改在本機回答）。國際規則的結果改變時只遞增 `INTERNATIONAL_RULES_VERSION`，延伸規則只遞增 `EXTENDED_RULES_VERSION`，都不影響未啟用它們的宿主。`intl-2` 加入 8 條電話規則，並讓 `e164-phone` 在行首只認分組寫法、略過日期。`intl-2` 與 `ext-1` 在 v0.1.0 之前的修改沿用這兩個版本。自 v0.1.0 起，任何改變偵測結果的修改都必須遞增對應的版本（`DETECTOR_VERSION`、`INTERNATIONAL_RULES_VERSION` 或 `EXTENDED_RULES_VERSION`），因為以 git submodule 固定使用這份核心的宿主（dsh-addons 的 redaction 套件）會比對政策摘要。`terms`、`projectNames` 的比對改為詞的部分之間可有一串分隔符（`Margaret  Holloway`、換行縮排）時沿用 `rules-6`：摘要只含字面值的數量，不含比對方式；新的比對只多遮、不少遮；已記錄的訊息不重新掃描，其中這類寫法只在新訊息綁定同一寫法後才經值傳播遮掉。代理不保存索引，每個請求都用空索引，所以摘要對代理沒有影響，代理因此預設啟用全部規則（嚴格版取代 `card`、`entropy`）。
+**國際規則、延伸規則與政策摘要。** 偵測器的 `policyDigest` 是偵測器版本與啟用規則清單的雜湊，持久化 span 索引的宿主用它判斷先前記錄的遮罩是否仍適用；摘要不同時，`mask` 以 `policy` 拒絕。核心預設不含國際規則與延伸規則。`rules-7` 讓 `api-key` 不再遮 schema 用字、協定用字與遮蔽寫法（見[第 3 節](#3-偵測規則)），也不再把 `Authorization:` 後的空白算進值；`rules-8` 再讓它不遮由協定用字組成的 snake_case 欄位名稱（`max_tokens`）與範本佔位（`<your secret>`），並遮含引號的值（`ab"cd12ef`）；`rules-9` 改為只不遮未加引號、不在 `.env` 行上的知名 API 欄位名稱，再遮 `data_store`、`web_server` 這類由協定用字組成的密碼，並把含數字的 `${{ secrets.PW2 }}` 整段當成範本；`rules-10` 讓 OpenAI 與 Anthropic API 的欄位名稱在任何寫法都不遮，並讓首尾是英文字母或數字的 `terms`、`projectNames` 只比對完整的詞（這項只少遮，所以也遞增版本）。`rules-11` 讓原文中是完整單字、但 NFKC 投影上不是的 `terms`、`projectNames` 出現處也遮（`Orion™`、`Lin№5`、`Orion\u200Bcloud`），與外洩檢查的判斷一致，並讓 `api-key` 未加引號的值在引號後接非 ASCII 字母、數字或符號時延續（`p@ss"🔑x12` 整段遮）。`rules-12` 讓 `terms`、`projectNames` 的原文邊界把 BMP 以外的字母與數字當成字母與數字（`Lin𝐀bc` 不再遮，這項只少遮），外洩檢查也把零寬字元後接的組合符號算在前一個字母上（`Orion\u200B\u0301`）。所以未設定 `rules` 的宿主的偵測器版本從 `rules-11` 變成 `rules-12`，摘要從 `sha256:de67f507…a04124` 變成 `sha256:2e02d33a…8c674d`，以 `rules-11` 記錄的 session 會遇到 `policy` 拒絕（隱私路由會改在本機回答）。在這類宿主啟用任一國際規則，偵測器版本變成 `rules-12+intl-2`；啟用任一延伸規則再加上 `+ext-1`；摘要隨之改變，之前記錄的 session 會遇到 `policy` 拒絕（隱私路由會改在本機回答）。國際規則的結果改變時只遞增 `INTERNATIONAL_RULES_VERSION`，延伸規則只遞增 `EXTENDED_RULES_VERSION`，都不影響未啟用它們的宿主。`intl-2` 加入 8 條電話規則，並讓 `e164-phone` 在行首只認分組寫法、略過日期。`intl-2` 與 `ext-1` 在 v0.1.0 之前的修改沿用這兩個版本。自 v0.1.0 起，任何改變偵測結果的修改都必須遞增對應的版本（`DETECTOR_VERSION`、`INTERNATIONAL_RULES_VERSION` 或 `EXTENDED_RULES_VERSION`），因為以 git submodule 固定使用這份核心的宿主（dsh-addons 的 redaction 套件）會比對政策摘要。`terms`、`projectNames` 的比對改為詞的部分之間可有一串分隔符（`Margaret  Holloway`、換行縮排）時沿用 `rules-6`：摘要只含字面值的數量，不含比對方式；新的比對只多遮、不少遮；已記錄的訊息不重新掃描，其中這類寫法只在新訊息綁定同一寫法後才經值傳播遮掉。代理不保存索引，每個請求都用空索引，所以摘要對代理沒有影響，代理因此預設啟用全部規則（嚴格版取代 `card`、`entropy`）。
 
 上游 base 要設成讓 `<base>/v1/chat/completions`（或 `<base>/v1/messages`）是真正的端點，例如 `https://api.deepseek.com`。結尾斜線會被去掉。
 
@@ -499,7 +486,6 @@ npx：尚未發布到 npm。2026-10-14 以本機 tarball 驗證（0.3.0 的 `npm
 - 量測中文散文語料的誤遮率。
 - 發布到 npm。套件已可發布（`bin` 入口 `redaction-proxy`，`npm pack` 只含 `lib/`、README、LICENSE、NOTICE、`config.example.toml`），但 `package.json` 仍是 `"private": true`；決定發布時刪掉這一行即可（若改用 scoped 名稱，另加 `"publishConfig": { "access": "public" }`）。`prepublishOnly` 會先跑型別檢查與測試。授權條款已定為 Apache-2.0（[LICENSE](../LICENSE)）。
 - 在 linux/amd64 上建置並執行 Docker 映像，並以真模型執行人名模型版映像（linux/arm64 的映像已於 2026-10-13 驗證，見[第 13 節](#13-測試)）。
-- 將 dsh-privacy-router 的串流還原器統一到這份核心。
 
 ## 16. 人名模型（實驗性）
 
