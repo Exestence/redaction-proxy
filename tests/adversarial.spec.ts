@@ -1,6 +1,5 @@
 // Adversarial inputs against the core: leaks, fail-closed screening,
 // handler-level pathological inputs, and every chunk split of a streamed reply.
-// Ported from the dsh-privacy-router `.verify/` scripts to the core API.
 import { readFileSync, readdirSync } from 'node:fs'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'

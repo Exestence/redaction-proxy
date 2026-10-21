@@ -4,7 +4,7 @@
 // `git archive`: CORPUS_REPO names a local checkout (required), CORPUS_REF the
 // commit (default master).
 //
-// Headline metric, unchanged from the dsh-addons gate: KEY (credential) spans
+// Headline metric: KEY (credential) spans
 // per 1,000 lines of code files (.ts .json .sh .py). Every such span is a false
 // positive because source files carry no working credential. Other categories
 // are reported per 1,000 lines of all files; they are an upper bound on false
