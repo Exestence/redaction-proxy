@@ -221,7 +221,7 @@ How to read the table:
 
 - **Fully masked:** the share of sensitive values that were replaced whole by a placeholder. It is computed for each of the 10 categories and then averaged with each category counting equally (a *macro average*), so a category the rules do not cover at all, such as addresses at 0%, pulls the average down as much as one they cover well.
 - **Left untouched:** the share of sensitive values of which no part was masked, averaged the same way; lower is better. The rest were partly masked, such as a home path whose user name is masked and whose other folders are kept.
-- **Masked regions overlapping a sensitive value:** of all the regions a system masked, the share that covered a sensitive value. This works like precision: a low share means the system also masked harmless text.
+- **Masked regions overlapping a sensitive value:** of all the regions a system masked, the share that overlapped a sensitive value, at least in part. This works like precision: a low share means the system also masked harmless text.
 - **Median time per prompt:** half the prompts took less than this.
 - **Fully masked, all 7 languages:** the first row, over all 7 languages.
 - **Columns:** the core default rules are the smaller set the library uses on its own; the proxy default rules add the international and extended rules and are what the proxy runs. Presidio scores each finding with a confidence from 0 to 1, and the cutoff is the lowest score it keeps: cutoff 0 keeps every finding, cutoff 0.4 drops the less confident ones.

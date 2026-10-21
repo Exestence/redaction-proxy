@@ -41,7 +41,7 @@ A scenario is `inconclusive` when the model echoed no placeholder of the request
 DeepSeek serves an OpenAI-compatible API at `https://api.deepseek.com` and an Anthropic-compatible one at `https://api.deepseek.com/anthropic` ([docs](https://api-docs.deepseek.com/guides/anthropic_api)), so one DeepSeek key checks both SDKs. The `anthropic` provider is pointed at DeepSeek and given the DeepSeek key; `OPENAI_API_KEY` is emptied so the `openai` provider is skipped:
 
 ```sh
-export OPENAI_API_KEY= ANTHROPIC_API_KEY="$DEEPSEEK_API_KEY" \
+export OPENAI_API_KEY= ANTHROPIC_AUTH_TOKEN= ANTHROPIC_API_KEY="$DEEPSEEK_API_KEY" \
   E2E_DEEPSEEK_MODEL=deepseek-flash \
   E2E_ANTHROPIC_UPSTREAM=https://api.deepseek.com/anthropic E2E_ANTHROPIC_MODEL=deepseek-flash
 E2E_CLIENT=sdk pnpm run e2e:real   # official SDKs
