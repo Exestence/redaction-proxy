@@ -108,6 +108,16 @@ describe('real-service harness against a fake upstream', () => {
     for (const result of results) expect(result, `${result.scenario}: ${result.detail}`).toMatchObject({ status: 'pass' })
   })
 
+  it.each(PROVIDERS.map(provider => [provider.name, provider] as const))('passes every %s scenario through the official SDK', async (_name, provider) => {
+    const results = await runProvider(provider, { ...fakeEnv(), E2E_CLIENT: 'sdk' })
+    expect(results.length).toBe(provider.apis.length * 4)
+    for (const result of results) expect(result, `${result.scenario}: ${result.detail}`).toMatchObject({ status: 'pass' })
+  })
+
+  it('refuses an unknown E2E_CLIENT', async () => {
+    await expect(runProvider(PROVIDERS[0]!, { ...fakeEnv(), E2E_CLIENT: 'curl' })).rejects.toThrow('E2E_CLIENT must be fetch or sdk')
+  })
+
   it('fails a run that verified no restoration', () => {
     const result = (status: 'pass' | 'inconclusive' | 'fail'): CaseResult => ({ provider: 'p', scenario: 's', status, detail: '' })
     expect(isSuccessfulRun([result('pass'), result('inconclusive')])).toBe(true)
@@ -120,10 +130,10 @@ describe('real-service harness against a fake upstream', () => {
     expect(await runProvider(PROVIDERS[0]!, {})).toEqual([])
   })
 
-  it('never reports the key an upstream error quotes', async () => {
+  it.each(['fetch', 'sdk'])('never reports the key an upstream error quotes (%s)', async (client) => {
     rejectWithKey = true
     try {
-      const results = await runProvider(PROVIDERS[0]!, fakeEnv())
+      const results = await runProvider(PROVIDERS[0]!, { ...fakeEnv(), E2E_CLIENT: client })
       for (const result of results) {
         expect(result.status).toBe('error')
         expect(result.detail).not.toContain(FAKE_KEY)

@@ -74,7 +74,9 @@
     }
   },
   "devDependencies": {
+    "@anthropic-ai/sdk": "0.135.0",
     "@types/node": "^22.20.4",
+    "openai": "7.39.0",
     "typescript": "^6.0.3",
     "vitest": "^4.1.11"
   },

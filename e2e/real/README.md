@@ -34,6 +34,21 @@ A scenario is `inconclusive` when the model echoed no placeholder of the request
 | `E2E_ANTHROPIC_MODEL` | `claude-haiku-4-5` | Model for Anthropic |
 | `E2E_DEEPSEEK_MODEL` | `deepseek-chat` | Model for DeepSeek |
 | `E2E_OPENAI_UPSTREAM`, `E2E_ANTHROPIC_UPSTREAM`, `E2E_DEEPSEEK_UPSTREAM` | the public API | Service base URL |
+| `E2E_CLIENT` | `fetch` | `sdk` sends every request through the official SDKs instead of `fetch`: the `openai` package for Chat Completions and Responses, `@anthropic-ai/sdk` for Messages. Any other value stops the run. |
+
+## With a DeepSeek key only
+
+DeepSeek serves an OpenAI-compatible API at `https://api.deepseek.com` and an Anthropic-compatible one at `https://api.deepseek.com/anthropic` ([docs](https://api-docs.deepseek.com/guides/anthropic_api)), so one DeepSeek key checks both SDKs. The `anthropic` provider is pointed at DeepSeek and given the DeepSeek key; `OPENAI_API_KEY` is emptied so the `openai` provider is skipped:
+
+```sh
+export OPENAI_API_KEY= ANTHROPIC_API_KEY="$DEEPSEEK_API_KEY" \
+  E2E_DEEPSEEK_MODEL=deepseek-flash \
+  E2E_ANTHROPIC_UPSTREAM=https://api.deepseek.com/anthropic E2E_ANTHROPIC_MODEL=deepseek-flash
+E2E_CLIENT=sdk pnpm run e2e:real   # official SDKs
+pnpm run e2e:real                  # raw fetch
+```
+
+Results are labelled `deepseek` (Chat Completions) and `anthropic` (Messages, served by DeepSeek). This checks the wire formats and the SDK clients, not OpenAI's or Anthropic's own services.
 
 ## Pointing real clients at the proxy
 
@@ -47,7 +62,7 @@ ANTHROPIC_BASE_URL=http://127.0.0.1:8787 claude
 
 To use DeepSeek's Anthropic-compatible API instead, start the proxy with `REDACTION_PROXY_ANTHROPIC_UPSTREAM=https://api.deepseek.com/anthropic` and run Claude Code with `ANTHROPIC_BASE_URL=http://127.0.0.1:8787 ANTHROPIC_AUTH_TOKEN=$DEEPSEEK_API_KEY`.
 
-**Codex CLI** (API-key login only; a ChatGPT login sends requests to ChatGPT's backend, which no base URL changes):
+**Codex CLI** (API-key login only). Codex 0.155.1 speaks only the Responses API: `wire_api = "chat"` stops it at startup. A ChatGPT login sends requests to ChatGPT's backend (`/backend-api/codex/responses`), which is not a proxy route, so it cannot go through the proxy. Not verified against OpenAI.
 
 ```sh
 OPENAI_BASE_URL=http://127.0.0.1:8787/v1 codex
@@ -64,3 +79,23 @@ base_url = "http://127.0.0.1:8787/v1"
 env_key = "OPENAI_API_KEY"
 wire_api = "responses"
 ```
+
+**Codex CLI with DeepSeek.** DeepSeek also serves the Responses API ([docs](https://api-docs.deepseek.com/guides/responses_api/); stateless, so no `previous_response_id`). Start the proxy with `REDACTION_PROXY_OPENAI_UPSTREAM=https://api.deepseek.com` and give Codex its own configuration directory, so your `~/.codex` login stays as it is:
+
+```toml
+# ~/.codex-redaction-proxy/config.toml
+model = "deepseek-flash"
+model_provider = "deepseek-via-proxy"
+
+[model_providers.deepseek-via-proxy]
+name = "DeepSeek through redaction-proxy"
+base_url = "http://127.0.0.1:8787/v1"
+env_key = "DEEPSEEK_API_KEY"
+wire_api = "responses"
+```
+
+```sh
+CODEX_HOME=~/.codex-redaction-proxy codex exec --skip-git-repo-check "..." </dev/null
+```
+
+On 2026-10-21, with a dummy key, Codex 0.155.1 sent its requests to the proxy's `/v1/responses`, the proxy masked the e-mail in the prompt and the OS user name, and DeepSeek answered 401 for the key; a run with a real key has not been made yet.

@@ -11,6 +11,8 @@ import { createProxyServer, listen } from '../../src/proxy/server.ts'
 import { ROUTES, authHeaders } from './providers.ts'
 import type { Provider } from './providers.ts'
 import { extractReplyText } from './replies.ts'
+import { parseClientKind, sendWithSdk } from './sdk.ts'
+import type { ClientKind } from './sdk.ts'
 import { buildRequestBody, describeScenario, promptOf, scenariosFor, syntheticRecord } from './requests.ts'
 import type { Scenario } from './requests.ts'
 import { startTee } from './tee.ts'
@@ -36,6 +38,7 @@ interface Rig {
   model: string
   proxyUrl: string
   tee: Tee
+  client: ClientKind
 }
 
 const RECORD_SEED = 20261005
@@ -45,12 +48,13 @@ const REDACTED_KEY = '[key]'
 /**
  * Run every scenario of one service through a fresh proxy and tee.
  * @param provider - the service.
- * @param env - environment holding the key and optional overrides.
+ * @param env - environment holding the key and optional overrides; `E2E_CLIENT=sdk` sends through the official SDKs.
  * @returns one result per scenario, or an empty list when the key is not set.
  */
 export async function runProvider(provider: Provider, env: NodeJS.ProcessEnv): Promise<CaseResult[]> {
   const key = env[provider.keyVariable]
   if (key === undefined || key === '') return []
+  const client = parseClientKind(env.E2E_CLIENT)
   const tee = await startTee(env[provider.baseUrlVariable] ?? provider.defaultBaseUrl)
   const proxy = createProxyServer(loadConfig(undefined, {
     REDACTION_PROXY_OPENAI_UPSTREAM: tee.url,
@@ -64,6 +68,7 @@ export async function runProvider(provider: Provider, env: NodeJS.ProcessEnv): P
     model: env[provider.modelVariable] ?? provider.defaultModel,
     proxyUrl: `http://127.0.0.1:${await listen(proxy, 0)}`,
     tee,
+    client,
   }
   try {
     const results: CaseResult[] = []
@@ -83,13 +88,18 @@ async function runScenario(rig: Rig, scenario: Scenario): Promise<Outcome> {
   const record = syntheticRecord(RECORD_SEED)
   const requestBody = buildRequestBody(scenario, rig.model, record)
   const exchangesBefore = rig.tee.exchanges.length
-  const response = await fetch(rig.proxyUrl + ROUTES[scenario.api], {
-    method: 'POST',
-    headers: { 'content-type': 'application/json', ...authHeaders(rig.provider, rig.key) },
-    body: JSON.stringify(requestBody),
-  })
-  const clientBody = await response.text()
-  if (!response.ok) return { status: 'error', detail: `HTTP ${response.status}: ${excerptWithoutKey(clientBody, rig.key)}` }
+  let clientBody: string
+  if (rig.client === 'sdk') {
+    clientBody = await sendWithSdk(rig.provider, scenario.api, rig.proxyUrl, rig.key, requestBody)
+  } else {
+    const response = await fetch(rig.proxyUrl + ROUTES[scenario.api], {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', ...authHeaders(rig.provider, rig.key) },
+      body: JSON.stringify(requestBody),
+    })
+    clientBody = await response.text()
+    if (!response.ok) return { status: 'error', detail: `HTTP ${response.status}: ${excerptWithoutKey(clientBody, rig.key)}` }
+  }
   const exchange = rig.tee.exchanges[exchangesBefore]
   if (exchange === undefined) return { status: 'error', detail: 'the upstream received no request' }
   const leaked = findLeakedOriginals(exchange.requestBody, record.originals)

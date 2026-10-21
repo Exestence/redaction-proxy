@@ -9,6 +9,9 @@
 import { isSuccessfulRun, runProvider } from './harness.ts'
 import type { CaseResult } from './harness.ts'
 import { PROVIDERS } from './providers.ts'
+import { parseClientKind } from './sdk.ts'
+
+console.log(`client: ${parseClientKind(process.env.E2E_CLIENT)}`)
 
 const results: CaseResult[] = []
 for (const provider of PROVIDERS) {
