@@ -1,4 +1,4 @@
-// WO-7 review: unseen percent-encoded negatives and positives, and offset
+// Unseen percent-encoded negatives and positives, and offset
 // edges (byte order marks, mixed encoded and decoded spellings, adjacent
 // placeholders). Every value is invented.
 import { describe, expect, it } from 'vitest'

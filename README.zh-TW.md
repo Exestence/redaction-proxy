@@ -10,7 +10,9 @@
 
 絕不能離開電腦的內容，請改用本機模型回答；這個代理適合你選擇用雲端模型、但仍想減少外洩的時候。
 
-> **狀態：** 0.3.0，尚未發布到 npm。已對真實服務驗證：DeepSeek Chat Completions（2026-10-08），以及透過 Claude Code 與 dsh 的 Anthropic Messages（2026-10-14），見下方。OpenAI API 與 Codex CLI 尚未驗證。
+> **狀態：** 0.3.0，尚未發布到 npm。已對真實服務驗證：DeepSeek Chat Completions（2026-10-08），透過 Claude Code 與 dsh 的 Anthropic Messages（2026-10-14），以及以官方 Anthropic SDK 對 Anthropic Messages（2026-10-21），見下方。OpenAI API 與 Codex CLI 尚未驗證。
+
+> 這是一個學習與探索用的專案。歡迎提 issue 與 pull request，我有空時會看。
 
 ## 介紹影片
 
@@ -40,7 +42,7 @@ client receives:   I will email lin.fictional@example.test about /Users/fictiona
 
 ### Docker
 
-2026-10-13 在 Apple Silicon 上以 Docker Desktop 29.6.2（linux/arm64）對本機假上游驗證：映像可以建置（347 MB；加 `--build-arg NAME_MODEL=1` 為 864 MB），以非 root 使用者 `node` 執行；沒設 `REDACTION_PROXY_AUTH_TOKEN` 時拒絕啟動，沒帶權杖的請求回 401；email、身分證字號與家目錄路徑在 OpenAI Chat Completions JSON、串流與 Anthropic Messages 中都以遮罩後的形式送到上游，並在回覆中還原；允許來源的 CORS 預檢得到 204 且不轉送，其他來源得到 403；下方的設定檔掛載可用。未測試：以真模型執行人名模型版映像，以及 linux/amd64。
+2026-10-13 在 Apple Silicon 上以 Docker Desktop 29.6.2（linux/arm64）對本機假上游驗證：映像可以建置（347 MB；加 `--build-arg NAME_MODEL=1` 為 864 MB），以非 root 使用者 `node` 執行；沒設 `REDACTION_PROXY_AUTH_TOKEN` 時拒絕啟動，沒帶權杖的請求回 401；email、身分證字號與家目錄路徑在 OpenAI Chat Completions JSON、串流與 Anthropic Messages 中都以遮罩後的形式送到上游，並在回覆中還原；允許來源的 CORS 預檢得到 204 且不轉送，其他來源得到 403；下方的設定檔掛載可用。2026-10-21 在 Apple Silicon 上以模擬方式建置並執行 linux/amd64 映像（Docker 29.8.2），對假上游驗證：以 `node` 執行；沒設權杖就拒絕啟動，沒帶權杖回 401；email、身分證字號與家目錄路徑在 Chat Completions JSON、串流與 Anthropic Messages 中都遮罩後送上游並還原。linux/amd64 的人名模型版映像以真模型遮罩並還原了人名與公司名（`⟦NAME_1⟧`、`⟦ORG_1⟧`）。在 linux/amd64 上未測試：CORS 預檢與設定檔掛載；兩個映像都還沒在原生 x86-64 機器上執行過。
 
 ```sh
 docker build -t redaction-proxy .
@@ -74,15 +76,17 @@ npx redaction-proxy           # 啟動代理，位址 http://127.0.0.1:8787（�
 > - **Claude Code 2.1.287**，以訂閱登入，設定 `ANTHROPIC_BASE_URL=http://127.0.0.1:8787`：串流文字與工具（Bash、Read）。偵測到的值上游只看到佔位符，回覆已還原，工具參數依 `toolRestore` 還原 `PATH`、`TERM`、`PROJECT`，其他類別保留為佔位符。0.3.0 之前，工具參數中保留的佔位符在後續回合會被重新編號，模型把同一個工具重試了 7 次；0.3.0 中工具只執行 1 次（2026-10-13 為 3 個請求；2026-10-14 模型先寫了一句話再呼叫 Bash 與 Read，共 2 個請求，佔位符編號不變）。Claude Code 也會送出作業系統的使用者名稱（在 `safeguards…user_identity` 與專案目錄名稱中），0.3.0 預設會遮掉（`maskLocalUsername`）。
 > - **dsh**（DeepSeek Harness，經由它的 pi-ai Anthropic 路徑）：文字與工具。0.3.0 之前，保留的佔位符讓 Anthropic 以 HTTP 400 拒絕重送的簽章 thinking 區塊；已驗證 0.3.0 修正了這個問題。
 >
-> 未驗證：OpenAI API（沒有金鑰）、Codex CLI（未登入）、直接使用 Anthropic SDK（只經由 dsh 的 pi-ai 使用過）、以本儲存庫的 `e2e:real` 驗證工具對 Anthropic 執行（未執行）。
+> 2026-10-21 真實服務驗證工具對 Anthropic Messages（Claude Haiku 5.5）通過：以官方 Anthropic SDK（`@anthropic-ai/sdk` 0.135.0）當用戶端，以及以單純的 `fetch`，各 4 個情境全部通過（非串流 JSON 與串流；純文字與強制工具呼叫）；上游只看到佔位符，每次 5 個值都還原。
+>
+> 未驗證：OpenAI API（沒有金鑰；驗證工具的 OpenAI SDK 用戶端路徑只對假上游測試過）、Codex CLI（沒有用真實金鑰跑過）。
 
 工具照常送出自己的 API 金鑰；代理原樣轉送，從不儲存。
 
 | 工具 | 設定 | 狀態 |
 | --- | --- | --- |
 | Claude Code | `ANTHROPIC_BASE_URL=http://127.0.0.1:8787 claude` | 2026-10-14 已驗證（訂閱登入；文字、串流、工具） |
-| Anthropic SDK | `ANTHROPIC_BASE_URL=http://127.0.0.1:8787`（不加 `/v1`） | 經由 dsh（pi-ai）驗證，未直接驗證 |
-| OpenAI SDK 與多數相容工具 | `OPENAI_BASE_URL=http://127.0.0.1:8787/v1`（要加 `/v1`） | 未測試 |
+| Anthropic SDK | `ANTHROPIC_BASE_URL=http://127.0.0.1:8787`（不加 `/v1`） | 2026-10-21 以真實服務驗證工具驗證（Claude Haiku 5.5；JSON、串流、工具呼叫） |
+| OpenAI SDK 與多數相容工具 | `OPENAI_BASE_URL=http://127.0.0.1:8787/v1`（要加 `/v1`） | 未對 OpenAI 驗證；OpenAI SDK 只對假上游測試過 |
 | DeepSeek | 以 `REDACTION_PROXY_OPENAI_UPSTREAM=https://api.deepseek.com node lib/cli.js` 啟動代理，再用 `OPENAI_BASE_URL=http://127.0.0.1:8787/v1` 搭配你的 DeepSeek 金鑰。這會取代 OpenAI 上游。 | 已用真實服務驗證工具驗證（僅 API） |
 | Cursor | 不支援：Cursor 的自訂 base URL 請求從 Cursor 自己的伺服器發出，連不到你的 `127.0.0.1`。 | — |
 
@@ -195,11 +199,17 @@ REDACTION_PROXY_NAME_MODEL_DIR=$HOME/models/nym node lib/cli.js
 ## 實測結果
 
 <!-- RESULTS:START -->
-**held-out set v2 (written blind, run once)，保留集第 2 版（盲寫、只跑一次）。** 7 種語言（英文、繁中、簡中、日文、韓文、德文、法文）共 1,617 筆合成提示、10,268 個敏感值、2,997 個困難反例。撰寫者沒看過規則與評測程式；約 60% 的值是非標準寫法（用點分隔的卡號、小寫 IBAN、`name at example dot com`、帶分機的電話）。以 SHA-256 凍結後只在 2026-10-07 評分一次，使用代理預設的偵測器 `rules-6+intl-2+ext-1`；兩版保留集與其雜湊在 [bench/heldout/](bench/heldout/)。其中所有形似憑證的字串（`ghp_`、`AKIA`、`npm_`、PEM 區塊）都是合成的、無法使用，機密掃描工具（secret scanner）標出它們是預期中的事。
+- **測了什麼：** 在 7 種語言（英文、繁中、簡中、日文、韓文、德文、法文）共 1,617 筆編造的提示中，代理能遮掉多少敏感值。其中有 10 類（email、電話、身分證號、信用卡、IBAN、金鑰與憑證、家目錄路徑、主機、人名、地址）共 10,268 個敏感值，以及 2,997 個困難反例：看起來像敏感值、其實無害的值，例如訂單號碼與版本字串。沒有使用任何真實個資。
+- **和誰比：** [Microsoft Presidio](https://github.com/microsoft/presidio)，一套廣泛使用的開源個資偵測工具。
+- **為什麼平均看起來偏低：** 約 60% 的測試值刻意用不常見的寫法（用點分隔的卡號、小寫 IBAN、`name at example dot com`、帶分機的電話）。標準寫法的值大多遮得掉：email 100%、信用卡 94.7%、金鑰 95.9%、主機 100%（英文、代理預設規則）。
+- **弱點：** 不常見的寫法大多抓不到（非標準的卡號與 IBAN 0%、身分證號 30.4%）；沒有地址規則；人名要靠選用的人名模型；電話 Presidio 遮得比較多（85% 對 51%）。
+- **整體：** 10 類平均下來，代理完全遮蔽 39.5% 的英文值，Presidio 37.8–40.4%，代理加人名模型 44.8%。規則每筆提示約 0.1 ms，Presidio 約 11 ms。
+
+這組測試資料是*保留集*（held-out）：由沒看過規則與評測程式的人撰寫，所以規則沒有針對它調整過。它以 SHA-256 凍結，只在 2026-10-07 評分一次，所以在那次評分之前沒有任何規則是為了配合它的結果而修改。當時用的是代理預設的偵測器 `rules-6+intl-2+ext-1`。兩版保留集與其雜湊在 [bench/heldout/](bench/heldout/)。其中所有形似憑證的字串（`ghp_`、`AKIA`、`npm_`、PEM 區塊）都是編造的、無法使用，機密掃描工具（secret scanner）標出它們是預期中的事。
 
 ![長條圖：英文保留集第 2 版提示中各類別完全遮蔽的比例，代理預設規則、規則加人名模型與 Presidio（cutoff 0.4）對照。](docs/media/results.svg)
 
-| 保留集第 2 版，英文提示（1,527 個值） | 核心預設規則 | 代理預設規則 | + 人名模型（實驗性） | Presidio，cutoff 0 | Presidio，cutoff 0.4 |
+| 英文提示（1,527 個值） | 核心預設規則 | 代理預設規則 | + 人名模型（實驗性） | Presidio，cutoff 0 | Presidio，cutoff 0.4 |
 | --- | --- | --- | --- | --- | --- |
 | 完全遮蔽（10 類 macro 平均） | 25.9% | 39.5% | **44.8%** | 40.4% | 37.8% |
 | 完全沒遮（macro 平均） | 64.0% | 49.9% | 35.6% | **29.3%** | 35.0% |
@@ -208,6 +218,17 @@ REDACTION_PROXY_NAME_MODEL_DIR=$HOME/models/nym node lib/cli.js
 | 完全遮蔽，全部 7 種語言 | 27.3% | 37.9% | 44.4% | 34.5%* | 32.8%* |
 
 \* Presidio 把每筆提示都當英文分析，全部語言的結果僅供參考。
+
+怎麼讀這張表：
+
+- **完全遮蔽：** 整個被換成佔位符的敏感值佔全部敏感值的比例。先在 10 類中各算一次，再讓每一類同樣重要地平均（*macro 平均*），所以規則完全沒涵蓋的類別（例如地址 0%）把平均往下拉的程度，和規則處理得很好的類別一樣大。
+- **完全沒遮：** 沒有任何一部分被遮的敏感值所佔的比例，同樣平均；越低越好。其餘的是只遮掉一部分，例如家目錄路徑遮掉了使用者名稱、其他資料夾保留。
+- **與敏感值重疊的遮罩範圍：** 一個系統遮掉的所有範圍中，至少蓋到敏感值一部分的比例。作用類似精確率（precision）：比例低代表也遮掉了無害的文字。
+- **中位數耗時：** 一半的提示比這個時間快。
+- **完全遮蔽，全部 7 種語言：** 第一列，改以全部 7 種語言計算。
+- **各欄：** 核心預設規則是函式庫單獨使用時較小的那組規則；代理預設規則再加上國際與延伸規則，是代理實際執行的規則。Presidio 為每個發現打一個 0 到 1 的信心分數，cutoff 是它保留的最低分數：cutoff 0 保留全部，cutoff 0.4 去掉信心較低的。
+
+<details><summary>細節：標準與非標準寫法、弱點、還原自我檢查、偵測器版本</summary>
 
 標準與非標準寫法，英文，完全遮蔽（n 為值的數量）：
 
@@ -235,6 +256,8 @@ REDACTION_PROXY_NAME_MODEL_DIR=$HOME/models/nym node lib/cli.js
 還原，自我檢查而非成績：只用規則時，1,617 筆提示遮罩後全部能逐位元組還原；開啟人名模型時是 1,617 筆中的 1,587 筆（30 筆不完全一致）。
 
 上面的數字以偵測器 `rules-6+intl-2+ext-1` 量測；發布版是 `rules-12+intl-2+ext-1`，之後的修改都不在數字中。當時的 `ext-1` 只有現在 10 條延伸規則中的 5 條（v0.1.0 之前的修改沿用這個版本），人名模型是 `nym-edge-int8-2`（現在是 `nym-edge-int8-3`）。之後的修改包括：schema 用字、API 欄位名、佔位寫法或範本形式的憑證值（`password: required`、`${{ secrets.X }}`）不再遮；首尾是英文字母或數字的字詞只比對完整的詞。更早、同樣不在數字中的修改：代理預設現在也遮小寫字母開頭與夾不換行空白的身分證字號、以 `.`、`/`、`_` 分組或前 4 碼加括號（`(0912)345678`）的手機號碼、關鍵詞後的護照與健保卡號、`@` 經 HTML 或 JSON 跳脫的 email、加引號的憑證鍵（`"密碼": "…"`、`"jwt": "…"`），以及 `100.64.0.0/10` 與 IPv6 唯一本地位址；`card-strict` 現在也認重新分組、用點分隔、混用空格和 `-`，以及換行斷開的卡號（這次代理預設只完全遮蔽 30.5% 的英文卡號，核心預設是 44.1%）；人名模型的還原錯誤已修正：同一個名字的不同寫法（`Jordan`、`JORDAN`）現在各拿一個佔位符（自訂詞彙也一樣，`Nimbus` 和 `NIMBUS` 各自原樣還原）。保留集不以發布版偵測器重新評分：後來有些規則修改（例如 `card-strict` 那一項）是看過這些結果後做的，再評分一次就不是盲測；要有新的保留集數字，需要新的一組保留集。
+
+</details>
 
 完整表格：[保留集第 2 版結果](bench/results/public-bench-held-out-v2.md)。較早的[保留集第 1 版](bench/results/public-bench-held-out.md)（1,518 筆、較舊的規則 `rules-6+intl-1`、只有標準寫法）留作紀錄。方法與其他量測：[技術細節第 18 節](docs/DETAILS.md#18-實測數字)。
 <!-- RESULTS:END -->

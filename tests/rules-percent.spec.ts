@@ -1,4 +1,4 @@
-// Percent-encoded values (WO-7): every rule also runs over a percent-decoded
+// Percent-encoded values: every rule also runs over a percent-decoded
 // projection, a detection masks the whole encoded range, and restore writes the
 // encoded text back byte for byte. Plus the letter boundary on mobile numbers.
 // Every value is invented.

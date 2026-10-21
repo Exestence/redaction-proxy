@@ -1,4 +1,4 @@
-// Review round 5 of the anchored pass rule: assistant text de-anchors outside the call's own turn, server-written sources, Chat custom calls. Every value is synthetic.
+// The anchored pass rule: assistant text de-anchors outside the call's own turn, server-written sources, Chat custom calls. Every value is synthetic.
 import { createServer } from 'node:http'
 import type { IncomingHttpHeaders, Server } from 'node:http'
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest'

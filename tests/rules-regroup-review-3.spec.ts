@@ -1,9 +1,7 @@
-// WO-6 review round 3 (fresh D3 under amendment R3): negatives and positives
-// the implementer did not see, aimed at the spaced `@` rule with its closed
-// TLD list. Every address is invented.
-// The cases under "required fixes" fail at c94e1f3 by design and pass on
-// origin/main: each is a spaced `@` false positive whose final label is in
-// the list, so amendment R3 step 6 (keyword gate on the spaced form) applies.
+// Negatives and positives written apart from the rules, aimed at spaced `@`
+// addresses with a closed TLD list. Every address is invented.
+// The cases under "regressions" are spaced `@` false positives whose final
+// label is in the list, so the keyword gate on the spaced form applies.
 import { describe, expect, it } from 'vitest'
 import { Context, SessionSeq } from './shim.ts'
 import RulesRedactionService from './shim.ts'
@@ -16,7 +14,7 @@ async function mask(text: string): Promise<string> {
   return result.masked[0] ?? ''
 }
 
-describe('WO-6 review 3 D3: unseen negatives', () => {
+describe('spaced @ with a closed TLD list: unseen negatives', () => {
   it.each([
     '@ app.route("/")',
     '    @ pytest.fixture',
@@ -35,7 +33,7 @@ describe('WO-6 review 3 D3: unseen negatives', () => {
   })
 })
 
-describe('WO-6 review 3 D3: required fixes (red at c94e1f3)', () => {
+describe('spaced @ with a closed TLD list: regressions', () => {
   it.each([
     // numpy/PyTorch matrix products whose right-hand attribute is a listed label.
     'x = data.io @ weights.co',
@@ -59,7 +57,7 @@ describe('WO-6 review 3 D3: required fixes (red at c94e1f3)', () => {
   })
 })
 
-describe('WO-6 review 3 D3: unseen positives (each carries an amendment keyword)', () => {
+describe('spaced @ with a closed TLD list: unseen positives', () => {
   it.each([
     ['wang.yichun＠gmail.com', '⟦EMAIL_1⟧'],
   ])('masks %j', async (text, expected) => {
@@ -67,8 +65,8 @@ describe('WO-6 review 3 D3: unseen positives (each carries an amendment keyword)
   })
 })
 
-// WO-6 amendment R4: spaced `@` is not detected, so these spaced-`@` addresses are asserted unmasked.
-describe('WO-6 round 5: spaced @ is not detected', () => {
+// Spaced `@` is not detected, so these spaced-`@` addresses are asserted unmasked.
+describe('spaced @ is not detected', () => {
   it.each([
     'email: wang.yichun @ gmail.com',
     'E-mail: wang_yc @ company.com.tw',

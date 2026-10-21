@@ -1,0 +1,59 @@
+{
+  "manifest": "bench/zh-prose-manifest.json",
+  "variants": {
+    "zh-tw": {
+      "articles": 300,
+      "chars": 997203,
+      "lines": 18987,
+      "rules": {
+        "core": {
+          "detector": "rules-12",
+          "spans": 1,
+          "per1kChars": 0.001,
+          "per1kLines": 0.05,
+          "byCategory": {
+            "PATH": 1
+          },
+          "restoreFailures": 0
+        },
+        "proxy": {
+          "detector": "rules-12+intl-2+ext-1",
+          "spans": 1,
+          "per1kChars": 0.001,
+          "per1kLines": 0.05,
+          "byCategory": {
+            "PATH": 1
+          },
+          "restoreFailures": 0
+        }
+      }
+    },
+    "zh-cn": {
+      "articles": 300,
+      "chars": 996994,
+      "lines": 18987,
+      "rules": {
+        "core": {
+          "detector": "rules-12",
+          "spans": 1,
+          "per1kChars": 0.001,
+          "per1kLines": 0.05,
+          "byCategory": {
+            "PATH": 1
+          },
+          "restoreFailures": 0
+        },
+        "proxy": {
+          "detector": "rules-12+intl-2+ext-1",
+          "spans": 1,
+          "per1kChars": 0.001,
+          "per1kLines": 0.05,
+          "byCategory": {
+            "PATH": 1
+          },
+          "restoreFailures": 0
+        }
+      }
+    }
+  }
+}

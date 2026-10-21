@@ -1,4 +1,4 @@
-// Realistic regroupings of identifiers (WO-6): configured terms split by a
+// Realistic regroupings of identifiers: configured terms split by a
 // separator, obfuscated addresses, identification, business, and mobile
 // numbers with one internal separator, the full-width call guard, and the
 // business-number tie with a telephone keyword. Every number is invented:
@@ -196,9 +196,9 @@ describe('the call guard on a full-width host', () => {
   })
 })
 
-// WO-6 round 3 dropped the bare ` at ` form (prose is lexically identical to
-// an address), so these former positives are asserted unmasked.
-describe('WO-6 round 3: bare at is not detected', () => {
+// The bare ` at ` form is not detected (prose is lexically identical to
+// an address), so these addresses are asserted unmasked.
+describe('bare at is not detected', () => {
   it.each([
     'mail wang.yichun at example.com now',
     '信箱：wang.yichun at example.com',
@@ -208,8 +208,8 @@ describe('WO-6 round 3: bare at is not detected', () => {
   })
 })
 
-// WO-6 amendment R4: spaced `@` is not detected, so these spaced-`@` addresses are asserted unmasked.
-describe('WO-6 round 5: spaced @ is not detected', () => {
+// Spaced `@` is not detected, so these spaced-`@` addresses are asserted unmasked.
+describe('spaced @ is not detected', () => {
   it.each([
     'CONTACT=wang.yichun @ example.tw',
     '寄到 liu_kuanting ＠ school.test 謝謝',

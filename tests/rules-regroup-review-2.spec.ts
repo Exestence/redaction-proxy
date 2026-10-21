@@ -1,8 +1,7 @@
-// WO-6 review round 2 (D3): negatives and positives the implementer did not
-// see, aimed at the round-2 rules (email word before a bare ` at `, lower-case
-// TLD and code-root guard on spaced forms). Every address is invented.
-// The cases under "required fixes" fail at 0b31e32 by design: they are the
-// round-2 FAIL findings and must pass before WO-6 merges.
+// Negatives and positives written apart from the rules, aimed at obfuscated
+// addresses (email word before a bare ` at `, lower-case TLD and code-root
+// guard on spaced forms). Every address is invented.
+// The cases under "regressions" are earlier misses and false positives.
 import { describe, expect, it } from 'vitest'
 import { Context, SessionSeq } from './shim.ts'
 import RulesRedactionService from './shim.ts'
@@ -15,7 +14,7 @@ async function mask(text: string): Promise<string> {
   return result.masked[0] ?? ''
 }
 
-describe('WO-6 review 2 D3: unseen negatives', () => {
+describe('obfuscated addresses: unseen negatives', () => {
   it.each([
     'contact the team at github.com/issues',
     'email me at noon',
@@ -32,7 +31,7 @@ describe('WO-6 review 2 D3: unseen negatives', () => {
   })
 })
 
-describe('WO-6 review 2 D3: required fixes (red at 0b31e32)', () => {
+describe('obfuscated addresses: regressions', () => {
   it.each([
     // An email word before `<dotted product> at <site>`: prose, not an address.
     'If it keeps failing, contact fly.io at community.fly.io',
@@ -56,7 +55,7 @@ describe('WO-6 review 2 D3: required fixes (red at 0b31e32)', () => {
   })
 })
 
-describe('WO-6 review 2 D3: unseen positives', () => {
+describe('obfuscated addresses: unseen positives', () => {
   it.each([
     ['wang.yichun(at)gmail(dot)com', '⟦EMAIL_1⟧'],
     ['john.doe(at)gmail[dot]com', '⟦EMAIL_1⟧'],
@@ -67,9 +66,9 @@ describe('WO-6 review 2 D3: unseen positives', () => {
   })
 })
 
-// WO-6 round 3 dropped the bare ` at ` form (prose is lexically identical to
-// an address), so these former positives are asserted unmasked.
-describe('WO-6 round 3: bare at is not detected', () => {
+// The bare ` at ` form is not detected (prose is lexically identical to
+// an address), so these addresses are asserted unmasked.
+describe('bare at is not detected', () => {
   it.each([
     'email: wang.yichun at example.com',
     'my e-mail is chen.mei at gmail.com',
@@ -80,8 +79,8 @@ describe('WO-6 round 3: bare at is not detected', () => {
   })
 })
 
-// WO-6 amendment R4: spaced `@` is not detected, so these spaced-`@` addresses are asserted unmasked.
-describe('WO-6 round 5: spaced @ is not detected', () => {
+// Spaced `@` is not detected, so these spaced-`@` addresses are asserted unmasked.
+describe('spaced @ is not detected', () => {
   it.each([
     '信箱：wang.yichun ＠ gmail.com',
   ])('keeps %j', async (text) => {

@@ -1,4 +1,4 @@
-// Percent decoding one UTF-8 sequence at a time (WO-9): an invalid or truncated
+// Percent decoding one UTF-8 sequence at a time: an invalid or truncated
 // escape no longer stops the rest of its run from decoding, and the decoded text
 // is folded through NFKC with invisible characters removed. Every value is invented.
 import { describe, expect, it } from 'vitest'

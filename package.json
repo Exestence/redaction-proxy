@@ -53,6 +53,7 @@
     "bench": "tsc -p tsconfig.build.json && node bench/false-positives.mjs",
     "start": "node lib/cli.js",
     "demo": "tsc -p tsconfig.build.json && node lib/cli.js --demo",
+    "bench:zh-prose": "tsc -p tsconfig.build.json && node bench/zh-prose.mjs",
     "bench:public": "node --experimental-transform-types --disable-warning=ExperimentalWarning bench/public/main.ts",
     "e2e:real": "node --experimental-transform-types --disable-warning=ExperimentalWarning e2e/real/main.ts",
     "bench:presidio:setup": "uv venv bench/presidio/.venv --python 3.12 --allow-existing && uv pip install --python bench/presidio/.venv/bin/python -r bench/presidio/requirements.txt"
@@ -74,7 +75,9 @@
     }
   },
   "devDependencies": {
+    "@anthropic-ai/sdk": "0.135.0",
     "@types/node": "^22.20.4",
+    "openai": "7.39.0",
     "typescript": "^6.0.3",
     "vitest": "^4.1.11"
   },
