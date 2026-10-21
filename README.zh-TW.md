@@ -10,7 +10,7 @@
 
 絕不能離開電腦的內容，請改用本機模型回答；這個代理適合你選擇用雲端模型、但仍想減少外洩的時候。
 
-> **狀態：** 0.3.0，尚未發布到 npm。已對真實服務驗證：DeepSeek Chat Completions（2026-10-08），透過 Claude Code 與 dsh 的 Anthropic Messages（2026-10-14），以及以官方 Anthropic SDK 對 Anthropic Messages（2026-10-21），見下方。OpenAI API 與 Codex CLI 尚未驗證。
+> **狀態：** 0.3.1，尚未發布到 npm。已對真實服務驗證：DeepSeek Chat Completions（2026-10-08），透過 Claude Code 與 dsh 的 Anthropic Messages（2026-10-14），以及以官方 Anthropic SDK 對 Anthropic Messages（2026-10-21），見下方。OpenAI API 與 Codex CLI 尚未驗證。
 
 > 這是一個學習與探索用的專案。歡迎提 issue 與 pull request，我有空時會看。
 

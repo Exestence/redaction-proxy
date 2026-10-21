@@ -10,7 +10,7 @@ It works with any OpenAI- or Anthropic-compatible client, streaming included, an
 
 If content must never leave your machine, answer it with a local model instead; this proxy is for when you choose a cloud model and still want fewer leaks.
 
-> **Status:** 0.3.0, not yet on npm. Verified with real services: DeepSeek Chat Completions (2026-10-08), Anthropic Messages through Claude Code and dsh (2026-10-14), and the official Anthropic SDK against Anthropic Messages (2026-10-21); see below. The OpenAI API and Codex CLI are not verified yet.
+> **Status:** 0.3.1, not yet on npm. Verified with real services: DeepSeek Chat Completions (2026-10-08), Anthropic Messages through Claude Code and dsh (2026-10-14), and the official Anthropic SDK against Anthropic Messages (2026-10-21); see below. The OpenAI API and Codex CLI are not verified yet.
 
 > This is a learning and exploration project. Issues and pull requests are welcome; I'll look at them when I have time.
 

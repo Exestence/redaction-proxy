@@ -10,7 +10,7 @@ OpenAI 互換・Anthropic 互換のクライアントならストリーミング
 
 絶対にマシンの外に出してはいけない内容は、ローカルモデルに答えさせてください。このプロキシは、クラウドモデルを選びつつ漏えいを減らしたいときのためのものです。
 
-> **ステータス：** バージョン 0.3.0 で、npm にはまだ公開していません。実サービスでは DeepSeek の Chat Completions（2026-10-08）、Claude Code と dsh を通した Anthropic Messages（2026-10-14）、公式 Anthropic SDK による Anthropic Messages（2026-10-21）で検証済みです（下記参照）。OpenAI API と Codex CLI は未検証です。
+> **ステータス：** バージョン 0.3.1 で、npm にはまだ公開していません。実サービスでは DeepSeek の Chat Completions（2026-10-08）、Claude Code と dsh を通した Anthropic Messages（2026-10-14）、公式 Anthropic SDK による Anthropic Messages（2026-10-21）で検証済みです（下記参照）。OpenAI API と Codex CLI は未検証です。
 
 > 学習と探求のためのプロジェクトです。issue や pull request は歓迎します。時間のあるときに目を通します。
 
