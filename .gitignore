@@ -4,3 +4,4 @@ lib/
 *.log
 bench/presidio/.venv/
 __pycache__/
+.zh-prose-corpus/
