@@ -10,7 +10,7 @@
 
 绝不能离开电脑的内容，请改用本地模型回答；这个代理适合你选择用云端模型、但仍想减少泄露的时候。
 
-> **状态：** 0.3.0，尚未发布到 npm。已在真实服务上验证：DeepSeek Chat Completions（2026-10-08），以及通过 Claude Code 和 dsh 的 Anthropic Messages（2026-10-14），见下文。OpenAI API 和 Codex CLI 尚未验证。
+> **状态：** 0.3.0，尚未发布到 npm。已在真实服务上验证：DeepSeek Chat Completions（2026-10-08），通过 Claude Code 和 dsh 的 Anthropic Messages（2026-10-14），以及用官方 Anthropic SDK 对 Anthropic Messages（2026-10-21），见下文。OpenAI API 和 Codex CLI 尚未验证。
 
 > 这是一个学习和探索用的项目。欢迎提 issue 和 pull request，我有空时会看。
 
@@ -76,15 +76,17 @@ npx redaction-proxy           # 启动代理，地址 http://127.0.0.1:8787（�
 > - **Claude Code 2.1.287**，以订阅登录，设置 `ANTHROPIC_BASE_URL=http://127.0.0.1:8787`：流式文本与工具（Bash、Read）。检测到的值上游只看到占位符，回复已还原，工具参数按 `toolRestore` 还原 `PATH`、`TERM`、`PROJECT`，其他类别保留为占位符。0.3.0 之前，工具参数中保留的占位符在后续轮次会被重新编号，模型把同一个工具重试了 7 次；0.3.0 中工具只执行 1 次（2026-10-13 为 3 个请求；2026-10-14 模型先写了一句话再调用 Bash 和 Read，共 2 个请求，占位符编号不变）。Claude Code 还会发送操作系统的用户名（在 `safeguards…user_identity` 和项目目录名中），0.3.0 默认会脱敏（`maskLocalUsername`）。
 > - **dsh**（DeepSeek Harness，经由它的 pi-ai Anthropic 路径）：文本与工具。0.3.0 之前，保留的占位符让 Anthropic 以 HTTP 400 拒绝重发的签名 thinking 块；已验证 0.3.0 修复了这个问题。
 >
-> 未验证：OpenAI API（没有密钥）、Codex CLI（未登录）、直接使用 Anthropic SDK（只经由 dsh 的 pi-ai 用过）、用本仓库的 `e2e:real` 验证工具对 Anthropic 运行（未运行）。
+> 2026-10-21 真实服务验证工具对 Anthropic Messages（Claude Haiku 5.5）通过：用官方 Anthropic SDK（`@anthropic-ai/sdk` 0.135.0）作为客户端，以及用普通的 `fetch`，各 4 个场景全部通过（非流式 JSON 与流式；纯文本与强制工具调用）；上游只看到占位符，每次 5 个值都还原。
+>
+> 未验证：OpenAI API（没有密钥；验证工具的 OpenAI SDK 客户端路径只对假上游测试过）、Codex CLI（未登录）。
 
 工具照常发送自己的 API 密钥；代理原样转发，从不保存。
 
 | 工具 | 配置 | 状态 |
 | --- | --- | --- |
 | Claude Code | `ANTHROPIC_BASE_URL=http://127.0.0.1:8787 claude` | 2026-10-14 已验证（订阅登录；文本、流式、工具） |
-| Anthropic SDK | `ANTHROPIC_BASE_URL=http://127.0.0.1:8787`（不带 `/v1`） | 经由 dsh（pi-ai）验证，未直接验证 |
-| OpenAI SDK 及大多数兼容工具 | `OPENAI_BASE_URL=http://127.0.0.1:8787/v1`（要带 `/v1`） | 未测试 |
+| Anthropic SDK | `ANTHROPIC_BASE_URL=http://127.0.0.1:8787`（不带 `/v1`） | 2026-10-21 用真实服务验证工具验证（Claude Haiku 5.5；JSON、流式、工具调用） |
+| OpenAI SDK 及大多数兼容工具 | `OPENAI_BASE_URL=http://127.0.0.1:8787/v1`（要带 `/v1`） | 未对 OpenAI 验证；OpenAI SDK 只对假上游测试过 |
 | DeepSeek | 用 `REDACTION_PROXY_OPENAI_UPSTREAM=https://api.deepseek.com node lib/cli.js` 启动代理，再配 `OPENAI_BASE_URL=http://127.0.0.1:8787/v1` 和你的 DeepSeek 密钥。这会替换掉 OpenAI 上游。 | 已用真实服务验证工具验证（仅 API） |
 | Cursor | 不支持：Cursor 的自定义 base URL 请求从 Cursor 自己的服务器发出，访问不到你的 `127.0.0.1`。 | — |
 

@@ -10,7 +10,7 @@ It works with any OpenAI- or Anthropic-compatible client, streaming included, an
 
 If content must never leave your machine, answer it with a local model instead; this proxy is for when you choose a cloud model and still want fewer leaks.
 
-> **Status:** 0.3.0, not yet on npm. Verified with real services: DeepSeek Chat Completions (2026-10-08) and Anthropic Messages through Claude Code and dsh (2026-10-14); see below. The OpenAI API and Codex CLI are not verified yet.
+> **Status:** 0.3.0, not yet on npm. Verified with real services: DeepSeek Chat Completions (2026-10-08) Anthropic Messages through Claude Code and dsh (2026-10-14), and the official Anthropic SDK against Anthropic Messages (2026-10-21); see below. The OpenAI API and Codex CLI are not verified yet.
 
 > This is a learning and exploration project. Issues and pull requests are welcome; I'll look at them when I have time.
 
@@ -76,15 +76,17 @@ There is no health endpoint: the proxy relays GET requests to the upstream.
 > - **Claude Code 2.1.287**, signed in with its subscription, with `ANTHROPIC_BASE_URL=http://127.0.0.1:8787`: streaming text and tools (Bash, Read). The upstream saw only placeholders for detected values, replies were restored, and tool arguments got `PATH`, `TERM`, and `PROJECT` values back while other categories stayed placeholders (`toolRestore`). Before 0.3.0 a placeholder kept in tool arguments was renumbered on later turns, and the model retried the tool 7 times; with 0.3.0 the tool ran once (3 requests on 2026-10-13; on 2026-10-14 the model wrote a sentence before calling Bash and Read, and the task took 2 requests with stable placeholder numbers). Claude Code also sends the OS user name (in `safeguards…user_identity` and in project-directory names); 0.3.0 masks it by default (`maskLocalUsername`).
 > - **dsh** (DeepSeek Harness, through its pi-ai Anthropic route): text and tools. Before 0.3.0 a kept placeholder made Anthropic reject the replayed signed thinking block with HTTP 400; verified fixed in 0.3.0.
 >
-> Not verified: the OpenAI API (no key), Codex CLI (not logged in), the Anthropic SDK used directly (only through dsh's pi-ai), and this repository's `e2e:real` harness against Anthropic (not run).
+> On 2026-10-21 the real-service harness passed against Anthropic Messages (Claude Haiku 5.5) with the official Anthropic SDK (`@anthropic-ai/sdk` 0.135.0) as the client and again with plain `fetch`: 4 of 4 scenarios each (JSON and streaming; plain text and a forced tool call); the upstream saw only placeholders and all 5 values were restored each time.
+>
+> Not verified: the OpenAI API (no key; the harness's OpenAI SDK client path is tested only against a fake upstream) and Codex CLI (not logged in).
 
 Your tool keeps sending its own API key; the proxy forwards it and never stores it.
 
 | Tool | Setting | Status |
 | --- | --- | --- |
 | Claude Code | `ANTHROPIC_BASE_URL=http://127.0.0.1:8787 claude` | Verified 2026-10-14 (subscription login; text, streaming, tools) |
-| Anthropic SDK | `ANTHROPIC_BASE_URL=http://127.0.0.1:8787` (no `/v1`) | Verified through dsh (pi-ai), not directly |
-| OpenAI SDK and most compatible tools | `OPENAI_BASE_URL=http://127.0.0.1:8787/v1` (with `/v1`) | Untested |
+| Anthropic SDK | `ANTHROPIC_BASE_URL=http://127.0.0.1:8787` (no `/v1`) | Verified 2026-10-21 with the real-service harness (Claude Haiku 5.5; JSON, streaming, tool call) |
+| OpenAI SDK and most compatible tools | `OPENAI_BASE_URL=http://127.0.0.1:8787/v1` (with `/v1`) | Not verified against OpenAI; the OpenAI SDK is tested only against a fake upstream |
 | DeepSeek | Start the proxy with `REDACTION_PROXY_OPENAI_UPSTREAM=https://api.deepseek.com node lib/cli.js`, then use `OPENAI_BASE_URL=http://127.0.0.1:8787/v1` with your DeepSeek key. This replaces the OpenAI upstream. | Verified with the real-service harness (API only) |
 | Cursor | Not supported: Cursor sends custom base-URL requests from its own servers, which cannot reach your `127.0.0.1`. | — |
 

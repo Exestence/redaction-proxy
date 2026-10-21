@@ -8,7 +8,7 @@ OPENAI_API_KEY=... ANTHROPIC_API_KEY=... DEEPSEEK_API_KEY=... pnpm run e2e:real
 
 A provider whose key is not set is skipped. Keys are read from the environment only and are never printed; an upstream error that quotes the key is shown with the key replaced.
 
-Last real run: on 2026-10-08, with only `DEEPSEEK_API_KEY` set, DeepSeek Chat Completions passed 4 of 4 scenarios; OpenAI and Anthropic were skipped (no keys).
+Last real runs: on 2026-10-21, with only `ANTHROPIC_API_KEY` set and `E2E_ANTHROPIC_MODEL=claude-haiku-5-5`, Anthropic Messages passed 4 of 4 scenarios with `E2E_CLIENT=sdk` (`@anthropic-ai/sdk` 0.135.0) and 4 of 4 with `fetch`; OpenAI and DeepSeek were skipped (no keys). On 2026-10-08, with only `DEEPSEEK_API_KEY` set, DeepSeek Chat Completions passed 4 of 4 scenarios. The OpenAI SDK client path has run only against the fake upstream in `pnpm test`.
 
 ## What it checks
 
@@ -31,8 +31,8 @@ A scenario is `inconclusive` when the model echoed no placeholder of the request
 | Variable | Default | Meaning |
 | --- | --- | --- |
 | `E2E_OPENAI_MODEL` | `gpt-4.1-mini` | Model for OpenAI |
-| `E2E_ANTHROPIC_MODEL` | `claude-haiku-4-5` | Model for Anthropic |
-| `E2E_DEEPSEEK_MODEL` | `deepseek-chat` | Model for DeepSeek |
+| `E2E_ANTHROPIC_MODEL` | `claude-haiku-5-5` | Model for Anthropic |
+| `E2E_DEEPSEEK_MODEL` | `deepseek-flash` | Model for DeepSeek |
 | `E2E_OPENAI_UPSTREAM`, `E2E_ANTHROPIC_UPSTREAM`, `E2E_DEEPSEEK_UPSTREAM` | the public API | Service base URL |
 | `E2E_CLIENT` | `fetch` | `sdk` sends every request through the official SDKs instead of `fetch`: the `openai` package for Chat Completions and Responses, `@anthropic-ai/sdk` for Messages. Any other value stops the run. |
 
@@ -42,7 +42,6 @@ DeepSeek serves an OpenAI-compatible API at `https://api.deepseek.com` and an An
 
 ```sh
 export OPENAI_API_KEY= ANTHROPIC_AUTH_TOKEN= ANTHROPIC_API_KEY="$DEEPSEEK_API_KEY" \
-  E2E_DEEPSEEK_MODEL=deepseek-flash \
   E2E_ANTHROPIC_UPSTREAM=https://api.deepseek.com/anthropic E2E_ANTHROPIC_MODEL=deepseek-flash
 E2E_CLIENT=sdk pnpm run e2e:real   # official SDKs
 pnpm run e2e:real                  # raw fetch
@@ -52,7 +51,7 @@ Results are labelled `deepseek` (Chat Completions) and `anthropic` (Messages, se
 
 ## Pointing real clients at the proxy
 
-Start the proxy with `pnpm build && node lib/cli.js` (port 8787). Claude Code was verified through the proxy on 2026-10-13 and again on 2026-10-14 on the final 0.3.0 build (commit `1a12a30`, where the model wrote a sentence before its tool calls, the Bash command ran once, and placeholder numbers stayed stable across requests): version 2.1.287 with its subscription login against Anthropic Messages (Claude Haiku 5.5), streaming text and the Bash and Read tools; the upstream saw only placeholders for detected values, replies were restored, and tool arguments were restored per `toolRestore` (`PATH`, `TERM`, `PROJECT`) and kept as placeholders for other categories. Codex CLI has not been verified. This harness has not been run against Anthropic.
+Start the proxy with `pnpm build && node lib/cli.js` (port 8787). Claude Code was verified through the proxy on 2026-10-13 and again on 2026-10-14 on the final 0.3.0 build (commit `1a12a30`, where the model wrote a sentence before its tool calls, the Bash command ran once, and placeholder numbers stayed stable across requests): version 2.1.287 with its subscription login against Anthropic Messages (Claude Haiku 5.5), streaming text and the Bash and Read tools; the upstream saw only placeholders for detected values, replies were restored, and tool arguments were restored per `toolRestore` (`PATH`, `TERM`, `PROJECT`) and kept as placeholders for other categories. Codex CLI has not been verified.
 
 **Claude Code** (API key or subscription login; the proxy forwards either credential unchanged):
 
