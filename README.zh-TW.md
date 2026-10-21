@@ -78,7 +78,7 @@ npx redaction-proxy           # 啟動代理，位址 http://127.0.0.1:8787（�
 >
 > 2026-10-21 真實服務驗證工具對 Anthropic Messages（Claude Haiku 5.5）通過：以官方 Anthropic SDK（`@anthropic-ai/sdk` 0.135.0）當用戶端，以及以單純的 `fetch`，各 4 個情境全部通過（非串流 JSON 與串流；純文字與強制工具呼叫）；上游只看到佔位符，每次 5 個值都還原。
 >
-> 未驗證：OpenAI API（沒有金鑰；驗證工具的 OpenAI SDK 用戶端路徑只對假上游測試過）、Codex CLI（未登入）。
+> 未驗證：OpenAI API（沒有金鑰；驗證工具的 OpenAI SDK 用戶端路徑只對假上游測試過）、Codex CLI（沒有用真實金鑰跑過）。
 
 工具照常送出自己的 API 金鑰；代理原樣轉送，從不儲存。
 

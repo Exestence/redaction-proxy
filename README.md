@@ -10,7 +10,7 @@ It works with any OpenAI- or Anthropic-compatible client, streaming included, an
 
 If content must never leave your machine, answer it with a local model instead; this proxy is for when you choose a cloud model and still want fewer leaks.
 
-> **Status:** 0.3.0, not yet on npm. Verified with real services: DeepSeek Chat Completions (2026-10-08) Anthropic Messages through Claude Code and dsh (2026-10-14), and the official Anthropic SDK against Anthropic Messages (2026-10-21); see below. The OpenAI API and Codex CLI are not verified yet.
+> **Status:** 0.3.0, not yet on npm. Verified with real services: DeepSeek Chat Completions (2026-10-08), Anthropic Messages through Claude Code and dsh (2026-10-14), and the official Anthropic SDK against Anthropic Messages (2026-10-21); see below. The OpenAI API and Codex CLI are not verified yet.
 
 > This is a learning and exploration project. Issues and pull requests are welcome; I'll look at them when I have time.
 
@@ -78,7 +78,7 @@ There is no health endpoint: the proxy relays GET requests to the upstream.
 >
 > On 2026-10-21 the real-service harness passed against Anthropic Messages (Claude Haiku 5.5) with the official Anthropic SDK (`@anthropic-ai/sdk` 0.135.0) as the client and again with plain `fetch`: 4 of 4 scenarios each (JSON and streaming; plain text and a forced tool call); the upstream saw only placeholders and all 5 values were restored each time.
 >
-> Not verified: the OpenAI API (no key; the harness's OpenAI SDK client path is tested only against a fake upstream) and Codex CLI (not logged in).
+> Not verified: the OpenAI API (no key; the harness's OpenAI SDK client path is tested only against a fake upstream) and Codex CLI (no real-key run).
 
 Your tool keeps sending its own API key; the proxy forwards it and never stores it.
 
