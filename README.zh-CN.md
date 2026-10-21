@@ -10,7 +10,7 @@
 
 绝不能离开电脑的内容，请改用本地模型回答；这个代理适合你选择用云端模型、但仍想减少泄露的时候。
 
-> **状态：** 0.3.0，尚未发布到 npm。已在真实服务上验证：DeepSeek Chat Completions（2026-10-08），通过 Claude Code 和 dsh 的 Anthropic Messages（2026-10-14），以及用官方 Anthropic SDK 对 Anthropic Messages（2026-10-21），见下文。OpenAI API 和 Codex CLI 尚未验证。
+> **状态：** 0.3.1，尚未发布到 npm。已在真实服务上验证：DeepSeek Chat Completions（2026-10-08），通过 Claude Code 和 dsh 的 Anthropic Messages（2026-10-14），以及用官方 Anthropic SDK 对 Anthropic Messages（2026-10-21），见下文。OpenAI API 和 Codex CLI 尚未验证。
 
 > 这是一个学习和探索用的项目。欢迎提 issue 和 pull request，我有空时会看。
 

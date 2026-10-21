@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.3.1 — 2026-10-22
 
 - Verified against the real Anthropic Messages API (2026-10-21, Claude Haiku 5.5): the real-service harness passed 4 of 4 scenarios (JSON and streaming, plain text and a forced tool call) with the official Anthropic SDK (`@anthropic-ai/sdk` 0.135.0) as the client and 4 of 4 with plain `fetch`. The OpenAI API and Codex CLI remain unverified; the OpenAI SDK client path is tested only against a fake upstream. The harness's default models are now `claude-haiku-5-5` (Anthropic) and `deepseek-flash` (DeepSeek's current model name).
 - The real-service harness can send every scenario through the official `openai` and `@anthropic-ai/sdk` packages (`E2E_CLIENT=sdk`; default `fetch`). Both are new pinned dev dependencies; the fake-upstream test runs every provider both ways. `e2e/real/README.md` shows how to check both SDKs with one DeepSeek key, through DeepSeek's OpenAI- and Anthropic-compatible APIs, and how to point Codex CLI at the proxy with DeepSeek's Responses API (Codex 0.155.1 refuses `wire_api = "chat"`; a ChatGPT login cannot go through the proxy).
@@ -9,6 +9,7 @@
 - The code false-positive bench now uses the public `deepseek-ai/deepseek-harness` at commit `687f282e86` (`CORPUS_REF` default): 0.76 credential false positives per 1,000 code lines (1.10 million code lines).
 - READMEs: the results section starts with a plain summary, explains every table row, and keeps the detailed tables in a collapsed block (numbers unchanged); a short project status note.
 - Tests only: the leak-scan test in `proxy` allows 5 s of CPU time instead of 2 s, like the other pathological-input tests (it took 2.07 s on one CI run). Test names and comments describe behaviour instead of review codes, and the term example `Hsin`/`Hsinchu` is now `Ash`/`Ashford`.
+- READMEs give the status as this version.
 
 ## 0.3.0 — 2026-10-13
 
