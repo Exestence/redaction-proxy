@@ -607,7 +607,7 @@ function containsAnyOf(patterns: readonly string[]): (text: string) => boolean {
  * field the proxy does not rewrite (metadata, an image URL), or an occurrence
  * masking could not cover. A name-model value or configured literal is
  * matched as its propagation matches it, as a whole word for spaced scripts
- * (`Lee` inside `Leeds`, a term `Hsin` inside `Hsinchu` is no leak): a model
+ * (`Lee` inside `Leeds`, a term `Ash` inside `Ashford` is no leak): a model
  * value as written and only from two code points, a literal in any ASCII
  * case. Every other value counts anywhere, at any length and in any ASCII
  * case, so a rules value glued to other characters (`tel0912345678`) or

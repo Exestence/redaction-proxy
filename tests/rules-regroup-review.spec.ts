@@ -1,8 +1,7 @@
-// WO-6 review (D3, D4): negatives and positives the implementer did not see,
+// Regrouped spellings: negatives and positives written apart from the rules,
 // and identity/restore checks across spellings. Every number is invented;
 // identification and business numbers are checksum-valid inventions.
-// The cases under "required fixes" fail at b5fa653 by design: they are the
-// review's FAIL findings and must pass before WO-6 merges.
+// The cases under "regressions" are earlier misses and false positives.
 import { describe, expect, it } from 'vitest'
 import { Context, SessionSeq } from './shim.ts'
 import RulesRedactionService from './shim.ts'
@@ -15,7 +14,7 @@ async function mask(text: string): Promise<string> {
   return result.masked[0] ?? ''
 }
 
-describe('WO-6 review D3: unseen negatives', () => {
+describe('regrouped spellings: unseen negatives', () => {
   it.each([
     '訂單編號 09-2025-0001 已出貨',
     '這批貨的序號是 B 223456789，請核對',
@@ -34,7 +33,7 @@ describe('WO-6 review D3: unseen negatives', () => {
   })
 })
 
-describe('WO-6 review D3: required fixes (red at b5fa653)', () => {
+describe('regrouped spellings: regressions', () => {
   it.each([
     // English prose: a dotted product or file name before ` at `.
     'Grab socket.io at github.com before upgrading',
@@ -50,7 +49,7 @@ describe('WO-6 review D3: required fixes (red at b5fa653)', () => {
   })
 })
 
-describe('WO-6 review D3: unseen positives', () => {
+describe('regrouped spellings: unseen positives', () => {
   it.each([
     ['mail: lin.yating[at]school[dot]tw', 'mail: ⟦EMAIL_1⟧'],
     ['申請人 K231-415926 已補件', '申請人 ⟦TWID_1⟧ 已補件'],
@@ -62,7 +61,7 @@ describe('WO-6 review D3: unseen positives', () => {
   })
 })
 
-describe('WO-6 review D4: identity and restore across spellings', () => {
+describe('identity and restore across spellings', () => {
   const spellings = ['星河計畫', '星河 計畫', '星河-計畫', 'NIMBUS-7', 'nimbus 7', 'Nimbus_7']
   const text = spellings.join(' / ')
 
@@ -107,8 +106,8 @@ describe('WO-6 review D4: identity and restore across spellings', () => {
   })
 })
 
-// WO-6 amendment R4: spaced `@` is not detected, so these spaced-`@` addresses are asserted unmasked.
-describe('WO-6 round 5: spaced @ is not detected', () => {
+// Spaced `@` is not detected, so these spaced-`@` addresses are asserted unmasked.
+describe('spaced @ is not detected', () => {
   it.each([
     '請寄到 chen.meiling ＠ example.tw，謝謝',
   ])('keeps %j', async (text) => {

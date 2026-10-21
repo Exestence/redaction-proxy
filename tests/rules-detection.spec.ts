@@ -127,14 +127,14 @@ describe('overlap resolution', () => {
 
 describe('configured term boundaries', () => {
   const named = new RulesRedactionService(new Context(), {
-    terms: ['Lin', 'Hsin', 'Kai', 'Whitlock', '林小姐'],
+    terms: ['Lin', 'Ash', 'Kai', 'Whitlock', '林小姐'],
     projectNames: ['Orion', 'NIMBUS-7'],
   })
 
   it.each([
     'the server is online',
     'install Linux',
-    'I live in Hsinchu',
+    'I live in Ashford',
     'the Orionids meteor shower',
     'Kaiser',
     'nimbus70 and xnimbus-7',

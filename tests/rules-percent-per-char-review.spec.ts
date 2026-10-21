@@ -1,4 +1,4 @@
-// WO-9 review: unseen negatives for per-character decoding and the soft hyphen,
+// Unseen negatives for per-character decoding and the soft hyphen,
 // mixed and adjacent spellings, and a second seeded fuzz that checks each
 // projected span against its source range. Every value is invented.
 import { describe, expect, it } from 'vitest'
@@ -85,7 +85,7 @@ describe('mixed and adjacent spellings', () => {
   })
 })
 
-describe('fuzz (review seed): projected spans decode from their source ranges', () => {
+describe('fuzz (second seed): projected spans decode from their source ranges', () => {
   let seed = 0x2545f491
   const random = (): number => {
     seed = (seed + 0x6d2b79f5) | 0

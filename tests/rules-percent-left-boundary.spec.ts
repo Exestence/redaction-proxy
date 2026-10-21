@@ -1,5 +1,5 @@
 // A stray high escape (`%E6`, `%FF`, `%c0`) right before a value is a left
-// boundary for the rules with an ASCII left boundary (WO-9b): telephone,
+// boundary for the rules with an ASCII left boundary: telephone,
 // identification, business and card numbers, private addresses, and token
 // prefixes. Every value is invented.
 import { describe, expect, it } from 'vitest'
