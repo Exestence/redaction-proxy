@@ -40,7 +40,7 @@ client receives:   I will email lin.fictional@example.test about /Users/fictiona
 
 ### Docker
 
-2026-10-13 在 Apple Silicon 上以 Docker Desktop 29.6.2（linux/arm64）對本機假上游驗證：映像可以建置（347 MB；加 `--build-arg NAME_MODEL=1` 為 864 MB），以非 root 使用者 `node` 執行；沒設 `REDACTION_PROXY_AUTH_TOKEN` 時拒絕啟動，沒帶權杖的請求回 401；email、身分證字號與家目錄路徑在 OpenAI Chat Completions JSON、串流與 Anthropic Messages 中都以遮罩後的形式送到上游，並在回覆中還原；允許來源的 CORS 預檢得到 204 且不轉送，其他來源得到 403；下方的設定檔掛載可用。未測試：以真模型執行人名模型版映像，以及 linux/amd64。
+2026-10-13 在 Apple Silicon 上以 Docker Desktop 29.6.2（linux/arm64）對本機假上游驗證：映像可以建置（347 MB；加 `--build-arg NAME_MODEL=1` 為 864 MB），以非 root 使用者 `node` 執行；沒設 `REDACTION_PROXY_AUTH_TOKEN` 時拒絕啟動，沒帶權杖的請求回 401；email、身分證字號與家目錄路徑在 OpenAI Chat Completions JSON、串流與 Anthropic Messages 中都以遮罩後的形式送到上游，並在回覆中還原；允許來源的 CORS 預檢得到 204 且不轉送，其他來源得到 403；下方的設定檔掛載可用。2026-10-21 在 Apple Silicon 上以模擬方式建置並執行 linux/amd64 映像（Docker 29.8.2），對假上游驗證：以 `node` 執行；沒設權杖就拒絕啟動，沒帶權杖回 401；email、身分證字號與家目錄路徑在 Chat Completions JSON、串流與 Anthropic Messages 中都遮罩後送上游並還原。linux/amd64 的人名模型版映像以真模型遮罩並還原了人名與公司名（`⟦NAME_1⟧`、`⟦ORG_1⟧`）。在 linux/amd64 上未測試：CORS 預檢與設定檔掛載；兩個映像都還沒在原生 x86-64 機器上執行過。
 
 ```sh
 docker build -t redaction-proxy .

@@ -40,7 +40,7 @@ client receives:   I will email lin.fictional@example.test about /Users/fictiona
 
 ### Docker
 
-2026-10-13 在 Apple Silicon 上用 Docker Desktop 29.6.2（linux/arm64）对本机假上游验证：镜像可以构建（347 MB；加 `--build-arg NAME_MODEL=1` 为 864 MB），以非 root 用户 `node` 运行；没设 `REDACTION_PROXY_AUTH_TOKEN` 时拒绝启动，没带令牌的请求返回 401；邮箱、身份证号和主目录路径在 OpenAI Chat Completions JSON、流式和 Anthropic Messages 中都以脱敏后的形式发往上游，并在回复中还原；允许来源的 CORS 预检得到 204 且不转发，其他来源得到 403；下方的配置文件挂载可用。未测试：用真实模型运行人名模型版镜像，以及 linux/amd64。
+2026-10-13 在 Apple Silicon 上用 Docker Desktop 29.6.2（linux/arm64）对本机假上游验证：镜像可以构建（347 MB；加 `--build-arg NAME_MODEL=1` 为 864 MB），以非 root 用户 `node` 运行；没设 `REDACTION_PROXY_AUTH_TOKEN` 时拒绝启动，没带令牌的请求返回 401；邮箱、身份证号和主目录路径在 OpenAI Chat Completions JSON、流式和 Anthropic Messages 中都以脱敏后的形式发往上游，并在回复中还原；允许来源的 CORS 预检得到 204 且不转发，其他来源得到 403；下方的配置文件挂载可用。2026-10-21 在 Apple Silicon 上以模拟方式构建并运行 linux/amd64 镜像（Docker 29.8.2），对假上游验证：以 `node` 运行；没设令牌就拒绝启动，没带令牌返回 401；邮箱、身份证号和家目录路径在 Chat Completions JSON、流式输出和 Anthropic Messages 中都脱敏后发往上游并还原。linux/amd64 的人名模型版镜像用真实模型脱敏并还原了人名和公司名（`⟦NAME_1⟧`、`⟦ORG_1⟧`）。在 linux/amd64 上未测试：CORS 预检和配置文件挂载；两个镜像都还没在原生 x86-64 机器上运行过。
 
 ```sh
 docker build -t redaction-proxy .

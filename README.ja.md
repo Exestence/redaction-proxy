@@ -40,7 +40,7 @@ client receives:   I will email lin.fictional@example.test about /Users/fictiona
 
 ### Docker
 
-2026-10-13 に Apple Silicon の Docker Desktop 29.6.2（linux/arm64）で、ローカルのダミー上流に対して検証しました。イメージはビルドでき（347 MB、`--build-arg NAME_MODEL=1` では 864 MB）、root ではないユーザー `node` で動きます。`REDACTION_PROXY_AUTH_TOKEN` がないと起動せず、トークンのないリクエストには 401 を返します。メールアドレス、身分証番号、ホームディレクトリのパスは、OpenAI Chat Completions の JSON、ストリーミング、Anthropic Messages のいずれでもマスクされて上流に届き、応答で復元されました。許可されたオリジンからの CORS プリフライトは転送されずに 204、ほかのオリジンは 403 でした。下記の設定ファイルのマウントも動きました。未テスト：人名モデル版イメージを実際のモデルで動かすこと、linux/amd64。
+2026-10-13 に Apple Silicon の Docker Desktop 29.6.2（linux/arm64）で、ローカルのダミー上流に対して検証しました。イメージはビルドでき（347 MB、`--build-arg NAME_MODEL=1` では 864 MB）、root ではないユーザー `node` で動きます。`REDACTION_PROXY_AUTH_TOKEN` がないと起動せず、トークンのないリクエストには 401 を返します。メールアドレス、身分証番号、ホームディレクトリのパスは、OpenAI Chat Completions の JSON、ストリーミング、Anthropic Messages のいずれでもマスクされて上流に届き、応答で復元されました。許可されたオリジンからの CORS プリフライトは転送されずに 204、ほかのオリジンは 403 でした。下記の設定ファイルのマウントも動きました。2026-10-21 に Apple Silicon 上のエミュレーションで linux/amd64 イメージをビルドして実行し（Docker 29.8.2）、ダミー上流に対して検証しました。`node` ユーザーで動き、トークンがなければ起動を拒否し、トークンのないリクエストには 401 を返します。メールアドレス・国民 ID・ホームディレクトリのパスは Chat Completions の JSON・ストリーミング・Anthropic Messages のいずれでもマスクされて上流に届き、復元されました。linux/amd64 の人名モデル版イメージは実際のモデルで人名と会社名（`⟦NAME_1⟧`、`⟦ORG_1⟧`）をマスクして復元しました。linux/amd64 で未テスト：CORS のプリフライトと設定ファイルのマウント。どちらのイメージもネイティブの x86-64 マシンではまだ動かしていません。
 
 ```sh
 docker build -t redaction-proxy .
