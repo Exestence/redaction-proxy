@@ -12,6 +12,8 @@ If content must never leave your machine, answer it with a local model instead; 
 
 > **Status:** 0.3.0, not yet on npm. Verified with real services: DeepSeek Chat Completions (2026-10-08) and Anthropic Messages through Claude Code and dsh (2026-10-14); see below. The OpenAI API and Codex CLI are not verified yet.
 
+> This is a learning and exploration project. Issues and pull requests are welcome; I'll look at them when I have time.
+
 ## Intro video
 
 [![A 30-second terminal recording: pnpm demo sends an email, a national ID, and a home path; the cloud sees only placeholders; the reply comes back with the real values.](docs/media/intro.gif)](docs/media/intro.mp4)
@@ -195,11 +197,17 @@ What it reads, every number, and the options: [technical details §16](docs/DETA
 ## Results
 
 <!-- RESULTS:START -->
-**held-out set v2 (written blind, run once).** 1,617 synthetic prompts in 7 languages (English, Traditional and Simplified Chinese, Japanese, Korean, German, French) with 10,268 sensitive values and 2,997 hard negatives. The author never read the rules or the benchmark code; about 60% of the values use non-standard spellings (dotted cards, lower-case IBANs, `name at example dot com`, phone extensions). The set was frozen with a SHA-256 checksum and scored once, on 2026-10-07, with the proxy-default detector `rules-6+intl-2+ext-1`; both held-out sets and their checksums are in [bench/heldout/](bench/heldout/). Every credential-shaped token in them (`ghp_`, `AKIA`, `npm_`, PEM blocks) is synthetic and non-functional, so secret scanners flag them as expected.
+- **What was tested:** how many sensitive values the proxy masks in 1,617 made-up prompts in 7 languages (English, Traditional and Simplified Chinese, Japanese, Korean, German, French). They hold 10,268 sensitive values in 10 categories (emails, phones, national IDs, cards, IBANs, secrets, home paths, hosts, names, addresses) and 2,997 hard negatives: harmless values that look sensitive, such as order numbers and version strings. No real personal data was used.
+- **Compared with:** [Microsoft Presidio](https://github.com/microsoft/presidio), a widely used open-source detector of personal data.
+- **Why the averages look low:** about 60% of the test values were written in unusual spellings on purpose (dotted card numbers, lower-case IBANs, `name at example dot com`, phone extensions). Values in standard spellings are mostly masked: emails 100%, cards 94.7%, secrets 95.9%, hosts 100% (English, proxy default rules).
+- **Where it is weak:** most unusual spellings are missed (non-standard cards and IBANs 0%, national IDs 30.4%); there is no address rule; names need the optional name model; Presidio masks more phone numbers (85% against 51%).
+- **Overall:** averaged over the 10 categories, the proxy fully masks 39.5% of English values, Presidio 37.8–40.4%, and the proxy with the name model 44.8%. The rules take about 0.1 ms per prompt, Presidio about 11 ms.
+
+The test set is *held out*: someone who never saw the rules or the benchmark code wrote it, so the rules were not tuned to it. It was frozen with a SHA-256 checksum and scored once, on 2026-10-07, so no rule was changed to fit its results before that score. The detector was the proxy default of that day, `rules-6+intl-2+ext-1`. Both held-out sets and their checksums are in [bench/heldout/](bench/heldout/). Every credential-shaped token in them (`ghp_`, `AKIA`, `npm_`, PEM blocks) is made up and does not work, so secret scanners flag them as expected.
 
 ![Bar chart: share of sensitive values fully masked per category on the English held-out v2 prompts, proxy-default rules and rules plus name model against Presidio at cutoff 0.4.](docs/media/results.svg)
 
-| held-out v2, English prompts (1,527 values) | core default rules | proxy default rules | + name model (experimental) | Presidio, cutoff 0 | Presidio, cutoff 0.4 |
+| English prompts (1,527 values) | core default rules | proxy default rules | + name model (experimental) | Presidio, cutoff 0 | Presidio, cutoff 0.4 |
 | --- | --- | --- | --- | --- | --- |
 | Fully masked (macro average of 10 categories) | 25.9% | 39.5% | **44.8%** | 40.4% | 37.8% |
 | Left untouched (macro average) | 64.0% | 49.9% | 35.6% | **29.3%** | 35.0% |
@@ -209,7 +217,18 @@ What it reads, every number, and the options: [technical details §16](docs/DETA
 
 \* Presidio analyzes every prompt as English, so its all-language results are for reference only.
 
-Standard against non-standard spellings, English, fully masked (n = values):
+How to read the table:
+
+- **Fully masked:** the share of sensitive values that were replaced whole by a placeholder. It is computed for each of the 10 categories and then averaged with each category counting equally (a *macro average*), so a category the rules do not cover at all, such as addresses at 0%, pulls the average down as much as one they cover well.
+- **Left untouched:** the share of sensitive values of which no part was masked, averaged the same way; lower is better. The rest were partly masked, such as a home path whose user name is masked and whose other folders are kept.
+- **Masked regions overlapping a sensitive value:** of all the regions a system masked, the share that covered a sensitive value. This works like precision: a low share means the system also masked harmless text.
+- **Median time per prompt:** half the prompts took less than this.
+- **Fully masked, all 7 languages:** the first row, over all 7 languages.
+- **Columns:** the core default rules are the smaller set the library uses on its own; the proxy default rules add the international and extended rules and are what the proxy runs. Presidio scores each finding with a confidence from 0 to 1, and the cutoff is the lowest score it keeps: cutoff 0 keeps every finding, cutoff 0.4 drops the less confident ones.
+
+<details><summary>Details: standard against non-standard spellings, weak spots, restore self-check, detector versions</summary>
+
+Standard against non-standard spellings, English, fully masked (n = number of values):
 
 | Category | proxy default, standard | proxy default, non-standard | Presidio 0.4, standard | Presidio 0.4, non-standard |
 | --- | --- | --- | --- | --- |
@@ -235,6 +254,8 @@ Where it is weak (English, proxy default):
 Restore, a self-check rather than a score: with rules only, restoring the masked text gave the original byte for byte in all 1,617 prompts; with the name model on, in 1,587 of 1,617 (30 were not exact).
 
 These numbers were measured with detector `rules-6+intl-2+ext-1`; the released detector is `rules-12+intl-2+ext-1`, and none of the later changes is in them. Its `ext-1` then had 5 of today's 10 extended rules, since that version was not bumped before 0.1.0, and the name model was `nym-edge-int8-2` (now `nym-edge-int8-3`). Since then, credential values that are schema words, API field names, placeholders, or templates (`password: required`, `${{ secrets.X }}`) are no longer masked, and a term starting or ending with a Latin letter or digit matches only as a whole word. Earlier changes also not in these numbers: the proxy default now also masks lower-case and no-break-spaced Taiwan IDs, mobile numbers grouped by `.`, `/`, or `_` or with a bracketed prefix (`(0912)345678`), Taiwan passport and health-insurance card numbers after their keyword, email addresses with an HTML- or JSON-escaped `@`, quoted credential keys (`"密碼": "…"`, `"jwt": "…"`), and `100.64.0.0/10` and IPv6 unique local addresses; `card-strict` now reads regrouped, dotted, space-and-dash mixed, and line-wrapped card numbers (the proxy default masked 30.5% of English cards here against 44.1% for the core default), and the name model's restore errors are fixed: different spellings of one name (`Jordan`, `JORDAN`) now get separate placeholders (configured terms work the same way, so `Nimbus` and `NIMBUS` each restore as written). The set is not scored again with the released detector: some later rule changes, such as the `card-strict` one, were made after these results were seen, so a second score would not be blind; fresh held-out numbers need a new set.
+
+</details>
 
 Full tables: [held-out v2 results](bench/results/public-bench-held-out-v2.md). The earlier [held-out v1 run](bench/results/public-bench-held-out.md) (1,518 prompts, older rules `rules-6+intl-1`, standard spellings only) is kept for history. Method and other measurements: [technical details §18](docs/DETAILS.md#18-實測數字).
 <!-- RESULTS:END -->
