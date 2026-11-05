@@ -51,7 +51,7 @@ Results are labelled `deepseek` (Chat Completions) and `anthropic` (Messages, se
 
 ## Pointing real clients at the proxy
 
-Start the proxy with `pnpm build && node lib/cli.js` (port 8787). Claude Code was verified through the proxy on 2026-10-13 and again on 2026-10-14 on the final 0.3.0 build (commit `1a12a30`, where the model wrote a sentence before its tool calls, the Bash command ran once, and placeholder numbers stayed stable across requests): version 2.1.287 with its subscription login against Anthropic Messages (Claude Haiku 5.5), streaming text and the Bash and Read tools; the upstream saw only placeholders for detected values, replies were restored, and tool arguments were restored per `toolRestore` (`PATH`, `TERM`, `PROJECT`) and kept as placeholders for other categories. Codex CLI has not been verified.
+Start the proxy with `pnpm build && node lib/cli.js` (port 8787). Claude Code was verified through the proxy on 2026-10-13 and again on 2026-10-14 on the final 0.3.0 build (commit `1a12a30`, where the model wrote a sentence before its tool calls, the Bash command ran once, and placeholder numbers stayed stable across requests): version 2.1.287 with its subscription login against Anthropic Messages (Claude Haiku 5.5), streaming text and the Bash and Read tools; the upstream saw only placeholders for detected values, replies were restored, and tool arguments were restored per `toolRestore` (`PATH`, `TERM`, `PROJECT`) and kept as placeholders for other categories. Codex CLI was verified against DeepSeek's Responses API on 2026-11-05 (below); not against OpenAI.
 
 **Claude Code** (API key or subscription login; the proxy forwards either credential unchanged):
 
@@ -98,3 +98,5 @@ CODEX_HOME=~/.codex-redaction-proxy codex exec --skip-git-repo-check "..." </dev
 ```
 
 On 2026-10-21, with a dummy key, Codex 0.155.1 sent its requests to the proxy's `/v1/responses`, the proxy masked the e-mail in the prompt and the OS user name, and DeepSeek answered 401 for the key; a run with a real key has not been made yet.
+
+On 2026-11-05, with a real DeepSeek key and this configuration (port changed to 8797 so a running proxy kept 8787), Codex 0.155.1 ran `codex exec` with a task that called the shell tool (`pwd`) and repeated an email and a Taiwan ID. A local recorder between the proxy and `https://api.deepseek.com` (request bodies only) saw 2 streaming `/v1/responses` requests, the second carrying the `function_call` and its output; neither held the email, the ID, the home path, or the OS user name, only `⟦EMAIL_1⟧`, `⟦TWID_1⟧`, and `⟦PATH_1⟧` (the home path in Codex's skill-root instructions). Both requests got 200, the proxy logged `masked 4 (PATH 2, EMAIL 1, TWID 1)` on each and `restored 20` on the reply, and Codex printed the real email and ID.
