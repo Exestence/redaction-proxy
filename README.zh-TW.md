@@ -12,7 +12,7 @@
 
 > **狀態：** 0.3.1，尚未發布到 npm。已對真實服務驗證：DeepSeek Chat Completions（2026-10-08），透過 Claude Code 與 dsh 的 Anthropic Messages（2026-10-14），以官方 Anthropic SDK 對 Anthropic Messages（2026-10-21），以及 Codex CLI 對 DeepSeek 的 Responses API（2026-11-05），見下方。OpenAI 自己的 API 尚未驗證。
 
-> 這是一個學習與探索用的專案。歡迎提 issue 與 pull request，我有空時會看。
+> 這是一個學習與探索用的專案。歡迎提 issue 與 pull request，我有空時會看。能繞過遮罩的方法屬於安全漏洞，請私下回報（[SECURITY.md](SECURITY.md)），不要開公開的 issue。
 
 ## 介紹影片
 

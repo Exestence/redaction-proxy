@@ -12,7 +12,7 @@ OpenAI 互換・Anthropic 互換のクライアントならストリーミング
 
 > **ステータス：** バージョン 0.3.1 で、npm にはまだ公開していません。実サービスでは DeepSeek の Chat Completions（2026-10-08）、Claude Code と dsh を通した Anthropic Messages（2026-10-14）、公式 Anthropic SDK による Anthropic Messages（2026-10-21）、DeepSeek の Responses API に対する Codex CLI（2026-11-05）で検証済みです（下記参照）。OpenAI 自身の API は未検証です。
 
-> 学習と探求のためのプロジェクトです。issue や pull request は歓迎します。時間のあるときに目を通します。
+> 学習と探求のためのプロジェクトです。issue や pull request は歓迎します。時間のあるときに目を通します。マスクをすり抜ける方法はセキュリティ上の不具合なので、公開の issue ではなく非公開で報告してください（[SECURITY.md](SECURITY.md)）。
 
 ## 紹介動画
 
