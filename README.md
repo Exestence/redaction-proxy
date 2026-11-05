@@ -10,7 +10,7 @@ It works with any OpenAI- or Anthropic-compatible client, streaming included, an
 
 If content must never leave your machine, answer it with a local model instead; this proxy is for when you choose a cloud model and still want fewer leaks.
 
-> **Status:** 0.3.1, not yet on npm. Verified with real services: DeepSeek Chat Completions (2026-10-08), Anthropic Messages through Claude Code and dsh (2026-10-14), and the official Anthropic SDK against Anthropic Messages (2026-10-21); see below. The OpenAI API and Codex CLI are not verified yet.
+> **Status:** 0.3.1, not yet on npm. Verified with real services: DeepSeek Chat Completions (2026-10-08), Anthropic Messages through Claude Code and dsh (2026-10-14), the official Anthropic SDK against Anthropic Messages (2026-10-21), and Codex CLI against DeepSeek's Responses API (2026-11-05); see below. OpenAI's own API is not verified yet.
 
 > This is a learning and exploration project. Issues and pull requests are welcome; I'll look at them when I have time.
 
@@ -78,7 +78,9 @@ There is no health endpoint: the proxy relays GET requests to the upstream.
 >
 > On 2026-10-21 the real-service harness passed against Anthropic Messages (Claude Haiku 5.5) with the official Anthropic SDK (`@anthropic-ai/sdk` 0.135.0) as the client and again with plain `fetch`: 4 of 4 scenarios each (JSON and streaming; plain text and a forced tool call); the upstream saw only placeholders and all 5 values were restored each time.
 >
-> Not verified: the OpenAI API (no key; the harness's OpenAI SDK client path is tested only against a fake upstream) and Codex CLI (no real-key run).
+> On 2026-11-05 Codex CLI 0.155.1 (API-key login) ran one task through the proxy against DeepSeek's Responses API (`deepseek-flash`), with a local recorder between the proxy and DeepSeek: 2 streaming requests, including a shell tool call (`pwd`) and its output. DeepSeek saw only placeholders for the email and the Taiwan ID in the prompt and for the home path in Codex's own instructions, and the reply came back restored.
+>
+> Not verified: OpenAI's own API, including Codex CLI against OpenAI (no key; the harness's OpenAI SDK client path is tested only against a fake upstream). A Codex ChatGPT login cannot go through the proxy.
 
 Your tool keeps sending its own API key; the proxy forwards it and never stores it.
 
@@ -88,6 +90,7 @@ Your tool keeps sending its own API key; the proxy forwards it and never stores 
 | Anthropic SDK | `ANTHROPIC_BASE_URL=http://127.0.0.1:8787` (no `/v1`) | Verified 2026-10-21 with the real-service harness (Claude Haiku 5.5; JSON, streaming, tool call) |
 | OpenAI SDK and most compatible tools | `OPENAI_BASE_URL=http://127.0.0.1:8787/v1` (with `/v1`) | Not verified against OpenAI; the OpenAI SDK is tested only against a fake upstream |
 | DeepSeek | Start the proxy with `REDACTION_PROXY_OPENAI_UPSTREAM=https://api.deepseek.com node lib/cli.js`, then use `OPENAI_BASE_URL=http://127.0.0.1:8787/v1` with your DeepSeek key. This replaces the OpenAI upstream. | Verified with the real-service harness (API only) |
+| Codex CLI | API-key login with a `model_providers` entry whose `base_url` is `http://127.0.0.1:8787/v1` and `wire_api = "responses"`; see [e2e/real](e2e/real/README.md). A ChatGPT login cannot go through the proxy. | Verified 2026-11-05 against DeepSeek's Responses API (streaming, shell tool); not verified against OpenAI |
 | Cursor | Not supported: Cursor sends custom base-URL requests from its own servers, which cannot reach your `127.0.0.1`. | — |
 
 <details><summary>curl example and configuration file</summary>

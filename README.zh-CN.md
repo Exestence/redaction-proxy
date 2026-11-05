@@ -10,7 +10,7 @@
 
 绝不能离开电脑的内容，请改用本地模型回答；这个代理适合你选择用云端模型、但仍想减少泄露的时候。
 
-> **状态：** 0.3.1，尚未发布到 npm。已在真实服务上验证：DeepSeek Chat Completions（2026-10-08），通过 Claude Code 和 dsh 的 Anthropic Messages（2026-10-14），以及用官方 Anthropic SDK 对 Anthropic Messages（2026-10-21），见下文。OpenAI API 和 Codex CLI 尚未验证。
+> **状态：** 0.3.1，尚未发布到 npm。已在真实服务上验证：DeepSeek Chat Completions（2026-10-08），通过 Claude Code 和 dsh 的 Anthropic Messages（2026-10-14），用官方 Anthropic SDK 对 Anthropic Messages（2026-10-21），以及 Codex CLI 对 DeepSeek 的 Responses API（2026-11-05），见下文。OpenAI 自己的 API 尚未验证。
 
 > 这是一个学习和探索用的项目。欢迎提 issue 和 pull request，我有空时会看。
 
@@ -78,7 +78,9 @@ npx redaction-proxy           # 启动代理，地址 http://127.0.0.1:8787（�
 >
 > 2026-10-21 真实服务验证工具对 Anthropic Messages（Claude Haiku 5.5）通过：用官方 Anthropic SDK（`@anthropic-ai/sdk` 0.135.0）作为客户端，以及用普通的 `fetch`，各 4 个场景全部通过（非流式 JSON 与流式；纯文本与强制工具调用）；上游只看到占位符，每次 5 个值都还原。
 >
-> 未验证：OpenAI API（没有密钥；验证工具的 OpenAI SDK 客户端路径只对假上游测试过）、Codex CLI（没有用真实密钥运行过）。
+> 2026-11-05 用 Codex CLI 0.155.1（API 密钥登录）通过代理对 DeepSeek 的 Responses API（`deepseek-flash`）运行了一个任务，代理与 DeepSeek 之间放了本地录制站：共 2 个流式请求，含一次 shell 工具调用（`pwd`）及其输出。DeepSeek 只看到占位符：提示里的 email 和身份证号，以及 Codex 自己指令里的家目录路径；回复已还原。
+>
+> 未验证：OpenAI 自己的 API，包括 Codex CLI 接 OpenAI（没有密钥；验证工具的 OpenAI SDK 客户端路径只对假上游测试过）。Codex 的 ChatGPT 登录无法经过代理。
 
 工具照常发送自己的 API 密钥；代理原样转发，从不保存。
 
@@ -88,6 +90,7 @@ npx redaction-proxy           # 启动代理，地址 http://127.0.0.1:8787（�
 | Anthropic SDK | `ANTHROPIC_BASE_URL=http://127.0.0.1:8787`（不带 `/v1`） | 2026-10-21 用真实服务验证工具验证（Claude Haiku 5.5；JSON、流式、工具调用） |
 | OpenAI SDK 及大多数兼容工具 | `OPENAI_BASE_URL=http://127.0.0.1:8787/v1`（要带 `/v1`） | 未对 OpenAI 验证；OpenAI SDK 只对假上游测试过 |
 | DeepSeek | 用 `REDACTION_PROXY_OPENAI_UPSTREAM=https://api.deepseek.com node lib/cli.js` 启动代理，再配 `OPENAI_BASE_URL=http://127.0.0.1:8787/v1` 和你的 DeepSeek 密钥。这会替换掉 OpenAI 上游。 | 已用真实服务验证工具验证（仅 API） |
+| Codex CLI | API 密钥登录，在 `model_providers` 设 `base_url = "http://127.0.0.1:8787/v1"` 和 `wire_api = "responses"`；见 [e2e/real](e2e/real/README.md)。ChatGPT 登录无法经过代理。 | 2026-11-05 对 DeepSeek 的 Responses API 已验证（流式、shell 工具）；未对 OpenAI 验证 |
 | Cursor | 不支持：Cursor 的自定义 base URL 请求从 Cursor 自己的服务器发出，访问不到你的 `127.0.0.1`。 | — |
 
 <details><summary>curl 示例与配置文件</summary>

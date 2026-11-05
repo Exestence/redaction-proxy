@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+- Verified Codex CLI against DeepSeek's Responses API (2026-11-05, Codex 0.155.1 with an API-key login, `deepseek-flash`): one task through the proxy, with a local recorder between the proxy and DeepSeek, made 2 streaming requests including a shell tool call (`pwd`) and its output; DeepSeek saw only placeholders for the email and Taiwan ID in the prompt and the home path in Codex's own instructions, and the reply was restored. OpenAI's own API, including Codex against OpenAI, remains unverified.
+
 ## 0.3.1 — 2026-10-22
 
 - Verified against the real Anthropic Messages API (2026-10-21, Claude Haiku 5.5): the real-service harness passed 4 of 4 scenarios (JSON and streaming, plain text and a forced tool call) with the official Anthropic SDK (`@anthropic-ai/sdk` 0.135.0) as the client and 4 of 4 with plain `fetch`. The OpenAI API and Codex CLI remain unverified; the OpenAI SDK client path is tested only against a fake upstream. The harness's default models are now `claude-haiku-5-5` (Anthropic) and `deepseek-flash` (DeepSeek's current model name).
