@@ -18,11 +18,11 @@
         },
         "proxy": {
           "detector": "rules-12+intl-2+ext-2",
-          "spans": 15,
-          "per1kChars": 0.015,
-          "per1kLines": 0.79,
+          "spans": 19,
+          "per1kChars": 0.019,
+          "per1kLines": 1,
           "byCategory": {
-            "ADDR": 14,
+            "ADDR": 18,
             "PATH": 1
           },
           "restoreFailures": 0
@@ -46,11 +46,11 @@
         },
         "proxy": {
           "detector": "rules-12+intl-2+ext-2",
-          "spans": 15,
-          "per1kChars": 0.015,
-          "per1kLines": 0.79,
+          "spans": 19,
+          "per1kChars": 0.019,
+          "per1kLines": 1,
           "byCategory": {
-            "ADDR": 14,
+            "ADDR": 18,
             "PATH": 1
           },
           "restoreFailures": 0

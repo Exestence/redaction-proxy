@@ -373,6 +373,13 @@ describe('address-cjk', () => {
     ['北京市朝阳区建国路88号', '⟦ADDR_1⟧'],
     ['台北市大安區復興南路一段390號3樓', '⟦ADDR_1⟧'],
     ['東京都千代田区丸の内1-9-1', '⟦ADDR_1⟧'],
+    ['寄到 高雄市苓雅區四維三路2號', '寄到 ⟦ADDR_1⟧'],
+    ['地址 新竹縣竹北市光明六路東一段10號', '地址 ⟦ADDR_1⟧'],
+    ['地址是 台北市大安區忠孝東路四段 100 號 5 樓', '地址是 ⟦ADDR_1⟧'],
+    ['送到 台北市大安區復興南路一段390-1號', '送到 ⟦ADDR_1⟧'],
+    ['香港分店 九龍旺角彌敦道123號', '香港分店 ⟦ADDR_1⟧'],
+    ['地址 深圳市南山区科技园科苑路15号', '地址 ⟦ADDR_1⟧'],
+    ['公司在 浙江省杭州市西湖区文三路90号', '公司在 ⟦ADDR_1⟧'],
   ])('masks %j', async (text, expected) => {
     expect(await maskWith(['address-cjk'], text)).toBe(expected)
   })
@@ -387,12 +394,51 @@ describe('address-cjk', () => {
     ['a Japanese postal code alone', '〒100-0005'],
     ['a Japanese prefecture without a block number', '東京都千代田区丸の内'],
     ['a meeting room and a floor', '大安會議室 3 樓'],
+    ['a highway exit', '高速公路3號出口下'],
+    ['numbered routes', '走國道3號、縣道137號與東京都道318號'],
+    ['words ending in 道', '他知道3號要交，管道3號堵住'],
+    ['a metro line and a date', '搭3號線，2026年11月5號出發'],
   ])('leaves %s alone', async (_name, text) => {
     expect(await maskWith(['address-cjk'], text)).toBe(text)
   })
 
   it('keeps a phone number next to an address its own value', async () => {
     expect(await maskWith(['address-cjk', 'phone'], '台北市大安區復興南路一段390號 0912-345-678')).toBe('⟦ADDR_1⟧ ⟦PHONE_1⟧')
+  })
+})
+
+describe('address-en', () => {
+  it.each([
+    ['Ship it to 1600 Example Avenue, Springfield, IL 62704.', 'Ship it to ⟦ADDR_1⟧.'],
+    ['I live at Apt 4B, 350 Fictional Street, Brooklyn, NY 11201.', 'I live at ⟦ADDR_1⟧.'],
+    ['Send the letter to 221B Fictional Road, London NW1 6XE.', 'Send the letter to ⟦ADDR_1⟧.'],
+    ['address: 42 Wallaby Way', 'address: ⟦ADDR_1⟧'],
+    ['Office is at 500 W 5th St, Suite 200.', 'Office is at ⟦ADDR_1⟧.'],
+    ['Meet at 12 Maple Ave. at noon', 'Meet at ⟦ADDR_1⟧ at noon'],
+    ['Deliver to 7 Fictional Lane, Apt. 3 please', 'Deliver to ⟦ADDR_1⟧ please'],
+    ['Mail it to P.O. Box 1234, Springfield, IL 62704.', 'Mail it to ⟦ADDR_1⟧.'],
+    ['Visit 1600 Example Avenue NW, Washington, DC 20500 today', 'Visit ⟦ADDR_1⟧ today'],
+    ['Return to Flat 2, 10 Fictional Close, Leeds LS1 4AP', 'Return to ⟦ADDR_1⟧'],
+    ['ship to 350 fictional street, brooklyn, ny 11201', 'ship to ⟦ADDR_1⟧'],
+    ['My address is 88 Fictional Blvd #12, Austin, TX 78701.', 'My address is ⟦ADDR_1⟧.'],
+    ['Pick up at 19 Fictional Drive, Portland, OR', 'Pick up at ⟦ADDR_1⟧'],
+    ['Meet at 3 Fictional Court, Austin, TX', 'Meet at ⟦ADDR_1⟧'],
+    ['SEND TO 350 FIFTH AVENUE', 'SEND TO ⟦ADDR_1⟧'],
+  ])('masks %j', async (text, expected) => {
+    expect(await maskWith(['address-en'], text)).toBe(expected)
+  })
+
+  it.each([
+    ['a court', 'the 9 Supreme Court justices ruled'],
+    ['a weak street type without a city', 'meet at 3 Fictional Court tomorrow'],
+    ['a lower-case street without a region', 'send it to 350 fictional street tomorrow'],
+    ['hardware', 'I bought 1 hard drive and 2 Dr Pepper cans'],
+    ['routes and products', 'take Route 66, then Highway 1; runs on Windows 11 Home'],
+    ['sections and versions', 'see Chapter 3 Section 2 of the Version 2 Road Map'],
+    ['a title count', 'she won 3 Grand Slam titles'],
+    ['a street type glued to a word', 'the 2 Main Streetwise awards'],
+  ])('leaves %s alone', async (_name, text) => {
+    expect(await maskWith(['address-en'], text)).toBe(text)
   })
 })
 
@@ -404,6 +450,7 @@ describe('pathological inputs to the extended rules', () => {
     'sig=', 'AccountKey=', '1234567890:AA', 'token ', 'key is ', 'password: ', 'pw ', 'token is is ', ' \t',
     'a1234\u00a0', '護照 ', '健保卡 0000 ', '0912.345.', 'a&#64;', 'a\\u0040', '100.64.1.', 'fd12:', '"密碼": ',
     '台北市', '大安區', '中山路1', '1號', '路1巷', '1234台', '號1樓', '東京都千代田区', '千代田区1-', '〒100-0005 東京都',
+    '彌敦道1', '1 號 ', '12 Main ', '12 Main Street, ', 'Apt 4B, ', 'P.O. Box 1, ', '1 a b c street, x, ', 'A ',
   ])('masks 200KB of %j within 5s of CPU time', async unit => {
     const text = unit.repeat(Math.ceil(SIZE / unit.length)).slice(0, SIZE)
     const started = process.cpuUsage()
