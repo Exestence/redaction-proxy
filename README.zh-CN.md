@@ -12,7 +12,7 @@
 
 > **状态：** 0.3.1，尚未发布到 npm。已在真实服务上验证：DeepSeek Chat Completions（2026-10-08），通过 Claude Code 和 dsh 的 Anthropic Messages（2026-10-14），用官方 Anthropic SDK 对 Anthropic Messages（2026-10-21），以及 Codex CLI 对 DeepSeek 的 Responses API（2026-11-05），见下文。OpenAI 自己的 API 尚未验证。
 
-> 这是一个学习和探索用的项目。欢迎提 issue 和 pull request，我有空时会看。
+> 这是一个学习和探索用的项目。欢迎提 issue 和 pull request，我有空时会看。能绕过脱敏的方法属于安全漏洞，请私下报告（[SECURITY.md](SECURITY.md)），不要开公开的 issue。
 
 ## 介绍视频
 
@@ -58,6 +58,8 @@ docker run --rm -p 127.0.0.1:8787:8787 -e REDACTION_PROXY_AUTH_TOKEN redaction-p
 
 上游是非本机的明文 `http://`（例如经由 `host.docker.internal` 访问的本机模型服务器）时，再加 `-e REDACTION_PROXY_ALLOW_INSECURE_UPSTREAM=1`。`maskLocalUsername` 跳过容器的用户 `node`，所以在镜像中不脱敏任何词。
 
+镜像内置 `HEALTHCHECK`，会询问代理自己的健康检查端点（不连上游），所以 `docker ps` 会显示 `healthy`。它从 `REDACTION_PROXY_PORT` 和 `REDACTION_PROXY_AUTH_TOKEN` 读取端口和令牌；如果配置文件指定了别的端口或令牌，请同时用对应的环境变量（例如 `-e REDACTION_PROXY_PORT=…`）指定同一个值，否则容器照常运行但会显示 `unhealthy`。
+
 ### npx（首次发布到 npm 之后）
 
 目前还没有发布到 npm，在那之前请按[30 秒上手](#30-秒上手)从克隆目录运行。2026-10-14 用本地 tarball 验证：`npm pack` 对 0.3.0 生成 201.6 kB、60 个文件的包，`npx --yes --package=./redaction-proxy-<version>.tgz redaction-proxy --demo` 打印演示输出，不加 `--demo` 时代理在 127.0.0.1:8787 启动。发布之后：
@@ -67,7 +69,7 @@ npx redaction-proxy --demo
 npx redaction-proxy           # 启动代理，地址 http://127.0.0.1:8787（本机不需要令牌）
 ```
 
-代理没有健康检查端点：GET 请求会转发到上游。
+健康检查：`curl http://127.0.0.1:8787/_redaction-proxy/health` 由代理自己返回 `{"status":"ok"}`，不连上游；设置了验证令牌时，像普通请求一样带上。其他 GET 请求都会转发到上游。
 
 ## 接入你的工具
 

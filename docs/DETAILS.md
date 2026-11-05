@@ -216,7 +216,8 @@
 | `POST /v1/responses` | 遮罩與還原，記住回應 id | OpenAI 上游 |
 | `POST /v1/messages` | 遮罩與還原 | Anthropic 上游 |
 | `POST /v1/messages/count_tokens` | 遮罩（回應沒有佔位符可還原） | Anthropic 上游 |
-| `GET` 任何路徑 | 原樣轉送 | 帶 `x-api-key` 或 `anthropic-version` 標頭時走 Anthropic，否則走 OpenAI |
+| `GET /_redaction-proxy/health` | 代理自己回 200 `{"status":"ok"}`，不轉送；設了 `authToken` 時要帶權杖 | — |
+| 其他 `GET` 路徑 | 原樣轉送 | 帶 `x-api-key` 或 `anthropic-version` 標頭時走 Anthropic，否則走 OpenAI |
 | `OPTIONS`（CORS 預檢） | 允許的來源回 204，不轉送 | — |
 
 上游 URL 為設定的 base 加上用戶端的原始路徑與查詢字串。用戶端的 `authorization`、`x-api-key`、`anthropic-*` 等標頭原樣轉送，代理從不儲存。`host`、`connection`、`content-length`、`content-encoding`、`accept-encoding` 等逐跳標頭不轉送，送往上游時固定 `accept-encoding: identity`。`x-redaction-proxy-token` 不轉送。上游回應的 `access-control-*` 標頭不轉回；來自允許來源的請求，由代理自己回 `access-control-allow-origin: <該來源>` 與 `access-control-expose-headers: x-redaction-proxy-mask-failed`。上游回應若帶 `x-redaction-proxy-mask-failed`，代理把它去掉，這個標頭只由代理設定。用戶端斷線時，代理會中止上游請求。代理不跟隨上游的重新導向（回 502），所以用戶端的憑證與請求只送往設定的上游，即使 `Location` 指向別的主機或 `http://`。
@@ -453,7 +454,7 @@ POST /v1/messages tool arguments: kept by the tool restore policy KEY_1 in bash 
 
 Docker 映像：2026-10-13 在 Apple Silicon 上以 Docker Desktop 29.6.2（linux/arm64）對本機假上游驗證：可以建置（347 MB；加 `--build-arg NAME_MODEL=1` 為 864 MB），以非 root 使用者 `node` 執行；綁定 `0.0.0.0` 時沒設 `REDACTION_PROXY_AUTH_TOKEN` 就拒絕啟動，沒帶權杖的請求回 401；email、身分證字號與家目錄路徑在 OpenAI Chat Completions JSON、串流與 Anthropic Messages 中都遮罩後送上游並還原；以 `--config /redaction.toml` 掛載設定檔可用；允許來源的 CORS 預檢回 204 且不轉送，其他來源回 403。2026-10-21 在 Apple Silicon 上以模擬方式（`docker build --platform linux/amd64`，Docker 29.8.2）建置並執行 linux/amd64 映像，對 Docker 內部網路上的假上游做相同檢查：`id` 為 `uid=1000(node)`、`uname -m` 為 `x86_64`；沒設權杖就拒絕啟動（代碼 1），沒帶權杖回 401；email、身分證字號與家目錄路徑在 Chat Completions JSON、串流與 Anthropic Messages 中都遮罩後送上游並還原。`--build-arg NAME_MODEL=1` 的 linux/amd64 映像掛載以 `scripts/fetch-name-model.mjs` 下載的真模型，把 `Evelyn Hartwell`、`Brightwater Logistics` 遮成 `⟦NAME_1⟧`、`⟦ORG_1⟧` 並還原（模擬下第一個請求 542 ms，之後 40 ms）。容器內檔案系統約 233 MB 與 589 MB（`du`；`docker images` 在 containerd 映像儲存下顯示壓縮後的 80 MB 與 224 MB，與上面 arm64 的數字量法不同）。在 linux/amd64 上未測試：CORS 預檢與設定檔掛載；也還沒在原生 x86-64 機器上執行過。上游是非本機的明文 `http://`（例如經由 `host.docker.internal` 連到的本機模型伺服器）時，要加 `-e REDACTION_PROXY_ALLOW_INSECURE_UPSTREAM=1`。
 
-npx：尚未發布到 npm。2026-10-14 以本機 tarball 驗證（0.3.0 的 `npm pack`，201.6 kB、60 個檔案）：`npx --yes --package=./redaction-proxy-<version>.tgz redaction-proxy --demo` 印出示範輸出，不加 `--demo` 時代理在 127.0.0.1:8787 啟動。代理沒有健康檢查端點：GET 請求會轉送到上游。
+npx：尚未發布到 npm。2026-10-14 以本機 tarball 驗證（0.3.0 的 `npm pack`，201.6 kB、60 個檔案）：`npx --yes --package=./redaction-proxy-<version>.tgz redaction-proxy --demo` 印出示範輸出，不加 `--demo` 時代理在 127.0.0.1:8787 啟動。健康檢查端點 `GET /_redaction-proxy/health` 由代理自己回應，不連上游；其他 GET 請求會轉送到上游。
 
 ## 14. 誤遮率量測方法
 
