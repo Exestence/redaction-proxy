@@ -32,6 +32,9 @@ import type { ProxyConfig, ToolRestorePolicy } from './config.ts'
 /** Which wire API a route speaks. */
 type Api = 'chat' | 'responses' | 'messages'
 
+/** Answered by the proxy itself, never relayed: `GET` returns `{"status":"ok"}` once the port is serving. */
+export const HEALTH_PATH = '/_redaction-proxy/health'
+
 const ROUTES: Readonly<Record<string, Api>> = {
   '/v1/chat/completions': 'chat',
   '/v1/responses': 'responses',
@@ -1649,6 +1652,12 @@ export function createProxyServer(
     } else if (!hostIsLoopback(req.headers.host)) {
       // Without a token, a non-loopback Host is a DNS-rebinding page; a token holder may use any name.
       return refuse(403, 'the proxy only serves requests addressed to a loopback host unless authToken is set')
+    }
+    if (req.method === 'GET' && path === HEALTH_PATH) {
+      res.writeHead(200, { 'content-type': 'application/json', 'cache-control': 'no-store', ...cors })
+      res.end('{"status":"ok"}')
+      req.resume()
+      return
     }
     if (req.method === 'POST' ? api === undefined : req.method !== 'GET') {
       return refuse(404, `the proxy does not forward ${req.method} ${path}; only masked routes and GET are relayed`)

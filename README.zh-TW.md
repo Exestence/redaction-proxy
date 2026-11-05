@@ -67,7 +67,7 @@ npx redaction-proxy --demo
 npx redaction-proxy           # 啟動代理，位址 http://127.0.0.1:8787（本機不需要權杖）
 ```
 
-代理沒有健康檢查端點：GET 請求會轉送到上游。
+健康檢查：`curl http://127.0.0.1:8787/_redaction-proxy/health` 由代理自己回 `{"status":"ok"}`，不連上游；設了驗證權杖時，照一般請求一樣帶上。其他 GET 請求都會轉送到上游。
 
 ## 讓你的工具走代理
 

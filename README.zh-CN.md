@@ -67,7 +67,7 @@ npx redaction-proxy --demo
 npx redaction-proxy           # 启动代理，地址 http://127.0.0.1:8787（本机不需要令牌）
 ```
 
-代理没有健康检查端点：GET 请求会转发到上游。
+健康检查：`curl http://127.0.0.1:8787/_redaction-proxy/health` 由代理自己返回 `{"status":"ok"}`，不连上游；设置了验证令牌时，像普通请求一样带上。其他 GET 请求都会转发到上游。
 
 ## 接入你的工具
 

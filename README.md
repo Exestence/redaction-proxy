@@ -67,7 +67,7 @@ npx redaction-proxy --demo
 npx redaction-proxy           # the proxy, on http://127.0.0.1:8787 (loopback: no token needed)
 ```
 
-There is no health endpoint: the proxy relays GET requests to the upstream.
+Health check: `curl http://127.0.0.1:8787/_redaction-proxy/health` answers `{"status":"ok"}` from the proxy itself, without contacting the upstream; with an auth token set, send it as for any request. Every other GET is relayed to the upstream.
 
 ## Point your tool at it
 
