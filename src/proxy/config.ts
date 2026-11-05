@@ -46,7 +46,7 @@ export function toolKey(name: string): string {
 export const DEFAULT_TOOL_RESTORE_CATEGORIES: readonly string[] = ['PATH', 'TERM', 'PROJECT']
 
 /** Every category a placeholder can have. */
-const CATEGORIES: readonly string[] = [...RULE_CATEGORIES, ...NAME_MODEL_CATEGORIES]
+const CATEGORIES: readonly string[] = [...new Set([...RULE_CATEGORIES, ...NAME_MODEL_CATEGORIES])]
 
 /** Validated proxy configuration. */
 export interface ProxyConfig {

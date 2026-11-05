@@ -28,10 +28,10 @@ describe('extended rule configuration', () => {
   it('leaves the default detector version and digest alone and versions a detector with any extended rule', () => {
     expect(new RulesDetector().policyDigest).toBe(DEFAULT_DIGEST)
     const withHost = new RulesDetector({ rules: [...DEFAULT_RULE_NAMES, 'private-host'] })
-    expect(withHost.detectorVersion).toBe(`${DETECTOR_VERSION}+ext-1`)
+    expect(withHost.detectorVersion).toBe(`${DETECTOR_VERSION}+ext-2`)
     expect(withHost.policyDigest).not.toBe(DEFAULT_DIGEST)
-    expect(new RulesDetector({ rules: ['iban', 'token-format'] }).detectorVersion).toBe(`${DETECTOR_VERSION}+intl-2+ext-1`)
-    expect(new RulesDetector({ rules: [...EXTENDED_RULE_NAMES] }).categories).toEqual(['CARD', 'ENTROPY', 'KEY', 'HOST', 'TWID', 'PHONE', 'EMAIL', 'IP'])
+    expect(new RulesDetector({ rules: ['iban', 'token-format'] }).detectorVersion).toBe(`${DETECTOR_VERSION}+intl-2+ext-2`)
+    expect(new RulesDetector({ rules: [...EXTENDED_RULE_NAMES] }).categories).toEqual(['CARD', 'ENTROPY', 'KEY', 'HOST', 'TWID', 'PHONE', 'EMAIL', 'IP', 'ADDR'])
   })
 })
 
@@ -353,6 +353,49 @@ describe('ip-cgnat-ula', () => {
   })
 })
 
+describe('address-cjk', () => {
+  it.each([
+    ['寄到 台北市大安區復興南路一段390號3樓', '寄到 ⟦ADDR_1⟧'],
+    ['地址：新北市板橋區文化路二段100巷5弄8號', '地址：⟦ADDR_1⟧'],
+    ['我住 大安區和平東路三段12號5樓之1', '我住 ⟦ADDR_1⟧'],
+    ['收件 106台北市大安區復興南路一段390號', '收件 ⟦ADDR_1⟧'],
+    ['寄到台北市大安區復興南路一段390號，謝謝', '寄到⟦ADDR_1⟧，謝謝'],
+    ['店在中山路100號', '店在⟦ADDR_1⟧'],
+    ['收货地址 北京市朝阳区建国路88号院3号楼1201室', '收货地址 ⟦ADDR_1⟧'],
+    ['寄 上海市浦东新区世纪大道100号', '寄 ⟦ADDR_1⟧'],
+    ['在 台北市中正區網路街3號', '在 ⟦ADDR_1⟧'],
+    ['住所は 東京都千代田区丸の内1-9-1 です', '住所は ⟦ADDR_1⟧ です'],
+    ['〒100-0005 東京都千代田区丸の内一丁目9番1号', '⟦ADDR_1⟧'],
+    ['寄到 台北市大安區復興南路一段390號', '寄到 ⟦ADDR_1⟧'],
+    ['店在中山一路100號', '店在⟦ADDR_1⟧'],
+    ['1988年台北市建成區重慶北路一段67號8樓之2', '1988年⟦ADDR_1⟧'],
+    ['第3屆台北市大安區復興南路一段390號', '第3屆⟦ADDR_1⟧'],
+    ['北京市朝阳区建国路88号', '⟦ADDR_1⟧'],
+    ['台北市大安區復興南路一段390號3樓', '⟦ADDR_1⟧'],
+    ['東京都千代田区丸の内1-9-1', '⟦ADDR_1⟧'],
+  ])('masks %j', async (text, expected) => {
+    expect(await maskWith(['address-cjk'], text)).toBe(expected)
+  })
+
+  it.each([
+    ['a day of the month', '11月3號開會，3號見'],
+    ['an exit and an ordinal', '從3號出口出來，第3號選手'],
+    ['a bus route', '搭3路公車到站'],
+    ['words ending in 路 that are not roads', '網路3號機房、電路3號板、思路3號、一路3號'],
+    ['a city or a road alone', '台北市很熱，復興南路很塞'],
+    ['a road without a house number', '復興南路一段390巷'],
+    ['a Japanese postal code alone', '〒100-0005'],
+    ['a Japanese prefecture without a block number', '東京都千代田区丸の内'],
+    ['a meeting room and a floor', '大安會議室 3 樓'],
+  ])('leaves %s alone', async (_name, text) => {
+    expect(await maskWith(['address-cjk'], text)).toBe(text)
+  })
+
+  it('keeps a phone number next to an address its own value', async () => {
+    expect(await maskWith(['address-cjk', 'phone'], '台北市大安區復興南路一段390號 0912-345-678')).toBe('⟦ADDR_1⟧ ⟦PHONE_1⟧')
+  })
+})
+
 describe('pathological inputs to the extended rules', () => {
   const SIZE = 200 * 1024
   it.each([
@@ -360,6 +403,7 @@ describe('pathological inputs to the extended rules', () => {
     '.corp', 'a.corp.b', '.home.arpa.', 'com.a.corp.', 'glpat-', 'SG.aaaaaaaaaaaaaaaa.', 'eyJaaaaaaaaaa.aa.',
     'sig=', 'AccountKey=', '1234567890:AA', 'token ', 'key is ', 'password: ', 'pw ', 'token is is ', ' \t',
     'a1234\u00a0', '護照 ', '健保卡 0000 ', '0912.345.', 'a&#64;', 'a\\u0040', '100.64.1.', 'fd12:', '"密碼": ',
+    '台北市', '大安區', '中山路1', '1號', '路1巷', '1234台', '號1樓', '東京都千代田区', '千代田区1-', '〒100-0005 東京都',
   ])('masks 200KB of %j within 5s of CPU time', async unit => {
     const text = unit.repeat(Math.ceil(SIZE / unit.length)).slice(0, SIZE)
     const started = process.cpuUsage()
