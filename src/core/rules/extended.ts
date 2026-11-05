@@ -5,7 +5,7 @@
  * `card` and `entropy` rules, looser spellings of Taiwan identification and
  * mobile numbers, passport and health-insurance card numbers after a keyword,
  * escaped email addresses, shared and unique local network addresses, and
- * Chinese and Japanese street addresses. Hosts that persist a policy digest keep the
+ * Chinese, Japanese, and English street addresses. Hosts that persist a policy digest keep the
  * default rules; the proxy, which persists none, enables these.
  *
  * @module redaction-proxy/core/rules/extended
@@ -33,11 +33,12 @@ export type ExtendedRuleName =
   | 'email-escaped'
   | 'ip-cgnat-ula'
   | 'address-cjk'
+  | 'address-en'
 
 /** Every extended rule name, in declaration order. */
 export const EXTENDED_RULE_NAMES: readonly ExtendedRuleName[] = [
   'card-strict', 'entropy-strict', 'private-host', 'token-format', 'credential-phrase',
-  'tw-national-id-loose', 'tw-passport-nhi', 'tw-mobile-loose', 'email-escaped', 'ip-cgnat-ula', 'address-cjk',
+  'tw-national-id-loose', 'tw-passport-nhi', 'tw-mobile-loose', 'email-escaped', 'ip-cgnat-ula', 'address-cjk', 'address-en',
 ]
 
 /**
@@ -61,6 +62,7 @@ export const EXTENDED_RULE_CATEGORIES: Readonly<Record<ExtendedRuleName, readonl
   'email-escaped': ['EMAIL'],
   'ip-cgnat-ula': ['IP'],
   'address-cjk': ['ADDR'],
+  'address-en': ['ADDR'],
 }
 
 /**
@@ -413,8 +415,12 @@ const CN_NUMERAL = '[一二三四五六七八九十]'
  * A Chinese street address in Taiwan or mainland China, in either script: an
  * optional postal code and administrative divisions, a road (a name of one to
  * four Han characters ending in 路, 街, 大道, 大街, or 胡同, with an optional
- * section), optional lanes and alleys, a house number ending in 號 or 号, then
- * optional floors, buildings, units, and rooms. A number before the divisions is
+ * section, which may carry a direction: `東一段`), optional lanes and alleys, a
+ * house number ending in 號 or 号 (`390之1號` or `390-1號`), then optional floors,
+ * buildings, units, and rooms; one space may stand around each number
+ * (`四段 100 號 5 樓`). Hong Kong and Macau names may lead, and a road ending in
+ * 道 alone is read under {@link NOT_DAO_ROAD}. A village, community, or park may
+ * come between the district and the road (`科技园科苑路`). A number before the divisions is
  * a postal code only when no `年`, `屆`, or other counter follows it
  * (`1988年台北市…` keeps the year). The road and the house number
  * are both required, so `11月3號`, `3號出口`, `第3號`, and a city or road name
@@ -425,18 +431,27 @@ const CN_NUMERAL = '[一二三四五六七八九十]'
  */
 const CN_ADDRESS = new RegExp(
   `(?<!\\d)`
-  + `(?<admin>(?:\\d{3,6})?(?![年屆届次期個个])(?:${PLACE_CHAR}{1,4}(?:省|自治區|自治区))?(?:${PLACE_CHAR}{1,3}[市縣县])?(?:${PLACE_CHAR}{1,4}[區区鄉乡鎮镇市])?)`
-  + `(?<road>${PLACE_CHAR}{1,4}(?:路|街|大道|大街|胡同)(?:(?:\\d{1,2}|${CN_NUMERAL}{1,3})段)?)`
-  + `(?:\\d+[巷弄衖])*`
-  + `\\d+(?:之\\d+)?[號号]`
-  + `(?:之\\d+)?院?(?:(?:\\d+|${CN_NUMERAL}{1,3})[號号]?(?:樓|楼|層|层|F|棟|栋|幢|座|單元|单元|室)(?:之\\d+)?){0,4}`,
+  + `(?<admin>(?:\\d{3,6})?(?![年屆届次期個个])(?:香港|九龍|九龙|新界|澳門|澳门)?`
+  + `(?:${PLACE_CHAR}{1,4}(?:省|自治區|自治区))?(?:${PLACE_CHAR}{1,3}[市縣县])?(?:${PLACE_CHAR}{1,4}[區区鄉乡鎮镇市])?`
+  + `(?:${PLACE_CHAR}{1,3}(?:里|村|社區|社区|園區|园区|園|园|新村))?(?:\\d+鄰)?)`
+  + `(?<road>${PLACE_CHAR}{1,4}(?:路|街|大道|大街|胡同|道)(?:[東西南北东]?(?:\\d{1,2}|${CN_NUMERAL}{1,3})段)?)`
+  + `(?: ?\\d+ ?[巷弄衖])*`
+  + ` ?\\d+(?:[之\\-]\\d+)? ?[號号]`
+  + `(?:之\\d+)?院?(?: ?(?:\\d+|${CN_NUMERAL}{1,3}) ?[號号]? ?(?:樓|楼|層|层|F|棟|栋|幢|座|單元|单元|室)(?:之\\d+)?){0,4}`,
   'gv',
 )
 /**
  * Words ending in 路 that are not roads; without a division before them they are
- * not read as one. `一路` alone is a phrase, but `中山一路` is a road.
+ * not read as one. `一路` alone is a phrase, but `中山一路` is a road; `高速公路` is a highway.
  */
-const NOT_ROAD = /(?:(?:網|网|線|线|電|电|迴|回|思|套|出|通|銷|销|門|门)路|^一路)(?:(?:\d{1,2}|[一二三四五六七八九十]{1,3})段)?$/u
+const NOT_ROAD = /(?:(?:網|网|線|线|電|电|迴|回|思|套|出|通|銷|销|門|门|公)路|^一路)(?:[東西南北东]?(?:\d{1,2}|[一二三四五六七八九十]{1,3})段)?$/u
+/**
+ * A road ending in 道 alone (Hong Kong's 彌敦道) needs a name of two characters or
+ * more, and not a word that ends in 道: `知道3號` and `管道3號` are not addresses,
+ * and a numbered route (`國道3號`, `縣道137號`, `東京都道318號`) is a highway.
+ */
+const NOT_DAO_ROAD = /^.?道|(?:人行|管|頻|频|渠|通|軌|轨|跑|隧|味|知|報|报|難|难|說|说|問|问|國|国|車|车|水|坑|赤|地|古|都|縣|县|省|市|鄉|乡|府|區|区|州)道$/u
+
 /**
  * A Japanese address: an optional postal code, a prefecture (都, 道, 府, 県),
  * one or two municipalities, a town name, and a block and lot number written
@@ -460,11 +475,128 @@ function collectCjkAddressCandidates(text: string, push: PushCandidate): void {
     // oxlint-disable-next-line typescript/no-non-null-assertion -- both groups always take part in a match.
     const { admin, road } = match.groups!
     if (admin === '' && NOT_ROAD.test(road!)) return
+    const name = road!.replace(/[東西南北东]?(?:\d{1,2}|[一二三四五六七八九十]{1,3})段$/u, '')
+    if (name.endsWith('道') && !name.endsWith('大道') && NOT_DAO_ROAD.test(name)) return
     push(match.index, match.index + match[0].length, 'ADDR', PRIORITY_PII)
   })
   runAll(JP_ADDRESS, text, (match) => {
     push(match.index, match.index + match[0].length, 'ADDR', PRIORITY_PII)
   })
+}
+
+/**
+ * Each street type in its title-case and upper-case spellings, with an optional
+ * trailing dot for the abbreviations.
+ * @param words - title-case spellings.
+ * @returns an alternation.
+ */
+const streetTypes = (words: readonly string[]): string => words.flatMap(word => [word, word.toUpperCase()]).join('|')
+/** Street types that name a street in prose by themselves: `42 Wallaby Way`. */
+const EN_STREET_STRONG = streetTypes([
+  'Street', 'St', 'Avenue', 'Ave', 'Road', 'Rd', 'Boulevard', 'Blvd', 'Lane', 'Ln', 'Drive', 'Terrace', 'Parkway', 'Pkwy',
+  'Highway', 'Hwy', 'Way', 'Crescent', 'Cres', 'Gardens', 'Grove', 'Mews', 'Trail', 'Alley', 'Expressway',
+])
+/**
+ * Street types that are also ordinary words (`the 9 Supreme Court justices`,
+ * `2 Dr Pepper`): read only with a unit, or a city followed by a state or a
+ * postcode.
+ */
+const EN_STREET_WEAK = streetTypes(['Court', 'Ct', 'Place', 'Pl', 'Square', 'Sq', 'Circle', 'Cir', 'Dr', 'Plaza', 'Loop', 'Walk', 'Row', 'Close'])
+/** An apartment, suite, unit, flat, room, or floor and its number. */
+const EN_UNIT = '(?:Apt|Apartment|Suite|Ste|Unit|Flat|Room|Rm|Floor|Fl|APT|SUITE|UNIT|FLAT)\\.?\\s*#?\\s*[A-Za-z0-9-]{1,6}'
+/** A house number: `12`, `221B`, `12-14`. */
+const EN_NUMBER = '\\d{1,6}[A-Za-z]?(?:-\\d{1,6}[A-Za-z]?)?'
+/** A compass direction before or after the street name. */
+const EN_DIRECTION = '(?:N|S|E|W|NE|NW|SE|SW|North|South|East|West)\\.?'
+/** One word of a street name: capitalized (`Maple`, `FIFTH`) or an ordinal (`5th`). */
+const EN_NAME_WORD = "(?:[A-Z][A-Za-z'’]*|\\d{1,3}(?:st|nd|rd|th))"
+/** A city of one to three capitalized words. */
+const EN_CITY = '[A-Z][a-z]+(?:[ -][A-Z][a-z]+){0,2}'
+/** A UK postcode: `NW1 6XE`, `LS1 4AP`. */
+const UK_POSTCODE = '[A-Z]{1,2}\\d[A-Z\\d]?\\s?\\d[A-Z]{2}'
+/** A US state code, with an optional ZIP code, or a UK postcode. */
+const EN_REGION = `(?:[A-Z]{2}(?:\\s+\\d{5}(?:-\\d{4})?)?|${UK_POSTCODE})(?![A-Za-z0-9])`
+/**
+ * An English street address: an optional unit, a house number, one to four
+ * name words ending in a street type, an optional direction and unit, and an
+ * optional city with a state, ZIP code, or postcode. A weak street type needs
+ * the unit or the region.
+ */
+const EN_ADDRESS = new RegExp(
+  `(?<![\\w.-])(?<before>${EN_UNIT},?\\s+)?`
+  + `${EN_NUMBER}\\s+(?:${EN_DIRECTION}\\s+)?(?<names>(?:${EN_NAME_WORD}\\s+){1,4})`
+  + `(?:(?<strong>${EN_STREET_STRONG})|(?<weak>${EN_STREET_WEAK}))\\.?(?![A-Za-z0-9])(?:\\s+${EN_DIRECTION}(?![A-Za-z]))?`
+  + `(?<after>,?\\s+${EN_UNIT}|\\s*#\\s?[A-Za-z0-9-]{1,6})?`
+  + `(?:,\\s*${EN_CITY}(?<region>(?:,\\s*|\\s+)${EN_REGION})?)?`,
+  'g',
+)
+/**
+ * An English address typed in lower case: read only with a state and ZIP code
+ * or a postcode after the city, which no sentence has by chance.
+ */
+const EN_ADDRESS_ANY_CASE = new RegExp(
+  `(?<![\\w.-])${EN_NUMBER}\\s+(?:[a-z0-9'’]+\\s+){1,4}(?:${EN_STREET_STRONG}|${EN_STREET_WEAK})\\.?`
+  + `(?:,?\\s+${EN_UNIT})?,\\s*[a-z]+(?:[ -][a-z]+){0,2},?\\s+(?:[a-z]{2}\\s+\\d{5}(?:-\\d{4})?|${UK_POSTCODE})(?![A-Za-z0-9])`,
+  'gi',
+)
+/** A post office box, with an optional city and region. */
+const EN_PO_BOX = new RegExp(
+  `(?<![\\w.])(?:P\\.?\\s?O\\.?\\s?Box|Post\\s+Office\\s+Box)\\s+\\d{1,8}(?![\\w])(?:,\\s*${EN_CITY}(?:(?:,\\s*|\\s+)${EN_REGION})?)?`,
+  'gi',
+)
+
+/** Every street type, lower case, for checking a name word. */
+const EN_STREET_TYPES = new Set(`${EN_STREET_STRONG}|${EN_STREET_WEAK}`.split('|').map(word => word.toLowerCase()))
+/** A first name word that opens a phrase, not a street name: `3 Very Close calls`, `12 The Long Road`. */
+const EN_NOT_FIRST = new Set(['the', 'a', 'an', 'my', 'your', 'our', 'their', 'his', 'her', 'its', 'this', 'that', 'these', 'those', 'very', 'most', 'more', 'less', 'few', 'many'])
+/** Units and acronyms that make the number a quantity: `2 TB Hard Drive`, `64 GB USB Drive`. */
+const EN_QUANTITY_WORDS = new Set(['kb', 'mb', 'gb', 'tb', 'pb', 'usb', 'ssd', 'hdd', 'nvme', 'sata'])
+/** A last name word and street type that make a common phrase, not a street. */
+const EN_NOT_STREET = new Set([
+  'google drive', 'hard drive', 'flash drive', 'disk drive', 'usb drive', 'test drive', 'network drive', 'shared drive',
+  'cloud drive', 'thumb drive', 'external drive', 'state drive', 'optical drive', 'tape drive', 'milky way', 'memory lane',
+  'fast lane', 'slow lane', 'bus lane', 'silk road', 'long road', 'open road', 'easy street', 'main drive', 'only way',
+])
+/** A word right before the number that makes it an index: `Chapter 12 The Long Road`, `Step 3 Main Street`. */
+const EN_INDEX_BEFORE = /(?:chapter|episode|part|volume|vol\.?|season|book|step|track|no\.?|number|level|stage|section|act|scene|page|route|interstate|version|issue|item|rule|figure|fig\.?|table|exhibit|lesson|unit|day|week|top)\s*$/i
+
+/**
+ * Whether an English street match is a phrase rather than an address.
+ * @param text - the scanned text.
+ * @param start - the match's start offset.
+ * @param names - the name words before the street type.
+ * @param type - the street type.
+ * @returns whether to leave the match alone.
+ */
+function isEnglishStreetPhrase(text: string, start: number, names: string, type: string): boolean {
+  const words = names.trim().split(/\s+/).map(word => word.toLowerCase())
+  // oxlint-disable-next-line typescript/no-non-null-assertion -- the pattern takes one to four name words.
+  const last = words.at(-1)!
+  if (EN_STREET_TYPES.has(last) || EN_NOT_FIRST.has(words[0]!)) return true
+  if (words.some(word => EN_QUANTITY_WORDS.has(word))) return true
+  if (EN_NOT_STREET.has(`${last} ${type.toLowerCase()}`)) return true
+  return EN_INDEX_BEFORE.test(text.slice(Math.max(0, start - 20), start))
+}
+
+/**
+ * Collect English street addresses and post office boxes.
+ * @param text - text to scan.
+ * @param push - candidate sink.
+ */
+function collectEnglishAddressCandidates(text: string, push: PushCandidate): void {
+  runAll(EN_ADDRESS, text, (match) => {
+    // oxlint-disable-next-line typescript/no-non-null-assertion -- the pattern has named groups.
+    const { names, strong, weak, before, after, region } = match.groups!
+    if (weak !== undefined && before === undefined && after === undefined && region === undefined) return
+    // oxlint-disable-next-line typescript/no-non-null-assertion -- one of the two street-type groups always takes part.
+    if (isEnglishStreetPhrase(text, match.index + (before?.length ?? 0), names!, (strong ?? weak)!)) return
+    push(match.index, match.index + match[0].length, 'ADDR', PRIORITY_PII)
+  })
+  for (const pattern of [EN_ADDRESS_ANY_CASE, EN_PO_BOX]) {
+    runAll(pattern, text, (match) => {
+      push(match.index, match.index + match[0].length, 'ADDR', PRIORITY_PII)
+    })
+  }
 }
 
 /**
@@ -481,4 +613,5 @@ export const EXTENDED_COLLECTORS: Readonly<Partial<Record<ExtendedRuleName, Exte
   'email-escaped': collectEscapedEmailCandidates,
   'ip-cgnat-ula': collectSharedAndUniqueLocalCandidates,
   'address-cjk': collectCjkAddressCandidates,
+  'address-en': collectEnglishAddressCandidates,
 }
