@@ -424,6 +424,8 @@ describe('address-en', () => {
     ['Pick up at 19 Fictional Drive, Portland, OR', 'Pick up at ⟦ADDR_1⟧'],
     ['Meet at 3 Fictional Court, Austin, TX', 'Meet at ⟦ADDR_1⟧'],
     ['SEND TO 350 FIFTH AVENUE', 'SEND TO ⟦ADDR_1⟧'],
+    ['Pick up at 7 Fictional Drive', 'Pick up at ⟦ADDR_1⟧'],
+    ['Our office: 10 New Street', 'Our office: ⟦ADDR_1⟧'],
   ])('masks %j', async (text, expected) => {
     expect(await maskWith(['address-en'], text)).toBe(expected)
   })
@@ -437,6 +439,11 @@ describe('address-en', () => {
     ['sections and versions', 'see Chapter 3 Section 2 of the Version 2 Road Map'],
     ['a title count', 'she won 3 Grand Slam titles'],
     ['a street type glued to a word', 'the 2 Main Streetwise awards'],
+    ['a cloud folder and drive sizes', 'sync 3 Google Drive folders to a 2 TB Hard Drive and a 64 GB USB Drive'],
+    ['a street type as a name word', 'a 4 Lane Highway and a 2 Way Street'],
+    ['a title after an index word', 'Chapter 12 The Long Road Home; Step 3 Fictional Street'],
+    ['phrases with a determiner', '3 Very Close calls and 2 The Grand Avenue tours'],
+    ['idioms', 'the 1 Milky Way, 1 Memory Lane walk, and 2 Silk Road trips'],
   ])('leaves %s alone', async (_name, text) => {
     expect(await maskWith(['address-en'], text)).toBe(text)
   })

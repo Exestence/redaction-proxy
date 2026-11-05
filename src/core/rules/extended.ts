@@ -494,14 +494,14 @@ const streetTypes = (words: readonly string[]): string => words.flatMap(word => 
 /** Street types that name a street in prose by themselves: `42 Wallaby Way`. */
 const EN_STREET_STRONG = streetTypes([
   'Street', 'St', 'Avenue', 'Ave', 'Road', 'Rd', 'Boulevard', 'Blvd', 'Lane', 'Ln', 'Drive', 'Terrace', 'Parkway', 'Pkwy',
-  'Highway', 'Hwy', 'Way', 'Close', 'Crescent', 'Cres', 'Gardens', 'Grove', 'Mews', 'Trail', 'Alley', 'Expressway',
+  'Highway', 'Hwy', 'Way', 'Crescent', 'Cres', 'Gardens', 'Grove', 'Mews', 'Trail', 'Alley', 'Expressway',
 ])
 /**
  * Street types that are also ordinary words (`the 9 Supreme Court justices`,
  * `2 Dr Pepper`): read only with a unit, or a city followed by a state or a
  * postcode.
  */
-const EN_STREET_WEAK = streetTypes(['Court', 'Ct', 'Place', 'Pl', 'Square', 'Sq', 'Circle', 'Cir', 'Dr', 'Plaza', 'Loop', 'Walk', 'Row'])
+const EN_STREET_WEAK = streetTypes(['Court', 'Ct', 'Place', 'Pl', 'Square', 'Sq', 'Circle', 'Cir', 'Dr', 'Plaza', 'Loop', 'Walk', 'Row', 'Close'])
 /** An apartment, suite, unit, flat, room, or floor and its number. */
 const EN_UNIT = '(?:Apt|Apartment|Suite|Ste|Unit|Flat|Room|Rm|Floor|Fl|APT|SUITE|UNIT|FLAT)\\.?\\s*#?\\s*[A-Za-z0-9-]{1,6}'
 /** A house number: `12`, `221B`, `12-14`. */
@@ -524,7 +524,7 @@ const EN_REGION = `(?:[A-Z]{2}(?:\\s+\\d{5}(?:-\\d{4})?)?|${UK_POSTCODE})(?![A-Z
  */
 const EN_ADDRESS = new RegExp(
   `(?<![\\w.-])(?<before>${EN_UNIT},?\\s+)?`
-  + `${EN_NUMBER}\\s+(?:${EN_DIRECTION}\\s+)?(?:${EN_NAME_WORD}\\s+){1,4}`
+  + `${EN_NUMBER}\\s+(?:${EN_DIRECTION}\\s+)?(?<names>(?:${EN_NAME_WORD}\\s+){1,4})`
   + `(?:(?<strong>${EN_STREET_STRONG})|(?<weak>${EN_STREET_WEAK}))\\.?(?![A-Za-z0-9])(?:\\s+${EN_DIRECTION}(?![A-Za-z]))?`
   + `(?<after>,?\\s+${EN_UNIT}|\\s*#\\s?[A-Za-z0-9-]{1,6})?`
   + `(?:,\\s*${EN_CITY}(?<region>(?:,\\s*|\\s+)${EN_REGION})?)?`,
@@ -545,6 +545,39 @@ const EN_PO_BOX = new RegExp(
   'gi',
 )
 
+/** Every street type, lower case, for checking a name word. */
+const EN_STREET_TYPES = new Set(`${EN_STREET_STRONG}|${EN_STREET_WEAK}`.split('|').map(word => word.toLowerCase()))
+/** A first name word that opens a phrase, not a street name: `3 Very Close calls`, `12 The Long Road`. */
+const EN_NOT_FIRST = new Set(['the', 'a', 'an', 'my', 'your', 'our', 'their', 'his', 'her', 'its', 'this', 'that', 'these', 'those', 'very', 'most', 'more', 'less', 'few', 'many'])
+/** Units and acronyms that make the number a quantity: `2 TB Hard Drive`, `64 GB USB Drive`. */
+const EN_QUANTITY_WORDS = new Set(['kb', 'mb', 'gb', 'tb', 'pb', 'usb', 'ssd', 'hdd', 'nvme', 'sata'])
+/** A last name word and street type that make a common phrase, not a street. */
+const EN_NOT_STREET = new Set([
+  'google drive', 'hard drive', 'flash drive', 'disk drive', 'usb drive', 'test drive', 'network drive', 'shared drive',
+  'cloud drive', 'thumb drive', 'external drive', 'state drive', 'optical drive', 'tape drive', 'milky way', 'memory lane',
+  'fast lane', 'slow lane', 'bus lane', 'silk road', 'long road', 'open road', 'easy street', 'main drive', 'only way',
+])
+/** A word right before the number that makes it an index: `Chapter 12 The Long Road`, `Step 3 Main Street`. */
+const EN_INDEX_BEFORE = /(?:chapter|episode|part|volume|vol\.?|season|book|step|track|no\.?|number|level|stage|section|act|scene|page|route|interstate|version|issue|item|rule|figure|fig\.?|table|exhibit|lesson|unit|day|week|top)\s*$/i
+
+/**
+ * Whether an English street match is a phrase rather than an address.
+ * @param text - the scanned text.
+ * @param start - the match's start offset.
+ * @param names - the name words before the street type.
+ * @param type - the street type.
+ * @returns whether to leave the match alone.
+ */
+function isEnglishStreetPhrase(text: string, start: number, names: string, type: string): boolean {
+  const words = names.trim().split(/\s+/).map(word => word.toLowerCase())
+  // oxlint-disable-next-line typescript/no-non-null-assertion -- the pattern takes one to four name words.
+  const last = words.at(-1)!
+  if (EN_STREET_TYPES.has(last) || EN_NOT_FIRST.has(words[0]!)) return true
+  if (words.some(word => EN_QUANTITY_WORDS.has(word))) return true
+  if (EN_NOT_STREET.has(`${last} ${type.toLowerCase()}`)) return true
+  return EN_INDEX_BEFORE.test(text.slice(Math.max(0, start - 20), start))
+}
+
 /**
  * Collect English street addresses and post office boxes.
  * @param text - text to scan.
@@ -553,8 +586,10 @@ const EN_PO_BOX = new RegExp(
 function collectEnglishAddressCandidates(text: string, push: PushCandidate): void {
   runAll(EN_ADDRESS, text, (match) => {
     // oxlint-disable-next-line typescript/no-non-null-assertion -- the pattern has named groups.
-    const { weak, before, after, region } = match.groups!
+    const { names, strong, weak, before, after, region } = match.groups!
     if (weak !== undefined && before === undefined && after === undefined && region === undefined) return
+    // oxlint-disable-next-line typescript/no-non-null-assertion -- one of the two street-type groups always takes part.
+    if (isEnglishStreetPhrase(text, match.index + (before?.length ?? 0), names!, (strong ?? weak)!)) return
     push(match.index, match.index + match[0].length, 'ADDR', PRIORITY_PII)
   })
   for (const pattern of [EN_ADDRESS_ANY_CASE, EN_PO_BOX]) {
