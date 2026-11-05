@@ -5,7 +5,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import { printable } from '../src/core/printable.ts'
-import { loadConfig } from '../src/proxy/config.ts'
+import { loadConfig } from '../src/proxy/load-config.ts'
 
 const dir = mkdtempSync(join(tmpdir(), 'config-file-'))
 

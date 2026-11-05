@@ -3,7 +3,7 @@
  * come from the file; an upstream key may come from the environment as a
  * fallback for clients that send no credentials, and stays in memory.
  *
- * @module redaction-proxy/proxy/config
+ * @module redaction-proxy/proxy/load-config
  */
 
 import { readFileSync } from 'node:fs'

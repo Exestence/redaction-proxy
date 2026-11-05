@@ -26,8 +26,8 @@ import { NameModelDetector, NameModelError, containsStandingAlone, isSearchedVal
 import { isProtocolFieldName } from '../core/rules/secret.ts'
 import type { NameModel } from '../core/model/name-model.ts'
 import { NAME_MODEL_CATEGORIES } from '../core/model/config.ts'
-import { isLoopbackHost, toolKey } from './config.ts'
-import type { ProxyConfig, ToolRestorePolicy } from './config.ts'
+import { isLoopbackHost, toolKey } from './load-config.ts'
+import type { ProxyConfig, ToolRestorePolicy } from './load-config.ts'
 
 /** Which wire API a route speaks. */
 type Api = 'chat' | 'responses' | 'messages'

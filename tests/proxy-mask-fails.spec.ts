@@ -4,7 +4,7 @@ import { createServer } from 'node:http'
 import type { IncomingHttpHeaders, Server } from 'node:http'
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 import { RedactionError, mask } from '../src/core/index.ts'
-import { loadConfig } from '../src/proxy/config.ts'
+import { loadConfig } from '../src/proxy/load-config.ts'
 import { closeProxy, createProxyServer, listen } from '../src/proxy/server.ts'
 
 vi.mock('../src/core/index.ts', async importOriginal => {

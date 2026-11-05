@@ -4,8 +4,8 @@
 import { createServer } from 'node:http'
 import type { IncomingHttpHeaders, Server } from 'node:http'
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest'
-import { DEFAULT_TOOL_RESTORE_CATEGORIES, loadConfig } from '../src/proxy/config.ts'
-import type { ProxyConfig } from '../src/proxy/config.ts'
+import { DEFAULT_TOOL_RESTORE_CATEGORIES, loadConfig } from '../src/proxy/load-config.ts'
+import type { ProxyConfig } from '../src/proxy/load-config.ts'
 import { createProxyServer, listen } from '../src/proxy/server.ts'
 
 const A = 'first.fictional@example.test'

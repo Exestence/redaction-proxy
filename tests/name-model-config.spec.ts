@@ -8,7 +8,7 @@ import { RulesDetector } from '../src/core/index.ts'
 import { DEFAULT_NAME_MODEL_ALLOWLIST, resolveNameModelConfig } from '../src/core/model/config.ts'
 import { NameModelDetector } from '../src/core/model/detector.ts'
 import { loadNameModel } from '../src/core/model/name-model.ts'
-import { loadConfig } from '../src/proxy/config.ts'
+import { loadConfig } from '../src/proxy/load-config.ts'
 import { fakeNameModel } from './name-model-fake.ts'
 
 const RULES_ONLY_DIGEST = 'sha256:2e02d33a356f25bd3b258d00a19728d837d8be95e1bb1c46422e0a67828c674d'

@@ -17,7 +17,7 @@ import {
   resolveRulesConfig,
   restore,
 } from '../src/core/index.ts'
-import { loadConfig } from '../src/proxy/config.ts'
+import { loadConfig } from '../src/proxy/load-config.ts'
 
 /** Policy digest of the default rules, which the international rules leave alone. */
 const DEFAULT_DIGEST = 'sha256:2e02d33a356f25bd3b258d00a19728d837d8be95e1bb1c46422e0a67828c674d'
