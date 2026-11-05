@@ -12,7 +12,7 @@ If content must never leave your machine, answer it with a local model instead; 
 
 > **Status:** 0.3.1, not yet on npm. Verified with real services: DeepSeek Chat Completions (2026-10-08), Anthropic Messages through Claude Code and dsh (2026-10-14), the official Anthropic SDK against Anthropic Messages (2026-10-21), and Codex CLI against DeepSeek's Responses API (2026-11-05); see below. OpenAI's own API is not verified yet.
 
-> This is a learning and exploration project. Issues and pull requests are welcome; I'll look at them when I have time.
+> This is a learning and exploration project. Issues and pull requests are welcome; I'll look at them when I have time. A way around the masking is a security bug: report it privately ([SECURITY.md](SECURITY.md)), not in a public issue.
 
 ## Intro video
 
