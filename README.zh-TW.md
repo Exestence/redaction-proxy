@@ -58,6 +58,8 @@ docker run --rm -p 127.0.0.1:8787:8787 -e REDACTION_PROXY_AUTH_TOKEN redaction-p
 
 上游是非本機的明文 `http://`（例如經由 `host.docker.internal` 連到的本機模型伺服器）時，另加 `-e REDACTION_PROXY_ALLOW_INSECURE_UPSTREAM=1`。`maskLocalUsername` 略過容器的使用者 `node`，所以在映像中不遮任何字。
 
+映像內建 `HEALTHCHECK`，會詢問代理自己的健康檢查端點（不連上游），所以 `docker ps` 會顯示 `healthy`。它從 `REDACTION_PROXY_PORT` 和 `REDACTION_PROXY_AUTH_TOKEN` 讀 port 和權杖；如果設定檔指定了別的 port 或權杖，請同時用對應的環境變數（例如 `-e REDACTION_PROXY_PORT=…`）指定同一個值，否則容器照常運作但會顯示 `unhealthy`。
+
 ### npx（第一次發布到 npm 之後）
 
 目前還沒上 npm，在那之前請照[快速開始](#30-秒快速開始)從 clone 下來的目錄執行。2026-10-14 以本機 tarball 驗證：`npm pack` 對 0.3.0 產生 201.6 kB、60 個檔案的套件，`npx --yes --package=./redaction-proxy-<version>.tgz redaction-proxy --demo` 印出示範輸出，不加 `--demo` 時代理在 127.0.0.1:8787 啟動。發布之後：
@@ -67,7 +69,7 @@ npx redaction-proxy --demo
 npx redaction-proxy           # 啟動代理，位址 http://127.0.0.1:8787（本機不需要權杖）
 ```
 
-代理沒有健康檢查端點：GET 請求會轉送到上游。
+健康檢查：`curl http://127.0.0.1:8787/_redaction-proxy/health` 由代理自己回 `{"status":"ok"}`，不連上游；設了驗證權杖時，照一般請求一樣帶上。其他 GET 請求都會轉送到上游。
 
 ## 讓你的工具走代理
 

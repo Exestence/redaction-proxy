@@ -58,6 +58,8 @@ docker run --rm -p 127.0.0.1:8787:8787 -e REDACTION_PROXY_AUTH_TOKEN redaction-p
 
 上流がループバック以外の平文 `http://`（`host.docker.internal` 経由のローカルモデルサーバーなど）の場合は、`-e REDACTION_PROXY_ALLOW_INSECURE_UPSTREAM=1` も加えます。`maskLocalUsername` はコンテナのユーザー `node` をスキップするので、イメージ内では何もマスクしません。
 
+イメージには `HEALTHCHECK` が組み込まれていて、プロキシ自身のヘルスチェック用エンドポイントに問い合わせます（上流には接続しません）。そのため `docker ps` には `healthy` と表示されます。ポートとトークンは `REDACTION_PROXY_PORT` と `REDACTION_PROXY_AUTH_TOKEN` から読みます。設定ファイルで別のポートやトークンを指定した場合は、同じ値を対応する環境変数（`-e REDACTION_PROXY_PORT=…` など）でも指定してください。指定しないと、コンテナは動作し続けますが `unhealthy` と表示されます。
+
 ### npx（npm への初回公開後）
 
 まだ npm には公開していません。それまでは[クイックスタート](#30-秒クイックスタート)のとおりクローンから実行してください。2026-10-14 にローカルの tarball で検証しました。0.3.0 の `npm pack` で 201.6 kB・60 ファイルのパッケージができ、`npx --yes --package=./redaction-proxy-<version>.tgz redaction-proxy --demo` でデモの出力が表示され、`--demo` なしではプロキシが 127.0.0.1:8787 で起動します。公開後は次のとおりです。
@@ -67,7 +69,7 @@ npx redaction-proxy --demo
 npx redaction-proxy           # プロキシを http://127.0.0.1:8787 で起動（ループバックではトークン不要）
 ```
 
-ヘルスチェック用のエンドポイントはありません。GET リクエストは上流に中継されます。
+ヘルスチェック：`curl http://127.0.0.1:8787/_redaction-proxy/health` にはプロキシ自身が `{"status":"ok"}` を返し、上流には接続しません。認証トークンを設定している場合は、通常のリクエストと同じく付けてください。それ以外の GET リクエストは上流に中継されます。
 
 ## ツールの接続先を変える
 
