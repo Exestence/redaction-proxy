@@ -58,6 +58,8 @@ docker run --rm -p 127.0.0.1:8787:8787 -e REDACTION_PROXY_AUTH_TOKEN redaction-p
 
 上游是非本机的明文 `http://`（例如经由 `host.docker.internal` 访问的本机模型服务器）时，再加 `-e REDACTION_PROXY_ALLOW_INSECURE_UPSTREAM=1`。`maskLocalUsername` 跳过容器的用户 `node`，所以在镜像中不脱敏任何词。
 
+镜像内置 `HEALTHCHECK`，会询问代理自己的健康检查端点（不连上游），所以 `docker ps` 会显示 `healthy`。它从 `REDACTION_PROXY_PORT` 和 `REDACTION_PROXY_AUTH_TOKEN` 读取端口和令牌；如果配置文件指定了别的端口或令牌，请同时用对应的环境变量（例如 `-e REDACTION_PROXY_PORT=…`）指定同一个值，否则容器照常运行但会显示 `unhealthy`。
+
 ### npx（首次发布到 npm 之后）
 
 目前还没有发布到 npm，在那之前请按[30 秒上手](#30-秒上手)从克隆目录运行。2026-10-14 用本地 tarball 验证：`npm pack` 对 0.3.0 生成 201.6 kB、60 个文件的包，`npx --yes --package=./redaction-proxy-<version>.tgz redaction-proxy --demo` 打印演示输出，不加 `--demo` 时代理在 127.0.0.1:8787 启动。发布之后：

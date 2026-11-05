@@ -43,4 +43,9 @@ USER node
 # loadConfig then requires the auth token, and the `-p 127.0.0.1:...` mapping keeps it off the network.
 ENV REDACTION_PROXY_HOST=0.0.0.0
 EXPOSE 8787
+# Asks the proxy's own health endpoint, which never reaches the upstream. It reads the port
+# and token from REDACTION_PROXY_PORT and REDACTION_PROXY_AUTH_TOKEN; a port or token set only
+# in a --config file is not seen: pass the same values in those variables, or the container shows unhealthy.
+HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
+  CMD ["node", "-e", "fetch('http://127.0.0.1:'+(process.env.REDACTION_PROXY_PORT||8787)+'/_redaction-proxy/health',{headers:{'x-redaction-proxy-token':process.env.REDACTION_PROXY_AUTH_TOKEN||''}}).then(r=>process.exit(r.ok?0:1),()=>process.exit(1))"]
 ENTRYPOINT ["node", "lib/cli.js"]

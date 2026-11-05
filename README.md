@@ -58,6 +58,8 @@ A config file, `redaction.toml` (or `.json`): add `-v "$PWD/redaction.toml:/reda
 
 For a plain `http://` upstream that is not loopback, such as a local model server reached through `host.docker.internal`, also add `-e REDACTION_PROXY_ALLOW_INSECURE_UPSTREAM=1`. `maskLocalUsername` skips the container's user `node`, so inside the image it masks nothing.
 
+The image has a `HEALTHCHECK` that asks the proxy's own health endpoint (it never reaches the upstream), so `docker ps` shows `healthy`. It reads the port and token from `REDACTION_PROXY_PORT` and `REDACTION_PROXY_AUTH_TOKEN`; if a config file sets another port or the token, also pass the same value in that variable (`-e REDACTION_PROXY_PORT=…`), or the container shows `unhealthy` while it still serves.
+
 ### npx (after the first npm release)
 
 Not on npm yet; until then, run it from a clone as in the [quick start](#quick-start-30-seconds). A local tarball was verified on 2026-10-14: `npm pack` of 0.3.0 gives a 201.6 kB package of 60 files, `npx --yes --package=./redaction-proxy-<version>.tgz redaction-proxy --demo` prints the demo output, and without `--demo` it starts the proxy on 127.0.0.1:8787. Once it is published:
