@@ -414,7 +414,9 @@ const CN_NUMERAL = '[一二三四五六七八九十]'
  * optional postal code and administrative divisions, a road (a name of one to
  * four Han characters ending in 路, 街, 大道, 大街, or 胡同, with an optional
  * section), optional lanes and alleys, a house number ending in 號 or 号, then
- * optional floors, buildings, units, and rooms. The road and the house number
+ * optional floors, buildings, units, and rooms. A number before the divisions is
+ * a postal code only when no `年`, `屆`, or other counter follows it
+ * (`1988年台北市…` keeps the year). The road and the house number
  * are both required, so `11月3號`, `3號出口`, `第3號`, and a city or road name
  * alone are not read. Every name is up to four {@link PLACE_CHAR}s, so without a
  * division before the road the match can start a few characters early on a
@@ -423,15 +425,18 @@ const CN_NUMERAL = '[一二三四五六七八九十]'
  */
 const CN_ADDRESS = new RegExp(
   `(?<!\\d)`
-  + `(?<admin>(?:\\d{3,6})?(?:${PLACE_CHAR}{1,4}(?:省|自治區|自治区))?(?:${PLACE_CHAR}{1,3}[市縣县])?(?:${PLACE_CHAR}{1,4}[區区鄉乡鎮镇市])?)`
+  + `(?<admin>(?:\\d{3,6})?(?![年屆届次期個个])(?:${PLACE_CHAR}{1,4}(?:省|自治區|自治区))?(?:${PLACE_CHAR}{1,3}[市縣县])?(?:${PLACE_CHAR}{1,4}[區区鄉乡鎮镇市])?)`
   + `(?<road>${PLACE_CHAR}{1,4}(?:路|街|大道|大街|胡同)(?:(?:\\d{1,2}|${CN_NUMERAL}{1,3})段)?)`
   + `(?:\\d+[巷弄衖])*`
   + `\\d+(?:之\\d+)?[號号]`
   + `(?:之\\d+)?院?(?:(?:\\d+|${CN_NUMERAL}{1,3})[號号]?(?:樓|楼|層|层|F|棟|栋|幢|座|單元|单元|室)(?:之\\d+)?){0,4}`,
   'gv',
 )
-/** Words ending in 路 that are not roads; without a division before them they are not read as one. */
-const NOT_ROAD = /(?:網|网|線|线|電|电|迴|回|思|套|出|一|通|銷|销|門|门)路(?:\d{1,2}|[一二三四五六七八九十]{1,3})?段?$/u
+/**
+ * Words ending in 路 that are not roads; without a division before them they are
+ * not read as one. `一路` alone is a phrase, but `中山一路` is a road.
+ */
+const NOT_ROAD = /(?:(?:網|网|線|线|電|电|迴|回|思|套|出|通|銷|销|門|门)路|^一路)(?:(?:\d{1,2}|[一二三四五六七八九十]{1,3})段)?$/u
 /**
  * A Japanese address: an optional postal code, a prefecture (都, 道, 府, 県),
  * one or two municipalities, a town name, and a block and lot number written
