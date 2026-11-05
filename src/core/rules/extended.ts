@@ -4,7 +4,8 @@
  * rule does not know, credentials named in prose, stricter variants of the
  * `card` and `entropy` rules, looser spellings of Taiwan identification and
  * mobile numbers, passport and health-insurance card numbers after a keyword,
- * escaped email addresses, and shared and unique local network addresses. Hosts that persist a policy digest keep the
+ * escaped email addresses, shared and unique local network addresses, and
+ * Chinese and Japanese street addresses. Hosts that persist a policy digest keep the
  * default rules; the proxy, which persists none, enables these.
  *
  * @module redaction-proxy/core/rules/extended
@@ -31,11 +32,12 @@ export type ExtendedRuleName =
   | 'tw-mobile-loose'
   | 'email-escaped'
   | 'ip-cgnat-ula'
+  | 'address-cjk'
 
 /** Every extended rule name, in declaration order. */
 export const EXTENDED_RULE_NAMES: readonly ExtendedRuleName[] = [
   'card-strict', 'entropy-strict', 'private-host', 'token-format', 'credential-phrase',
-  'tw-national-id-loose', 'tw-passport-nhi', 'tw-mobile-loose', 'email-escaped', 'ip-cgnat-ula',
+  'tw-national-id-loose', 'tw-passport-nhi', 'tw-mobile-loose', 'email-escaped', 'ip-cgnat-ula', 'address-cjk',
 ]
 
 /**
@@ -44,7 +46,7 @@ export const EXTENDED_RULE_NAMES: readonly ExtendedRuleName[] = [
  * Unreleased: changes before the first release keep this version; after it,
  * every change to a match bumps it.
  */
-export const EXTENDED_RULES_VERSION = 'ext-1'
+export const EXTENDED_RULES_VERSION = 'ext-2'
 
 /** Categories each extended rule can report, in the order `categories` lists them. */
 export const EXTENDED_RULE_CATEGORIES: Readonly<Record<ExtendedRuleName, readonly string[]>> = {
@@ -58,6 +60,7 @@ export const EXTENDED_RULE_CATEGORIES: Readonly<Record<ExtendedRuleName, readonl
   'tw-mobile-loose': ['PHONE'],
   'email-escaped': ['EMAIL'],
   'ip-cgnat-ula': ['IP'],
+  'address-cjk': ['ADDR'],
 }
 
 /**
@@ -395,6 +398,71 @@ function collectSharedAndUniqueLocalCandidates(text: string, push: PushCandidate
 }
 
 /**
+ * A Han character that can be part of a place name: not one of the pronouns,
+ * verbs, and particles that come before a place (`寄到`, `我住`, `店在`), so a
+ * name never takes them in and `寄到台北市…` is masked from `台`. A `v`-flag class.
+ */
+const PLACE_CHAR = '[\\p{Script=Han}--[我你他她住在到寄送於于是的給给往從从由把被請请要去來来與与跟及或遷迁入駐驻位]]'
+/** One Han character, inside or outside a character class. */
+const HAN = '\\p{Script=Han}'
+/** Han and kana, for the inside of a character class. */
+const HAN_KANA = '\\p{Script=Han}\\p{Script=Hiragana}\\p{Script=Katakana}'
+/** Chinese numerals for a road section or a floor. */
+const CN_NUMERAL = '[一二三四五六七八九十]'
+/**
+ * A Chinese street address in Taiwan or mainland China, in either script: an
+ * optional postal code and administrative divisions, a road (a name of one to
+ * four Han characters ending in 路, 街, 大道, 大街, or 胡同, with an optional
+ * section), optional lanes and alleys, a house number ending in 號 or 号, then
+ * optional floors, buildings, units, and rooms. The road and the house number
+ * are both required, so `11月3號`, `3號出口`, `第3號`, and a city or road name
+ * alone are not read. Every name is up to four {@link PLACE_CHAR}s, so without a
+ * division before the road the match can start a few characters early on a
+ * word that is not one of them (`店中山路100號` is masked whole); restore is
+ * unaffected.
+ */
+const CN_ADDRESS = new RegExp(
+  `(?<!\\d)`
+  + `(?<admin>(?:\\d{3,6})?(?:${PLACE_CHAR}{1,4}(?:省|自治區|自治区))?(?:${PLACE_CHAR}{1,3}[市縣县])?(?:${PLACE_CHAR}{1,4}[區区鄉乡鎮镇市])?)`
+  + `(?<road>${PLACE_CHAR}{1,4}(?:路|街|大道|大街|胡同)(?:(?:\\d{1,2}|${CN_NUMERAL}{1,3})段)?)`
+  + `(?:\\d+[巷弄衖])*`
+  + `\\d+(?:之\\d+)?[號号]`
+  + `(?:之\\d+)?院?(?:(?:\\d+|${CN_NUMERAL}{1,3})[號号]?(?:樓|楼|層|层|F|棟|栋|幢|座|單元|单元|室)(?:之\\d+)?){0,4}`,
+  'gv',
+)
+/** Words ending in 路 that are not roads; without a division before them they are not read as one. */
+const NOT_ROAD = /(?:網|网|線|线|電|电|迴|回|思|套|出|一|通|銷|销|門|门)路(?:\d{1,2}|[一二三四五六七八九十]{1,3})?段?$/u
+/**
+ * A Japanese address: an optional postal code, a prefecture (都, 道, 府, 県),
+ * one or two municipalities, a town name, and a block and lot number written
+ * as `1丁目9番1号` or `1-9-1`. The prefecture and the block number are required.
+ */
+const JP_ADDRESS = new RegExp(
+  `(?:〒\\s?\\d{3}-\\d{4}\\s*)?${HAN}{2,3}[都道府県]`
+  + `(?:[${HAN_KANA}ヶ]{1,6}?[市区町村郡]){1,2}`
+  + `[${HAN_KANA}ー]{0,8}?`
+  + `(?:\\d+|${CN_NUMERAL}{1,3})(?:丁目|-)\\d+(?:番地?|-)\\d+号?`,
+  'gu',
+)
+
+/**
+ * Collect Chinese and Japanese street addresses.
+ * @param text - text to scan.
+ * @param push - candidate sink.
+ */
+function collectCjkAddressCandidates(text: string, push: PushCandidate): void {
+  runAll(CN_ADDRESS, text, (match) => {
+    // oxlint-disable-next-line typescript/no-non-null-assertion -- both groups always take part in a match.
+    const { admin, road } = match.groups!
+    if (admin === '' && NOT_ROAD.test(road!)) return
+    push(match.index, match.index + match[0].length, 'ADDR', PRIORITY_PII)
+  })
+  runAll(JP_ADDRESS, text, (match) => {
+    push(match.index, match.index + match[0].length, 'ADDR', PRIORITY_PII)
+  })
+}
+
+/**
  * The pass of every extended rule that adds a collector of its own. `card-strict`
  * and `entropy-strict` reuse the default collectors in `rules.ts` with a flag.
  */
@@ -407,4 +475,5 @@ export const EXTENDED_COLLECTORS: Readonly<Partial<Record<ExtendedRuleName, Exte
   'tw-mobile-loose': collectLooseMobileCandidates,
   'email-escaped': collectEscapedEmailCandidates,
   'ip-cgnat-ula': collectSharedAndUniqueLocalCandidates,
+  'address-cjk': collectCjkAddressCandidates,
 }

@@ -98,7 +98,7 @@ describe('settings that fail loud', () => {
     expect(loadConfig(file, {}).toolRestore).toEqual({ categories: ['PATH'], tools: new Map<string, RestoredCategories>([['git_commit', ['EMAIL', 'PATH']], ['trusted', '*']]) })
     expect(loadConfig(file, { REDACTION_PROXY_TOOL_RESTORE_CATEGORIES: 'PATH, NAME' }).toolRestore.categories).toEqual(['PATH', 'NAME'])
     expect(loadConfig(undefined, { REDACTION_PROXY_TOOL_RESTORE_CATEGORIES: '*' }).toolRestore.categories).toBe('*')
-    expect(() => loadConfig(configFile({ toolRestore: { tools: { bash: ['EMAIL', 'SECRET'] } } }), {})).toThrow(/toolRestore\.tools\.bash: unknown category "SECRET"; valid: EMAIL, PATH, KEY, .*NAME, ORG, LOC, ADDR$/)
+    expect(() => loadConfig(configFile({ toolRestore: { tools: { bash: ['EMAIL', 'SECRET'] } } }), {})).toThrow(/toolRestore\.tools\.bash: unknown category "SECRET"; valid: EMAIL, PATH, KEY, .*ADDR, PROJECT, TERM, NAME, ORG, LOC$/)
     expect(() => loadConfig(undefined, { REDACTION_PROXY_TOOL_RESTORE_CATEGORIES: 'path' })).toThrow('unknown category "path"')
     expect(() => loadConfig(configFile({ toolRestore: { tools: { bash: 7 } } }), {})).toThrow('toolRestore.tools.bash must be an array of categories or "*"')
     expect(() => loadConfig(configFile({ toolRestore: { allow: ['EMAIL'] } }), {})).toThrow('toolRestore: unknown key "allow"')
