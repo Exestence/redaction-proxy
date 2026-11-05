@@ -3,6 +3,7 @@
 ## Unreleased
 
 - Security policy (`SECURITY.md`): report a way around the masking privately through GitHub's private vulnerability reporting, now enabled; the READMEs link it.
+- Health check: `GET /_redaction-proxy/health` answers 200 `{"status":"ok"}` from the proxy itself, never relayed, after the auth-token and Host checks. Every other GET is still relayed. The Docker image's `HEALTHCHECK` uses it (verified 2026-11-05 on linux/arm64, Docker 29.8.2: `healthy` with the token in the environment; `unhealthy` when a config file alone moves the port, `healthy` again with the same port in `REDACTION_PROXY_PORT`).
 - Verified Codex CLI against DeepSeek's Responses API (2026-11-05, Codex 0.155.1 with an API-key login, `deepseek-flash`): one task through the proxy, with a local recorder between the proxy and DeepSeek, made 2 streaming requests including a shell tool call (`pwd`) and its output; DeepSeek saw only placeholders for the email and Taiwan ID in the prompt and the home path in Codex's own instructions, and the reply was restored. OpenAI's own API, including Codex against OpenAI, remains unverified.
 
 ## 0.3.1 — 2026-10-22

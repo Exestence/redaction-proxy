@@ -1163,6 +1163,22 @@ describe('refusals and screening', () => {
     expect(seen[0]!.url).toBe('/v1/models')
   })
 
+  it('answers the health check itself, after the token check, without forwarding it', async () => {
+    const res = await fetch(`${base}/_redaction-proxy/health?probe=1`)
+    expect(res.status).toBe(200)
+    expect(await res.json()).toEqual({ status: 'ok' })
+    expect((await post('/_redaction-proxy/health', {})).status).toBe(404)
+    const token = 'health-check-token-0123456789'
+    try {
+      await start({ authToken: token })
+      expect((await fetch(`${base}/_redaction-proxy/health`)).status).toBe(401)
+      expect((await fetch(`${base}/_redaction-proxy/health`, { headers: { 'x-redaction-proxy-token': token } })).status).toBe(200)
+    } finally {
+      await start()
+    }
+    expect(seen).toHaveLength(0)
+  })
+
   it('refuses a request whose unrewritten fields still hold a detected value, naming only the field', async () => {
     const res = await post('/v1/chat/completions', { model: 'm', metadata: { owner: EMAIL }, messages: [{ role: 'user', content: `hi ${EMAIL}` }] })
     expect(res.status).toBe(422)
