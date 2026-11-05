@@ -9,7 +9,7 @@
 
 import { createServer } from 'node:http'
 import type { AddressInfo } from 'node:net'
-import { loadConfig } from './proxy/config.ts'
+import { loadConfig } from './proxy/load-config.ts'
 import { createProxyServer, listen } from './proxy/server.ts'
 
 /** Run the demo once; both servers are closed before it resolves. */

@@ -8,7 +8,7 @@ import { execFileSync } from 'node:child_process'
 import { writeFileSync } from 'node:fs'
 import { createServer } from 'node:http'
 import { fileURLToPath } from 'node:url'
-import { loadConfig } from '../../../lib/proxy/config.js'
+import { loadConfig } from '../../../lib/proxy/load-config.js'
 import { createProxyServer, listen } from '../../../lib/proxy/server.js'
 
 const root = fileURLToPath(new URL('../../../', import.meta.url))

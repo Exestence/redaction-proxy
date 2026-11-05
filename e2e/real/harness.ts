@@ -6,7 +6,7 @@
  * @module e2e/real/harness
  */
 
-import { loadConfig } from '../../src/proxy/config.ts'
+import { loadConfig } from '../../src/proxy/load-config.ts'
 import { createProxyServer, listen } from '../../src/proxy/server.ts'
 import { ROUTES, authHeaders } from './providers.ts'
 import type { Provider } from './providers.ts'

@@ -3,7 +3,7 @@
 import { createServer } from 'node:http'
 import type { Server } from 'node:http'
 import { afterAll, beforeAll, expect, it } from 'vitest'
-import { DEFAULT_TOOL_RESTORE_CATEGORIES, loadConfig } from '../src/proxy/config.ts'
+import { DEFAULT_TOOL_RESTORE_CATEGORIES, loadConfig } from '../src/proxy/load-config.ts'
 import { createProxyServer, listen } from '../src/proxy/server.ts'
 
 let upstream: Server

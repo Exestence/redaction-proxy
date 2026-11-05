@@ -12,7 +12,7 @@
  */
 
 import { RulesDetector } from '../../src/core/index.ts'
-import { PROXY_DEFAULT_RULES } from '../../src/proxy/config.ts'
+import { PROXY_DEFAULT_RULES } from '../../src/proxy/load-config.ts'
 import type { Sample } from '../public/dataset.ts'
 import { classify } from '../public/metrics.ts'
 import type { MaskOutcome } from '../public/metrics.ts'

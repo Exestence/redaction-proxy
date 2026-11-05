@@ -83,7 +83,7 @@ async function fetchCorpus(args) {
 
 async function measure() {
   const { RulesDetector, emptyRedactionIndex, mask, restore } = await import('../lib/core/index.js')
-  const { PROXY_DEFAULT_RULES } = await import('../lib/proxy/config.js')
+  const { PROXY_DEFAULT_RULES } = await import('../lib/proxy/load-config.js')
   const ruleSets = { core: new RulesDetector({}), proxy: new RulesDetector({ rules: [...PROXY_DEFAULT_RULES] }) }
   const results = { manifest: 'bench/zh-prose-manifest.json', variants: {} }
   for (const variant of VARIANTS) {

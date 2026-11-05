@@ -33,7 +33,7 @@
 | `src/core/` | 遮罩核心：規則、佔位符引擎、嚴格與串流還原。匯出的核心（`lib/core/index.js`，不含 `model/`）只依賴 Node 標準函式庫，沒有宿主型別。 |
 | `src/core/rules/` | 規則偵測器 `RulesDetector`：各規則、需自行啟用的國際規則（`international.ts`）與延伸規則（`extended.ts`）、檢查碼演算法（`checksum.ts`）、NFKC 投影、百分比解碼投影、同值擴散、輸入篩檢。 |
 | `src/core/model/` | 實驗性人名模型；動態載入選用的 onnxruntime-node 與 tokenizers。 |
-| `src/proxy/config.ts` | 設定檔載入與驗證。 |
+| `src/proxy/load-config.ts` | 設定檔載入與驗證。 |
 | `src/proxy/server.ts` | HTTP 代理：收集可遮字串、遮罩、外洩檢查、轉送、JSON 與 SSE 還原。 |
 | `src/cli.ts` | 命令列 `redaction-proxy [--config path]`；`--demo` 跑免金鑰示範（`src/demo.ts`，即 `pnpm demo`）。 |
 | `bench/` | 誤遮率量測（`pnpm bench`）。 |

@@ -19,7 +19,7 @@ import { spawnSync } from 'node:child_process'
 import { mkdirSync, readFileSync, readdirSync, rmSync, statSync } from 'node:fs'
 import { join, relative } from 'node:path'
 import { RULE_NAMES, RedactionError, RulesDetector, emptyRedactionIndex, mask, restore } from '../lib/core/index.js'
-import { PROXY_DEFAULT_RULES } from '../lib/proxy/config.js'
+import { PROXY_DEFAULT_RULES } from '../lib/proxy/load-config.js'
 
 const REPO = process.env.CORPUS_REPO
 if (REPO === undefined || REPO === '') {

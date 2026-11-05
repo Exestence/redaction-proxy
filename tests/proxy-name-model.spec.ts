@@ -4,7 +4,7 @@
 import { createServer } from 'node:http'
 import type { Server } from 'node:http'
 import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest'
-import { loadConfig } from '../src/proxy/config.ts'
+import { loadConfig } from '../src/proxy/load-config.ts'
 import { closeProxy, createProxyServer, listen } from '../src/proxy/server.ts'
 import { fakeNameModel } from './name-model-fake.ts'
 import type { FakeRuntime } from './name-model-fake.ts'

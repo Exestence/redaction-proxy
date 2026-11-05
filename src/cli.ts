@@ -16,7 +16,7 @@
 import { userInfo } from 'node:os'
 import { parseArgs } from 'node:util'
 import { loadNameModel } from './core/model/name-model.ts'
-import { loadConfig } from './proxy/config.ts'
+import { loadConfig } from './proxy/load-config.ts'
 import { closeProxy, createProxyServer, listen } from './proxy/server.ts'
 
 /**

@@ -7,8 +7,8 @@ import type { IncomingHttpHeaders, Server } from 'node:http'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
-import { DEFAULT_TOOL_RESTORE_CATEGORIES, loadConfig } from '../src/proxy/config.ts'
-import type { ProxyConfig, RestoredCategories } from '../src/proxy/config.ts'
+import { DEFAULT_TOOL_RESTORE_CATEGORIES, loadConfig } from '../src/proxy/load-config.ts'
+import type { ProxyConfig, RestoredCategories } from '../src/proxy/load-config.ts'
 import { createProxyServer, listen, unusedPrivateUse } from '../src/proxy/server.ts'
 
 // Every value is fictional: example.test addresses, a checksum-valid invented
